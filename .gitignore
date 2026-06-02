@@ -33,3 +33,4 @@ node_modules/
 blitztext-tauri/node_modules/
 blitztext-tauri/src-tauri/target/
 blitztext-tauri/.derivedData*
+blitztext-tauri/src-tauri/gen/
