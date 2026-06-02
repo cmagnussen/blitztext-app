@@ -1,0 +1,55 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicosResworworked/tauri-apps/tauri/tooling/cli/schema.json",
+  "productName": "Blitztext",
+  "version": "1.5.0",
+  "identifier": "app.blitztext.windows",
+  "build": {
+    "frontendDist": "../src",
+    "devUrl": "http://localhost:1420"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Blitztext",
+        "width": 380,
+        "height": 520,
+        "resizable": false,
+        "decorations": true,
+        "visible": false,
+        "skipTaskbar": true,
+        "alwaysOnTop": true
+      }
+    ],
+    "trayIcon": {
+      "iconPath": "icons/icon.png",
+      "iconAsTemplate": true,
+      "tooltip": "Blitztext"
+    },
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self' https://api.openai.com; style-src 'self' 'unsafe-inline'; script-src 'self'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["msi", "nsis"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
+  },
+  "plugins": {
+    "global-shortcut": {},
+    "clipboard-manager": {},
+    "shell": {},
+    "notification": {}
+  }
+}
