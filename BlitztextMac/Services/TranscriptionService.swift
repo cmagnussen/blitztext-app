@@ -41,6 +41,27 @@ enum TranscriptionService {
         return URLSession(configuration: configuration)
     }()
 
+    /// Routet die Transkription je nach Backend: `.remote` → OpenAI Whisper,
+    /// `.local` → on-device WhisperKit. Erlaubt vollständig offline laufende KI-Workflows.
+    static func transcribe(
+        audioURL: URL,
+        customTerms: [String] = [],
+        language: String? = nil,
+        backend: TranscriptionBackend,
+        localModelName: String = LocalTranscriptionService.recommendedFastModelName
+    ) async throws -> String {
+        switch backend {
+        case .remote:
+            return try await transcribe(audioURL: audioURL, customTerms: customTerms, language: language)
+        case .local:
+            return try await LocalTranscriptionService.shared.transcribe(
+                audioURL: audioURL,
+                language: language ?? "de",
+                modelName: localModelName
+            )
+        }
+    }
+
     static func transcribe(
         audioURL: URL,
         customTerms: [String] = [],

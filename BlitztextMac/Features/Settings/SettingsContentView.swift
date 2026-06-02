@@ -161,6 +161,77 @@ struct AccessSettingsView: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
+                SectionLabel(text: "Lokales KI-Modell (offline)")
+
+                Toggle("Lokales KI-Modell verwenden", isOn: $appState.appSettings.localLLMEnabled)
+                    .toggleStyle(.switch)
+
+                Text("Die Rewrite-Features (Blitztext+, $%&!, :)) laufen dann über einen lokalen OpenAI-kompatiblen Server statt über OpenAI. Zusammen mit dem Sicheren Lokalen Modus arbeitet Blitztext komplett offline.")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if appState.appSettings.localLLMEnabled {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Server-Adresse")
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(.secondary)
+                        TextField("http://localhost:8080/v1", text: $appState.appSettings.localLLMBaseURL)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(size: 11.5, design: .monospaced))
+                            .autocorrectionDisabled(true)
+
+                        HStack(spacing: 8) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Modell (schnell)")
+                                    .font(.system(size: 10.5))
+                                    .foregroundStyle(.secondary)
+                                TextField("gemma", text: $appState.appSettings.localLLMFastModel)
+                                    .textFieldStyle(.roundedBorder)
+                                    .font(.system(size: 11.5))
+                                    .autocorrectionDisabled(true)
+                            }
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Modell (stark)")
+                                    .font(.system(size: 10.5))
+                                    .foregroundStyle(.secondary)
+                                TextField("gemma", text: $appState.appSettings.localLLMStrongModel)
+                                    .textFieldStyle(.roundedBorder)
+                                    .font(.system(size: 11.5))
+                                    .autocorrectionDisabled(true)
+                            }
+                        }
+
+                        Text("Bei llama-server ist der Modellname beliebig – der Server bedient das geladene Modell.")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.tertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Divider().padding(.vertical, 4)
+
+                        Toggle("Server automatisch starten", isOn: $appState.appSettings.localLLMAutostart)
+                            .toggleStyle(.switch)
+                        Text("Blitztext startet den llama-server beim App-Start selbst und beendet ihn beim Schließen. Läuft bereits ein Server, wird er weiterverwendet.")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.tertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        if appState.appSettings.localLLMAutostart {
+                            Text("Modelldatei (.gguf)")
+                                .font(.system(size: 10.5))
+                                .foregroundStyle(.secondary)
+                                .padding(.top, 2)
+                            TextField("/Pfad/zu/modell.gguf", text: $appState.appSettings.localLLMModelPath)
+                                .textFieldStyle(.roundedBorder)
+                                .font(.system(size: 10.5, design: .monospaced))
+                                .autocorrectionDisabled(true)
+                        }
+                    }
+                    .padding(.top, 2)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
                 SectionLabel(text: "Installation")
 
                 Text(installationHeadline)
@@ -513,6 +584,8 @@ struct AccessSettingsView: View {
 struct CustomizeSettingsView: View {
     @Bindable var appState: AppState
     @State private var newTerm = ""
+    @State private var newCorrectionFrom = ""
+    @State private var newCorrectionTo = ""
 
     private var installedLocalModels: [LocalTranscriptionModel] {
         LocalTranscriptionService.installedModels()
@@ -624,6 +697,19 @@ struct CustomizeSettingsView: View {
                     }
                     .pickerStyle(.segmented)
                 }
+            }
+
+            // MARK: Einfügen
+            VStack(alignment: .leading, spacing: 8) {
+                SectionLabel(text: "Einf\u{00FC}gen")
+
+                Toggle("Nach jedem Diktat ein Leerzeichen anh\u{00E4}ngen", isOn: $appState.appSettings.appendTrailingSpace)
+                    .toggleStyle(.switch)
+
+                Text("Verhindert, dass aufeinanderfolgende Diktate zusammenkleben („…Satz eins.Satz zwei“). Aus, wenn du kein abschließendes Leerzeichen möchtest.")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             // MARK: Blitztext+
@@ -780,6 +866,77 @@ struct CustomizeSettingsView: View {
                 }
             }
 
+            // MARK: Korrekturen
+            VStack(alignment: .leading, spacing: 10) {
+                SectionLabel(text: "Korrekturen")
+
+                Text("Feste Ersetzungen für wiederkehrende Fehler. Beispiel: \u{201E}CloudCode\u{201C} \u{2192} \u{201E}Claude Code\u{201C}. Wird automatisch auf jeden eingefügten Text angewendet (Gro\u{00DF}-/Kleinschreibung egal).")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if !appState.appSettings.corrections.isEmpty {
+                    VStack(spacing: 5) {
+                        ForEach(appState.appSettings.corrections) { correction in
+                            HStack(spacing: 6) {
+                                Text(correction.from)
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                Image(systemName: "arrow.right")
+                                    .font(.system(size: 9, weight: .semibold))
+                                    .foregroundStyle(.tertiary)
+                                Text(correction.to)
+                                    .font(.system(size: 11, weight: .medium))
+                                    .lineLimit(1)
+                                Spacer()
+                                Button {
+                                    withAnimation(.easeOut(duration: 0.15)) {
+                                        appState.appSettings.corrections.removeAll { $0.id == correction.id }
+                                    }
+                                } label: {
+                                    Image(systemName: "xmark")
+                                        .font(.system(size: 8, weight: .bold))
+                                        .foregroundStyle(.tertiary)
+                                }
+                                .buttonStyle(SubtleButtonStyle())
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 5)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(Color(nsColor: .controlBackgroundColor))
+                            )
+                        }
+                    }
+                }
+
+                HStack(spacing: 6) {
+                    TextField("CloudCode", text: $newCorrectionFrom)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 11))
+                        .onSubmit { addCorrection() }
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                    TextField("Claude Code", text: $newCorrectionTo)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 11))
+                        .onSubmit { addCorrection() }
+
+                    Button { addCorrection() } label: {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 16))
+                            .foregroundStyle(.blue.opacity(0.7))
+                    }
+                    .buttonStyle(SubtleButtonStyle())
+                    .disabled(
+                        newCorrectionFrom.trimmingCharacters(in: .whitespaces).isEmpty
+                            || newCorrectionTo.trimmingCharacters(in: .whitespaces).isEmpty
+                    )
+                }
+            }
+
         }
         .padding(16)
     }
@@ -791,6 +948,22 @@ struct CustomizeSettingsView: View {
             appState.textImprovementSettings.customTerms.append(trimmed)
         }
         newTerm = ""
+    }
+
+    private func addCorrection() {
+        let from = newCorrectionFrom.trimmingCharacters(in: .whitespaces)
+        let to = newCorrectionTo.trimmingCharacters(in: .whitespaces)
+        guard !from.isEmpty, !to.isEmpty else { return }
+        guard !appState.appSettings.corrections.contains(where: { $0.from.caseInsensitiveCompare(from) == .orderedSame }) else {
+            newCorrectionFrom = ""
+            newCorrectionTo = ""
+            return
+        }
+        withAnimation(.easeOut(duration: 0.15)) {
+            appState.appSettings.corrections.append(TextCorrection(from: from, to: to))
+        }
+        newCorrectionFrom = ""
+        newCorrectionTo = ""
     }
 }
 

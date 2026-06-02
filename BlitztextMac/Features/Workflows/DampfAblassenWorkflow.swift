@@ -16,12 +16,25 @@ final class DampfAblassenWorkflow: Workflow {
     private let settings: DampfAblassenSettings
     private let customTerms: [String]
     private let language: String
+    private let backend: TranscriptionBackend
+    private let localModelName: String
+    private let llmConfig: LLMConfig
     private var processingTask: Task<Void, Never>?
 
-    init(settings: DampfAblassenSettings, customTerms: [String] = [], language: String = "de") {
+    init(
+        settings: DampfAblassenSettings,
+        customTerms: [String] = [],
+        language: String = "de",
+        backend: TranscriptionBackend = .remote,
+        localModelName: String = LocalTranscriptionService.recommendedFastModelName,
+        llmConfig: LLMConfig = .openAI
+    ) {
         self.settings = settings
         self.customTerms = customTerms
         self.language = language
+        self.backend = backend
+        self.localModelName = localModelName
+        self.llmConfig = llmConfig
     }
 
     // MARK: - Recording State
@@ -82,11 +95,13 @@ final class DampfAblassenWorkflow: Workflow {
             }
 
             do {
-                // Phase 1: Whisper transcription
+                // Phase 1: Whisper transcription (remote oder lokal)
                 let rawText = try await TranscriptionService.transcribe(
                     audioURL: url,
                     customTerms: vocabularyHints,
-                    language: language
+                    language: language,
+                    backend: backend,
+                    localModelName: localModelName
                 )
                 let cleanedRawText = TranscriptionQualityService.cleanedTranscript(rawText)
                 guard !TranscriptionQualityService.isLikelyArtifact(cleanedRawText, recordingDuration: recordingDuration) else {
@@ -101,7 +116,8 @@ final class DampfAblassenWorkflow: Workflow {
 
                 let answer = try await LLMService.dampfAblassen(
                     text: cleanedRawText,
-                    systemPrompt: settings.systemPrompt
+                    systemPrompt: settings.systemPrompt,
+                    config: llmConfig
                 )
                 let cleanedAnswer = TranscriptionQualityService.cleanedTranscript(answer)
                 guard cleanedAnswer != "KEINE_AUFNAHME_ERKANNT" else {

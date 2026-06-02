@@ -113,10 +113,33 @@ final class AppState {
             return "Nur lokal. Kein Server."
         case .textImprover, .dampfAblassen, .emojiText:
             if appSettings.secureLocalModeEnabled {
-                return "Im lokalen Modus pausiert."
+                if appSettings.localLLMEnabled {
+                    return selectedLocalModelIsInstalled
+                        ? "Lokal: \(LocalTranscriptionModel.displayName(for: selectedLocalModelName)) + lokales KI-Modell."
+                        : "Lokales WhisperKit-Modell fehlt."
+                }
+                return "Lokales KI-Modell nicht aktiviert."
+            }
+            if appSettings.localLLMEnabled {
+                return "Transkription online, KI lokal."
             }
             return type.subtitle
         }
+    }
+
+    /// Endpoint-Konfiguration für die Rewrite-Features (OpenAI oder lokaler Server).
+    var llmConfig: LLMConfig {
+        LLMConfig(
+            useLocal: appSettings.localLLMEnabled,
+            baseURL: appSettings.localLLMBaseURL,
+            fastModel: appSettings.localLLMFastModel,
+            strongModel: appSettings.localLLMStrongModel
+        )
+    }
+
+    /// Transkriptions-Backend für die KI-Workflows folgt dem Sicheren Lokalen Modus.
+    var rewriteTranscriptionBackend: TranscriptionBackend {
+        appSettings.secureLocalModeEnabled ? .local : .remote
     }
 
     var resolvedLocalModelName: String {
@@ -188,7 +211,10 @@ final class AppState {
         case .textImprover:
             let workflow = TextImprovementWorkflow(
                 settings: textImprovementSettings,
-                language: transcriptionSettings.language
+                language: transcriptionSettings.language,
+                backend: rewriteTranscriptionBackend,
+                localModelName: selectedLocalModelName,
+                llmConfig: llmConfig
             )
             configureWorkflowHandlers(workflow)
             activeWorkflow = workflow
@@ -198,7 +224,10 @@ final class AppState {
             let workflow = DampfAblassenWorkflow(
                 settings: dampfAblassenSettings,
                 customTerms: textImprovementSettings.customTerms,
-                language: transcriptionSettings.language
+                language: transcriptionSettings.language,
+                backend: rewriteTranscriptionBackend,
+                localModelName: selectedLocalModelName,
+                llmConfig: llmConfig
             )
             configureWorkflowHandlers(workflow)
             activeWorkflow = workflow
@@ -208,7 +237,10 @@ final class AppState {
             let workflow = EmojiTextWorkflow(
                 settings: emojiTextSettings,
                 customTerms: textImprovementSettings.customTerms,
-                language: transcriptionSettings.language
+                language: transcriptionSettings.language,
+                backend: rewriteTranscriptionBackend,
+                localModelName: selectedLocalModelName,
+                llmConfig: llmConfig
             )
             configureWorkflowHandlers(workflow)
             activeWorkflow = workflow
@@ -227,7 +259,13 @@ final class AppState {
                 ? selectedLocalModelIsInstalled
                 : KeychainService.isConfigured
         case .textImprover, .dampfAblassen, .emojiText:
-            return !appSettings.secureLocalModeEnabled && KeychainService.isConfigured
+            // Phase 1 (Transkription) folgt dem Sicheren Lokalen Modus,
+            // Phase 2 (Rewrite) dem lokalen KI-Modell. Beide müssen verfügbar sein.
+            let transcriptionReady = appSettings.secureLocalModeEnabled
+                ? selectedLocalModelIsInstalled
+                : KeychainService.isConfigured
+            let rewriteReady = appSettings.localLLMEnabled || KeychainService.isConfigured
+            return transcriptionReady && rewriteReady
         }
     }
 
@@ -448,7 +486,13 @@ final class AppState {
     }
 
     private func handleWorkflowOutput(_ text: String) {
-        pasteAtCursor(text, target: activePasteTarget)
+        // Gelernte Korrekturen auf den finalen Text anwenden (gilt für alle Workflows).
+        var output = TranscriptionQualityService.applyCorrections(text, appSettings.corrections)
+        // Leerzeichen anhängen, damit aufeinanderfolgende Diktate nicht zusammenkleben.
+        if appSettings.appendTrailingSpace, !output.isEmpty {
+            output += " "
+        }
+        pasteAtCursor(output, target: activePasteTarget)
         if activeLaunchSource == .hotkeyBackground {
             page = .main
         }

@@ -16,9 +16,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var statusItem: NSStatusItem!
     private var popover: NSPopover!
     private let menuBarStatusController = MenuBarStatusController()
+    private let localLLMServer = LocalLLMServerService()
     let appState = AppState()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Lokalen KI-Server (llama-server) bei Bedarf automatisch starten.
+        localLLMServer.startIfNeeded(settings: appState.appSettings)
+
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
         if let button = statusItem.button {
@@ -55,6 +59,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         DispatchQueue.main.async { [weak self] in
             self?.showOnboardingIfNeeded()
         }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        // Selbst gestarteten LLM-Server wieder beenden (kein Orphan-Prozess).
+        localLLMServer.stop()
     }
 
     @objc private func handleDismissPopover() {

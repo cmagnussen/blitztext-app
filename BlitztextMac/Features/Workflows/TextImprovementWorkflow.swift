@@ -15,11 +15,23 @@ final class TextImprovementWorkflow: Workflow {
     private let recorder = AudioRecorder()
     private let settings: TextImprovementSettings
     private let language: String
+    private let backend: TranscriptionBackend
+    private let localModelName: String
+    private let llmConfig: LLMConfig
     private var processingTask: Task<Void, Never>?
 
-    init(settings: TextImprovementSettings, language: String = "de") {
+    init(
+        settings: TextImprovementSettings,
+        language: String = "de",
+        backend: TranscriptionBackend = .remote,
+        localModelName: String = LocalTranscriptionService.recommendedFastModelName,
+        llmConfig: LLMConfig = .openAI
+    ) {
         self.settings = settings
         self.language = language
+        self.backend = backend
+        self.localModelName = localModelName
+        self.llmConfig = llmConfig
     }
 
     // MARK: - Recording State
@@ -80,11 +92,13 @@ final class TextImprovementWorkflow: Workflow {
             }
 
             do {
-                // Phase 1: Whisper transcription
+                // Phase 1: Whisper transcription (remote oder lokal)
                 let rawText = try await TranscriptionService.transcribe(
                     audioURL: url,
                     customTerms: vocabularyHints,
-                    language: language
+                    language: language,
+                    backend: backend,
+                    localModelName: localModelName
                 )
                 let cleanedRawText = TranscriptionQualityService.cleanedTranscript(rawText)
                 guard !TranscriptionQualityService.isLikelyArtifact(cleanedRawText, recordingDuration: recordingDuration) else {
@@ -99,7 +113,8 @@ final class TextImprovementWorkflow: Workflow {
 
                 let improved = try await LLMService.improve(
                     text: cleanedRawText,
-                    settings: settings
+                    settings: settings,
+                    config: llmConfig
                 )
 
                 let cleanedImproved = TranscriptionQualityService.cleanedTranscript(improved)

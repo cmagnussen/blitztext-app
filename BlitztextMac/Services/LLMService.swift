@@ -25,6 +25,17 @@ enum RewriteModel: String {
     case rageMode = "gpt-4o"
 }
 
+/// Endpoint-Konfiguration für die Rewrite-Features.
+/// `useLocal == false` → OpenAI; `true` → lokaler OpenAI-kompatibler Server (z. B. llama-server).
+struct LLMConfig {
+    var useLocal: Bool
+    var baseURL: String
+    var fastModel: String
+    var strongModel: String
+
+    static let openAI = LLMConfig(useLocal: false, baseURL: "", fastModel: "", strongModel: "")
+}
+
 private struct OpenAIChatRequest: Encodable {
     struct Message: Encodable {
         let role: String
@@ -34,6 +45,18 @@ private struct OpenAIChatRequest: Encodable {
     let model: String
     let messages: [Message]
     let temperature: Double
+    // Nur für lokale Server gesetzt: begrenzt Runaway-Generierung bei GGUFs,
+    // deren End-of-Turn-Token nicht als Stop-Token registriert ist (z. B. ChatML-Quants).
+    var stop: [String]? = nil
+    var maxTokens: Int? = nil
+
+    enum CodingKeys: String, CodingKey {
+        case model
+        case messages
+        case temperature
+        case stop
+        case maxTokens = "max_tokens"
+    }
 }
 
 private struct OpenAIChatResponse: Decodable {
@@ -71,39 +94,45 @@ enum LLMService {
     static func improve(
         text: String,
         settings: TextImprovementSettings,
-        model: RewriteModel = .fastEdit
+        model: RewriteModel = .fastEdit,
+        config: LLMConfig = .openAI
     ) async throws -> String {
         try await complete(
             text: text,
             systemPrompt: buildSystemPrompt(settings: settings),
             model: model,
-            temperature: 0.3
+            temperature: 0.3,
+            config: config
         )
     }
 
     static func dampfAblassen(
         text: String,
         systemPrompt: String,
-        model: RewriteModel = .rageMode
+        model: RewriteModel = .rageMode,
+        config: LLMConfig = .openAI
     ) async throws -> String {
         try await complete(
             text: text,
             systemPrompt: systemPrompt,
             model: model,
-            temperature: 0.4
+            temperature: 0.4,
+            config: config
         )
     }
 
     static func addEmojis(
         text: String,
         settings: EmojiTextSettings,
-        model: RewriteModel = .fastEdit
+        model: RewriteModel = .fastEdit,
+        config: LLMConfig = .openAI
     ) async throws -> String {
         try await complete(
             text: text,
             systemPrompt: buildEmojiSystemPrompt(density: settings.emojiDensity),
             model: model,
-            temperature: 0.3
+            temperature: 0.3,
+            config: config
         )
     }
 
@@ -111,24 +140,38 @@ enum LLMService {
         text: String,
         systemPrompt: String,
         model: RewriteModel,
-        temperature: Double
+        temperature: Double,
+        config: LLMConfig
     ) async throws -> String {
-        guard let apiKey = KeychainService.load(key: .openAIAPIKey) else {
+        // Im Online-Modus ist der OpenAI-Key Pflicht; lokal ist er optional.
+        let apiKey = KeychainService.load(key: .openAIAPIKey)
+        if !config.useLocal && apiKey == nil {
             throw LLMError.notConfigured
         }
 
+        let modelName: String
+        if config.useLocal {
+            modelName = model == .rageMode ? config.strongModel : config.fastModel
+        } else {
+            modelName = model.rawValue
+        }
+
         let payload = OpenAIChatRequest(
-            model: model.rawValue,
+            model: modelName,
             messages: [
                 .init(role: "system", content: systemPrompt),
                 .init(role: "user", content: text),
             ],
-            temperature: temperature
+            temperature: temperature,
+            stop: config.useLocal ? ["<|im_end|>", "<end_of_turn>", "<|eot_id|>"] : nil,
+            maxTokens: config.useLocal ? 2048 : nil
         )
 
-        var request = URLRequest(url: chatCompletionsURL)
+        var request = URLRequest(url: config.useLocal ? resolvedLocalURL(config.baseURL) : chatCompletionsURL)
         request.httpMethod = "POST"
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        if let apiKey, !apiKey.isEmpty {
+            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        }
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = 45
         request.httpBody = try JSONEncoder().encode(payload)
@@ -154,6 +197,14 @@ enum LLMService {
 
     private static func openAIErrorMessage(from data: Data) -> String? {
         (try? JSONDecoder().decode(OpenAIErrorResponse.self, from: data))?.error?.message
+    }
+
+    /// Setzt aus der konfigurierten Base-URL (z. B. "http://localhost:8080/v1") den
+    /// Chat-Completions-Endpoint zusammen. Fällt bei ungültiger URL auf OpenAI zurück.
+    private static func resolvedLocalURL(_ baseURL: String) -> URL {
+        let trimmed = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalized = trimmed.hasSuffix("/") ? String(trimmed.dropLast()) : trimmed
+        return URL(string: normalized + "/chat/completions") ?? chatCompletionsURL
     }
 
     private static func buildEmojiSystemPrompt(density: EmojiTextSettings.EmojiDensity) -> String {

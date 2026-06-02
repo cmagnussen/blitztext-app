@@ -9,6 +9,14 @@ INSTALL_APP=false
 BUILD_CONFIGURATION="Release"
 UNIVERSAL_ARCHS="arm64 x86_64"
 
+# Stabile Signatur-Identität, falls vorhanden (sonst Ad-hoc "-").
+# Eine gleichbleibende Signatur sorgt dafür, dass macOS die Bedienungshilfen-Freigabe
+# über Rebuilds hinweg behält (statt sie bei jeder neuen Version zu vergessen).
+SIGN_IDENTITY="Blitztext Local Signing"
+if ! security find-identity -p codesigning 2>/dev/null | grep -q "$SIGN_IDENTITY"; then
+    SIGN_IDENTITY="-"
+fi
+
 for arg in "$@"; do
     case "$arg" in
         --debug)
@@ -138,8 +146,8 @@ cp -f "$PROJECT_DIR/Resources/menubar_icon@2x.png" "$RESOURCES_DIR/" 2>/dev/null
 DEST="$SCRIPT_DIR/Blitztext.app"
 rm -rf "$DEST"
 cp -R "$APP_PATH" "$DEST"
-echo "🔏 Signiere lokale Development-App ad-hoc. Dieses Artefakt ist nicht notarisiert."
-codesign --force --sign - "$DEST" 2>&1
+echo "🔏 Signiere lokale Development-App ($SIGN_IDENTITY). Dieses Artefakt ist nicht notarisiert."
+codesign --force --deep --sign "$SIGN_IDENTITY" "$DEST" 2>&1
 verify_universal_app "$DEST"
 
 RUN_TARGET="$DEST"
@@ -154,8 +162,8 @@ if [ "$INSTALL_APP" = true ]; then
     fi
     rm -rf "$INSTALL_DEST"
     cp -R "$DEST" "$INSTALL_DEST"
-    echo "🔏 Signiere lokale Development-App ad-hoc. Dieses Artefakt ist nicht notarisiert."
-    codesign --force --sign - "$INSTALL_DEST" 2>&1
+    echo "🔏 Signiere lokale Development-App ($SIGN_IDENTITY). Dieses Artefakt ist nicht notarisiert."
+    codesign --force --deep --sign "$SIGN_IDENTITY" "$INSTALL_DEST" 2>&1
     verify_universal_app "$INSTALL_DEST"
     RUN_TARGET="$INSTALL_DEST"
 fi
