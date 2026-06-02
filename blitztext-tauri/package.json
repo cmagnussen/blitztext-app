@@ -1,0 +1,21 @@
+{
+  "name": "blitztext",
+  "version": "1.5.0",
+  "description": "Blitztext – Speech to text, powered by OpenAI",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@anthropic-ai/sdk": "^0.26.0",
+    "@tauri-apps/cli": "^2"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-global-shortcut": "^2",
+    "@tauri-apps/plugin-clipboard-manager": "^2",
+    "@tauri-apps/plugin-shell": "^2",
+    "@tauri-apps/plugin-notification": "^2"
+  }
+}

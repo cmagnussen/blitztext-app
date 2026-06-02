@@ -1,0 +1,29 @@
+[package]
+name = "blitztext"
+version = "1.5.0"
+edition = "2024"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-clipboard-manager = "2"
+tauri-plugin-shell = "2"
+tauri-plugin-notification = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", features = ["multipart", "json"] }
+tokio = { version = "1", features = ["full"] }
+cpal = "0.15"
+hound = "3.5"
+uuid = { version = "1", features = ["v4"] }
+dirs = "6"
+keyring = { version = "3", features = ["crypto-rust"] }
+enigo = "0.2"
+anyhow = "1"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
