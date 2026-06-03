@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="BlitztextWin.App/BlitztextWin.App.csproj" />
+  <Project Path="BlitztextWin.Core/BlitztextWin.Core.csproj" />
+  <Project Path="BlitztextWin.Tests/BlitztextWin.Tests.csproj" />
+</Solution>
