@@ -30,3 +30,9 @@ Secrets.swift
 
 # Tooling
 node_modules/
+
+# .NET
+bin/
+obj/
+*.user
+*.rsuser
