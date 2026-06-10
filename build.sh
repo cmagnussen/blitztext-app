@@ -86,7 +86,10 @@ ensure_xcodebuild_available() {
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$SCRIPT_DIR/BlitztextMac"
 PROJECT_FILE="$PROJECT_DIR/BlitztextMac.xcodeproj"
-DERIVED_DATA_PATH="$SCRIPT_DIR/.derivedData-blitztextmac-build"
+# Keep DerivedData outside iCloud-synced folders (Desktop/Documents): the file
+# provider adds com.apple.FinderInfo xattrs to bundles, which breaks codesign
+# with "resource fork, Finder information, or similar detritus not allowed".
+DERIVED_DATA_PATH="$HOME/Library/Caches/blitztext-build/derivedData"
 cd "$PROJECT_DIR"
 
 ensure_xcodebuild_available
@@ -139,6 +142,8 @@ DEST="$SCRIPT_DIR/Blitztext.app"
 rm -rf "$DEST"
 cp -R "$APP_PATH" "$DEST"
 echo "🔏 Signiere lokale Development-App ad-hoc. Dieses Artefakt ist nicht notarisiert."
+# Strip xattrs that iCloud/file provider may have re-added before signing
+xattr -cr "$DEST" 2>/dev/null || true
 codesign --force --sign - "$DEST" 2>&1
 verify_universal_app "$DEST"
 
@@ -155,6 +160,7 @@ if [ "$INSTALL_APP" = true ]; then
     rm -rf "$INSTALL_DEST"
     cp -R "$DEST" "$INSTALL_DEST"
     echo "🔏 Signiere lokale Development-App ad-hoc. Dieses Artefakt ist nicht notarisiert."
+    xattr -cr "$INSTALL_DEST" 2>/dev/null || true
     codesign --force --sign - "$INSTALL_DEST" 2>&1
     verify_universal_app "$INSTALL_DEST"
     RUN_TARGET="$INSTALL_DEST"
