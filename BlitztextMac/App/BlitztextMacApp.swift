@@ -16,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var statusItem: NSStatusItem!
     private var popover: NSPopover!
     private let menuBarStatusController = MenuBarStatusController()
+    private let caretOverlayController = CaretActivityOverlayController()
     let appState = AppState()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -41,6 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
         appState.onMenuBarStatusChange = { [weak self] status in
             self?.menuBarStatusController.update(to: status)
+            self?.caretOverlayController.update(to: status)
         }
         appState.hotkeyService.start()
 

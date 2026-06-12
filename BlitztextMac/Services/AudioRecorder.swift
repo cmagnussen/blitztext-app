@@ -41,6 +41,7 @@ final class AudioRecorder: NSObject, AVAudioRecorderDelegate {
             audioRecorder?.isMeteringEnabled = true
             audioRecorder?.record()
             isRecording = true
+            RecordingSoundService.playRecordingStarted()
             startMetering()
         } catch {
             currentFileURL = nil
@@ -52,6 +53,9 @@ final class AudioRecorder: NSObject, AVAudioRecorderDelegate {
         stopMetering()
         lastRecordingDuration = audioRecorder?.currentTime ?? 0
         audioRecorder?.stop()
+        if isRecording {
+            RecordingSoundService.playRecordingStopped()
+        }
         isRecording = false
         recordingURL = currentFileURL
         currentFileURL = nil
