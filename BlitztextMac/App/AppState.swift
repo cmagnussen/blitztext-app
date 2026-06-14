@@ -348,7 +348,11 @@ final class AppState {
     ) {
         pasteboardCleanupTask?.cancel()
         pasteboardCleanupTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(delay))
+            do {
+                try await Task.sleep(for: .seconds(delay))
+            } catch {
+                return
+            }
             guard let self else { return }
             self.restorePasteboardIfCurrent(marker: marker, previousContents: previousContents)
         }
