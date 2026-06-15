@@ -30,3 +30,6 @@ Secrets.swift
 
 # Tooling
 node_modules/
+
+# Swift Package Manager
+.build/
