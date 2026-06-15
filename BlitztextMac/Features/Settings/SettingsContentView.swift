@@ -69,7 +69,7 @@ struct AccessSettingsView: View {
     @State private var openAIAPIKey = ""
     @State private var editingAPIKey = false
     @State private var saved = false
-    @State private var saveErrorText: String?
+    @State private var apiKeyErrorText: String?
     @State private var installActionErrorText: String?
     @State private var showCleanupOptions = false
     @State private var deleteLocalDataOnCleanup = true
@@ -146,6 +146,15 @@ struct AccessSettingsView: View {
                             .textFieldStyle(.roundedBorder)
                             .font(.system(size: 11.5))
                             .focused($focusedField, equals: .openAIAPIKey)
+                            .onSubmit { saveAPIKey() }
+                            .onChange(of: focusedField) { oldValue, newValue in
+                                // Apple-typisch: beim Verlassen des Feldes speichern.
+                                // Leeres Feld still ignorieren, nicht rot meckern.
+                                if oldValue == .openAIAPIKey, newValue != .openAIAPIKey,
+                                   !openAIAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                    saveAPIKey()
+                                }
+                            }
 
                         Button("Einfuegen") {
                             pasteAPIKeyFromClipboard()
@@ -154,10 +163,39 @@ struct AccessSettingsView: View {
                     }
                 }
 
+                if saved {
+                    HStack(spacing: 4) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 10, weight: .bold))
+                        Text("Gespeichert")
+                    }
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(.green)
+                    .transition(.opacity)
+                }
+
                 Text("Dein Key bleibt lokal in dieser App. Audio und Text werden direkt an die OpenAI API gesendet.")
                     .font(.system(size: 10.5))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+
+                Link(destination: URL(string: "https://platform.openai.com/api-keys")!) {
+                    HStack(spacing: 3) {
+                        Text("OpenAI API Key erstellen")
+                        Image(systemName: "arrow.up.right")
+                            .font(.system(size: 8, weight: .semibold))
+                    }
+                    .font(.system(size: 10.5, weight: .medium))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.blue)
+
+                if let apiKeyErrorText {
+                    Text(apiKeyErrorText)
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
 
             VStack(alignment: .leading, spacing: 8) {
@@ -253,13 +291,6 @@ struct AccessSettingsView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            if let saveErrorText {
-                Text(saveErrorText)
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
             VStack(alignment: .leading, spacing: 6) {
                 SectionLabel(text: "Hinweis")
 
@@ -330,31 +361,9 @@ struct AccessSettingsView: View {
                 }
             }
 
-            // Save button (right-aligned, text only)
-            HStack {
-                Spacer()
-                Button {
-                    save()
-                } label: {
-                    if saved {
-                        HStack(spacing: 4) {
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 10, weight: .bold))
-                            Text("Gespeichert")
-                        }
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.green)
-                    } else {
-                        Text("Speichern")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(.blue)
-                    }
-                }
-                .buttonStyle(SubtleButtonStyle())
-                .animation(.easeInOut(duration: 0.2), value: saved)
-            }
         }
         .padding(16)
+        .animation(.easeInOut(duration: 0.2), value: saved)
         .onAppear {
             launchAtLoginService.refresh()
             refreshInstallState()
@@ -370,31 +379,36 @@ struct AccessSettingsView: View {
         openAIAPIKey = ""
     }
 
-    private func save() {
-        saveErrorText = nil
+    /// Speichert den Key direkt nach Eingabe/Einfügen — kein separater Button.
+    private func saveAPIKey() {
+        apiKeyErrorText = nil
         cleanupStatusText = nil
         cleanupErrorText = nil
         KeychainService.invalidateCache()
+
         let trimmedAPIKey = openAIAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        if editingAPIKey || !appState.hasValue(for: .openAIAPIKey) {
-            guard !trimmedAPIKey.isEmpty else {
-                saveErrorText = "Bitte trage deinen OpenAI API Key ein."
-                return
-            }
-            do {
-                try KeychainService.save(key: .openAIAPIKey, value: trimmedAPIKey)
-                openAIAPIKey = ""
-                editingAPIKey = false
-            } catch {
-                saveErrorText = "OpenAI API Key konnte nicht gespeichert werden."
-                return
-            }
+        guard !trimmedAPIKey.isEmpty else {
+            apiKeyErrorText = "Bitte trage deinen OpenAI API Key ein."
+            return
+        }
+        guard trimmedAPIKey.range(of: Self.openAIAPIKeyPattern, options: .regularExpression) != nil else {
+            apiKeyErrorText = "Das sieht nicht nach einem OpenAI API Key aus (beginnt mit „sk-“)."
+            return
+        }
+
+        do {
+            try KeychainService.save(key: .openAIAPIKey, value: trimmedAPIKey)
+            openAIAPIKey = ""
+            editingAPIKey = false
+        } catch {
+            apiKeyErrorText = "OpenAI API Key konnte nicht gespeichert werden."
+            return
         }
 
         KeychainService.invalidateCache()
         if !appState.hasValue(for: .openAIAPIKey) {
-            saveErrorText = "OpenAI API Key wurde nicht persistent gespeichert. Bitte App neu starten und erneut versuchen."
+            apiKeyErrorText = "OpenAI API Key wurde nicht persistent gespeichert. Bitte App neu starten und erneut versuchen."
             return
         }
 
@@ -406,20 +420,21 @@ struct AccessSettingsView: View {
 
     private func pasteAPIKeyFromClipboard() {
         guard let rawText = NSPasteboard.general.string(forType: .string) else {
-            saveErrorText = "Zwischenablage enthält keinen Text."
+            apiKeyErrorText = "Zwischenablage enthält keinen Text."
             return
         }
 
         let firstLine = rawText.components(separatedBy: .newlines).first ?? rawText
         let trimmedKey = firstLine.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmedKey.range(of: Self.openAIAPIKeyPattern, options: .regularExpression) != nil else {
-            saveErrorText = "Zwischenablage enthält keinen plausiblen OpenAI API Key."
+            apiKeyErrorText = "Zwischenablage enthält keinen plausiblen OpenAI API Key."
             return
         }
 
         openAIAPIKey = trimmedKey
         NSPasteboard.general.clearContents()
-        saveErrorText = nil
+        apiKeyErrorText = nil
+        saveAPIKey()
     }
 
     private var installationHeadline: String {
