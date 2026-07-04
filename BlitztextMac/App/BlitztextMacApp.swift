@@ -25,6 +25,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
+        menuBarStatusController.useModernTheme = appState.appSettings.useModernTheme
+
         if let button = statusItem.button {
             menuBarStatusController.attach(to: button)
             button.action = #selector(togglePopover)
@@ -45,6 +47,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
         appState.onMenuBarStatusChange = { [weak self] status in
             self?.menuBarStatusController.update(to: status)
+        }
+        appState.onMenuBarThemeChange = { [weak self] modern in
+            self?.menuBarStatusController.useModernTheme = modern
         }
         appState.hotkeyService.start()
 

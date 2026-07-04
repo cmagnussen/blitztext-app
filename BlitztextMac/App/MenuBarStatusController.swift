@@ -13,7 +13,17 @@ final class MenuBarStatusController {
     private weak var button: NSStatusBarButton?
     private var animationTimer: Timer?
     private var animationFrame = 0
+    private var animationPhase: Double = 0
     private var currentStatus: MenuBarStatus = .idle
+
+    /// Umschaltbares Theme: modern = Ring-Icon, klassisch = Streifen-Icon.
+    var useModernTheme = false {
+        didSet {
+            guard oldValue != useModernTheme else { return }
+            configureAnimationIfNeeded()
+            renderCurrentStatus()
+        }
+    }
 
     func attach(to button: NSStatusBarButton) {
         self.button = button
@@ -25,6 +35,7 @@ final class MenuBarStatusController {
     func update(to status: MenuBarStatus) {
         currentStatus = status
         animationFrame = 0
+        animationPhase = 0
         configureAnimationIfNeeded()
         renderCurrentStatus()
     }
@@ -34,21 +45,22 @@ final class MenuBarStatusController {
 
         switch currentStatus {
         case .recording:
-            startAnimation(interval: 0.12)
+            startAnimation(interval: useModernTheme ? 1.0 / 30.0 : 0.12)
         case .processing:
-            startAnimation(interval: 0.18)
+            startAnimation(interval: useModernTheme ? 1.0 / 30.0 : 0.18)
         default:
             break
         }
     }
 
     private func startAnimation(interval: TimeInterval) {
-        animationTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+        let timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.tick()
+                self?.tick(interval)
             }
         }
-        RunLoop.main.add(animationTimer!, forMode: .common)
+        animationTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
     }
 
     private func stopAnimation() {
@@ -56,15 +68,23 @@ final class MenuBarStatusController {
         animationTimer = nil
     }
 
-    private func tick() {
+    private func tick(_ interval: TimeInterval) {
         animationFrame = (animationFrame + 1) % 4
+        animationPhase += interval
         renderCurrentStatus()
     }
 
     private func renderCurrentStatus() {
         guard let button else { return }
-        button.image = MenuBarStatusIconRenderer.makeImage(for: currentStatus, frame: animationFrame)
-        button.image?.isTemplate = true
+        if useModernTheme {
+            let rendered = MenuBarRingIcon.makeImage(for: currentStatus, phase: animationPhase)
+            rendered.image.isTemplate = rendered.isTemplate
+            button.image = rendered.image
+        } else {
+            let image = MenuBarStatusIconRenderer.makeImage(for: currentStatus, frame: animationFrame)
+            image.isTemplate = true
+            button.image = image
+        }
         button.toolTip = tooltip(for: currentStatus)
     }
 
@@ -187,7 +207,7 @@ private enum MenuBarStatusIconRenderer {
                 values = [0.66, 0.84, 1.0, 0.8]
             case .dampfAblassen:
                 values = [1.0, 0.76, 0.94, 0.68]
-            case .emojiText:
+            case .emojiText, .translate, .summarize, .format:
                 values = [0.8, 0.92, 0.7, 1.0]
             }
             badgeOpacity = values[frame % values.count]
@@ -201,7 +221,7 @@ private enum MenuBarStatusIconRenderer {
                 values = [0.48, 0.68, 0.92, 0.84]
             case .dampfAblassen:
                 values = [0.84, 0.62, 0.9, 0.56]
-            case .emojiText:
+            case .emojiText, .translate, .summarize, .format:
                 values = [0.54, 0.76, 0.88, 0.68]
             }
             badgeOpacity = values[frame % values.count]
@@ -308,7 +328,7 @@ private enum MenuBarStatusIconRenderer {
                 [0.94, 0.4, 0.74, 1.0],
             ]
             return patterns[frame % patterns.count]
-        case .emojiText:
+        case .emojiText, .translate, .summarize, .format:
             let patterns: [[CGFloat]] = [
                 [1.0, 0.7, 0.46, 0.28],
                 [0.78, 1.0, 0.72, 0.42],
@@ -345,7 +365,7 @@ private enum MenuBarStatusIconRenderer {
                 [0.84, 0.48, 0.78, 1.0],
             ]
             return patterns[frame % patterns.count]
-        case .emojiText:
+        case .emojiText, .translate, .summarize, .format:
             let patterns: [[CGFloat]] = [
                 [1.0, 0.8, 0.58, 0.4],
                 [0.88, 1.0, 0.78, 0.54],
@@ -368,6 +388,12 @@ private enum MenuBarStatusIconRenderer {
             return "flame.fill"
         case .emojiText:
             return "face.smiling"
+        case .translate:
+            return "globe"
+        case .summarize:
+            return "doc.plaintext"
+        case .format:
+            return "list.bullet"
         }
     }
 
@@ -375,6 +401,69 @@ private enum MenuBarStatusIconRenderer {
         guard let image = NSImage(named: "menubar_icon") else { return nil }
         image.isTemplate = true
         image.size = NSSize(width: 18, height: 18)
+        return image
+    }
+}
+
+// MARK: - Modern Ring Icon (Theme "Modern")
+
+private enum MenuBarRingIcon {
+    struct Rendered {
+        let image: NSImage
+        let isTemplate: Bool
+    }
+
+    private static let size = NSSize(width: 18, height: 18)
+    private static let recordingYellow = NSColor(srgbRed: 1.0, green: 0.80, blue: 0.0, alpha: 1.0)
+    private static let successGreen = NSColor(srgbRed: 0.30, green: 0.78, blue: 0.36, alpha: 1.0)
+    private static let errorOrange = NSColor(srgbRed: 1.0, green: 0.46, blue: 0.20, alpha: 1.0)
+
+    static func makeImage(for status: MenuBarStatus, phase: Double) -> Rendered {
+        switch status {
+        case .idle:
+            // Monochromer Template-Ring — passt sich hell/dunkel an.
+            return Rendered(image: ring(color: .black, alpha: 1.0), isTemplate: true)
+        case .processing:
+            let alpha = 0.55 + 0.45 * pulse(phase, period: 1.4)
+            return Rendered(image: ring(color: .black, alpha: alpha), isTemplate: true)
+        case .recording:
+            let alpha = 0.45 + 0.55 * pulse(phase, period: 1.0)
+            let image = ring(color: recordingYellow, alpha: alpha, haloAlpha: alpha * 0.45)
+            return Rendered(image: image, isTemplate: false)
+        case .success:
+            return Rendered(image: ring(color: successGreen, alpha: 1.0), isTemplate: false)
+        case .error:
+            return Rendered(image: ring(color: errorOrange, alpha: 1.0), isTemplate: false)
+        }
+    }
+
+    /// Weicher 0...1 Sinus-Puls.
+    private static func pulse(_ phase: Double, period: Double) -> Double {
+        let x = sin((phase / period) * 2 * .pi)
+        return (x + 1) / 2
+    }
+
+    private static func ring(color: NSColor, alpha: CGFloat, haloAlpha: CGFloat = 0) -> NSImage {
+        let image = NSImage(size: size, flipped: false) { bounds in
+            let inset: CGFloat = 3.4
+            let lineWidth: CGFloat = 1.7
+            let rect = bounds.insetBy(dx: inset, dy: inset)
+
+            if haloAlpha > 0 {
+                let haloRect = rect.insetBy(dx: -1.4, dy: -1.4)
+                let haloPath = NSBezierPath(ovalIn: haloRect)
+                color.withAlphaComponent(haloAlpha).setStroke()
+                haloPath.lineWidth = 2.2
+                haloPath.stroke()
+            }
+
+            let path = NSBezierPath(ovalIn: rect)
+            color.withAlphaComponent(alpha).setStroke()
+            path.lineWidth = lineWidth
+            path.stroke()
+            return true
+        }
+        image.size = size
         return image
     }
 }

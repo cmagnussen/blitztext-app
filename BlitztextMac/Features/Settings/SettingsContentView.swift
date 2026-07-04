@@ -598,6 +598,19 @@ struct CustomizeSettingsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
 
+            // MARK: Darstellung
+            VStack(alignment: .leading, spacing: 8) {
+                SectionLabel(text: "Darstellung")
+
+                Toggle("Modernes Design", isOn: $appState.appSettings.useModernTheme)
+                    .toggleStyle(.switch)
+
+                Text("Ring-Icon in der Men\u{00FC}leiste und ein Glas-Look mit Akzent-Schein im Men\u{00FC}. Aus = klassisches Design.")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             // MARK: Lokaler Modus
             VStack(alignment: .leading, spacing: 10) {
                 SectionLabel(text: "Sicherer Lokaler Modus")
@@ -811,6 +824,29 @@ struct CustomizeSettingsView: View {
                         }
                     }
                     .pickerStyle(.segmented)
+                }
+            }
+
+            // MARK: Blitztext →EN
+            VStack(alignment: .leading, spacing: 10) {
+                SectionLabel(text: "Blitztext \u{2192}EN")
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Schreibstil")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+
+                    Picker("", selection: $appState.translateSettings.tone) {
+                        ForEach(TextImprovementSettings.TextTone.allCases) { tone in
+                            Text(tone.displayName).tag(tone)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    Text("Deutsch sprechen, Englisch im gew\u{00E4}hlten Ton einf\u{00FC}gen (\u{00FC}ber dein lokales KI-Modell).")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
 

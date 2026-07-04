@@ -8,6 +8,9 @@ enum WorkflowType: String, CaseIterable, Identifiable, Codable {
     case textImprover
     case dampfAblassen
     case emojiText
+    case translate
+    case summarize
+    case format
 
     var id: String { rawValue }
 
@@ -22,6 +25,9 @@ enum WorkflowType: String, CaseIterable, Identifiable, Codable {
         case .textImprover: return "Blitztext+"
         case .dampfAblassen: return "Blitztext $%&!"
         case .emojiText: return "Blitztext :)"
+        case .translate: return "Blitztext \u{2192}EN"
+        case .summarize: return "Zusammenfassen"
+        case .format: return "Format"
         }
     }
 
@@ -32,6 +38,9 @@ enum WorkflowType: String, CaseIterable, Identifiable, Codable {
         case .textImprover: return "text.badge.checkmark"
         case .dampfAblassen: return "flame.fill"
         case .emojiText: return "face.smiling"
+        case .translate: return "globe"
+        case .summarize: return "doc.plaintext"
+        case .format: return "list.bullet"
         }
     }
 
@@ -42,6 +51,9 @@ enum WorkflowType: String, CaseIterable, Identifiable, Codable {
         case .textImprover: return "Geschrieben sprechen."
         case .dampfAblassen: return "Frust rein. Entspannt raus."
         case .emojiText: return "Text rein. Emojis dazu."
+        case .translate: return "Deutsch sprechen. Englisch raus."
+        case .summarize: return "Sprechen. Kurzfassung raus."
+        case .format: return "Stichpunkte \u{00B7} E-Mail \u{00B7} To-do."
         }
     }
 
@@ -51,7 +63,10 @@ enum WorkflowType: String, CaseIterable, Identifiable, Codable {
         case .localTranscription: return "fn + Shift + Ctrl"
         case .textImprover: return "fn + Control"
         case .dampfAblassen: return "fn + Option"
-        case .emojiText: return "fn + Cmd"
+        case .emojiText: return "Men\u{00FC}"
+        case .translate: return "fn + Cmd"
+        case .summarize: return "Men\u{00FC}"
+        case .format: return "Men\u{00FC}"
         }
     }
 
@@ -62,6 +77,33 @@ enum WorkflowType: String, CaseIterable, Identifiable, Codable {
         case .textImprover: return "purple"
         case .dampfAblassen: return "orange"
         case .emojiText: return "cyan"
+        case .translate: return "indigo"
+        case .summarize: return "teal"
+        case .format: return "mint"
+        }
+    }
+}
+
+enum TextFormatKind: String, Codable, CaseIterable, Identifiable {
+    case bullets
+    case email
+    case todo
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .bullets: return "Stichpunkte"
+        case .email: return "E-Mail"
+        case .todo: return "To-do"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .bullets: return "list.bullet"
+        case .email: return "envelope"
+        case .todo: return "checklist"
         }
     }
 }
@@ -142,6 +184,8 @@ struct AppSettings: Codable {
     var corrections: [TextCorrection] = []
     // Hängt nach jedem Diktat ein Leerzeichen an, damit aufeinanderfolgende Diktate getrennt bleiben.
     var appendTrailingSpace: Bool = true
+    // Darstellung: false = Klassisch, true = Modern (Ring-Icon + Frosted-Glass-Popover).
+    var useModernTheme: Bool = false
 
     init(
         hotkeyMode: HotkeyMode = .hold,
@@ -157,7 +201,8 @@ struct AppSettings: Codable {
         localLLMServerPath: String = AppSettings.defaultLocalLLMServerPath,
         localLLMModelPath: String = AppSettings.defaultLocalLLMModelPath,
         corrections: [TextCorrection] = [],
-        appendTrailingSpace: Bool = true
+        appendTrailingSpace: Bool = true,
+        useModernTheme: Bool = false
     ) {
         self.hotkeyMode = hotkeyMode
         self.hasSeenOnboarding = hasSeenOnboarding
@@ -173,6 +218,7 @@ struct AppSettings: Codable {
         self.localLLMModelPath = localLLMModelPath
         self.corrections = corrections
         self.appendTrailingSpace = appendTrailingSpace
+        self.useModernTheme = useModernTheme
     }
 
     enum CodingKeys: String, CodingKey {
@@ -190,6 +236,7 @@ struct AppSettings: Codable {
         case localLLMModelPath
         case corrections
         case appendTrailingSpace
+        case useModernTheme
     }
 
     init(from decoder: Decoder) throws {
@@ -229,6 +276,7 @@ struct AppSettings: Codable {
         ) ?? AppSettings.defaultLocalLLMModelPath
         corrections = try container.decodeIfPresent([TextCorrection].self, forKey: .corrections) ?? []
         appendTrailingSpace = try container.decodeIfPresent(Bool.self, forKey: .appendTrailingSpace) ?? true
+        useModernTheme = try container.decodeIfPresent(Bool.self, forKey: .useModernTheme) ?? false
     }
 }
 
@@ -299,4 +347,9 @@ struct TextImprovementSettings: Codable {
             }
         }
     }
+}
+
+struct TranslateSettings: Codable {
+    var tone: TextImprovementSettings.TextTone = .neutral
+    var customName: String = ""
 }
