@@ -4,8 +4,8 @@ import Observation
 
 @Observable
 @MainActor
-final class DampfAblassenWorkflow: Workflow {
-    let type = WorkflowType.dampfAblassen
+final class TranslateWorkflow: Workflow {
+    let type = WorkflowType.translate
     var phase: WorkflowPhase = .idle {
         didSet { onPhaseChange?(phase) }
     }
@@ -13,28 +13,28 @@ final class DampfAblassenWorkflow: Workflow {
     var onPhaseChange: WorkflowPhaseChangeHandler?
 
     private let recorder = AudioRecorder()
-    private let settings: DampfAblassenSettings
     private let customTerms: [String]
     private let language: String
     private let backend: TranscriptionBackend
     private let localModelName: String
     private let llmConfig: LLMConfig
+    private let tone: TextImprovementSettings.TextTone
     private var processingTask: Task<Void, Never>?
 
     init(
-        settings: DampfAblassenSettings,
         customTerms: [String] = [],
         language: String = "de",
         backend: TranscriptionBackend = .remote,
         localModelName: String = LocalTranscriptionService.recommendedFastModelName,
-        llmConfig: LLMConfig = .openAI
+        llmConfig: LLMConfig = .openAI,
+        tone: TextImprovementSettings.TextTone = .neutral
     ) {
-        self.settings = settings
         self.customTerms = customTerms
         self.language = language
         self.backend = backend
         self.localModelName = localModelName
         self.llmConfig = llmConfig
+        self.tone = tone
     }
 
     // MARK: - Recording State
@@ -77,7 +77,7 @@ final class DampfAblassenWorkflow: Workflow {
         phase = .idle
     }
 
-    // MARK: - Two-Phase Processing: Whisper -> GPT Rage Mode
+    // MARK: - Two-Phase Processing: Whisper -> Übersetzung
 
     private func processRecording() {
         guard let url = recorder.recordingURL else {
@@ -111,21 +111,17 @@ final class DampfAblassenWorkflow: Workflow {
 
                 if Task.isCancelled { return }
 
-                // Phase 2: GPT dampf ablassen
-                phase = .running("Wird umformuliert ...")
+                // Phase 2: Übersetzung
+                phase = .running("Wird übersetzt ...")
 
-                let answer = try await LLMService.dampfAblassen(
+                let translated = try await LLMService.translate(
                     text: cleanedRawText,
-                    systemPrompt: settings.systemPrompt,
+                    tone: tone,
                     config: llmConfig
                 )
-                let cleanedAnswer = TranscriptionQualityService.cleanedTranscript(answer)
-                guard cleanedAnswer != "KEINE_AUFNAHME_ERKANNT" else {
-                    phase = .error("Keine Aufnahme erkannt.")
-                    return
-                }
-                phase = .done(cleanedAnswer)
-                onOutput?(cleanedAnswer)
+                let cleanedTranslated = TranscriptionQualityService.cleanedTranscript(translated)
+                phase = .done(cleanedTranslated)
+                onOutput?(cleanedTranslated)
             } catch {
                 phase = .error(error.localizedDescription)
             }

@@ -16,12 +16,25 @@ final class EmojiTextWorkflow: Workflow {
     private let settings: EmojiTextSettings
     private let customTerms: [String]
     private let language: String
+    private let backend: TranscriptionBackend
+    private let localModelName: String
+    private let llmConfig: LLMConfig
     private var processingTask: Task<Void, Never>?
 
-    init(settings: EmojiTextSettings, customTerms: [String] = [], language: String = "de") {
+    init(
+        settings: EmojiTextSettings,
+        customTerms: [String] = [],
+        language: String = "de",
+        backend: TranscriptionBackend = .remote,
+        localModelName: String = LocalTranscriptionService.recommendedFastModelName,
+        llmConfig: LLMConfig = .openAI
+    ) {
         self.settings = settings
         self.customTerms = customTerms
         self.language = language
+        self.backend = backend
+        self.localModelName = localModelName
+        self.llmConfig = llmConfig
     }
 
     // MARK: - Recording State
@@ -82,11 +95,13 @@ final class EmojiTextWorkflow: Workflow {
             }
 
             do {
-                // Phase 1: Whisper transcription
+                // Phase 1: Whisper transcription (remote oder lokal)
                 let rawText = try await TranscriptionService.transcribe(
                     audioURL: url,
                     customTerms: vocabularyHints,
-                    language: language
+                    language: language,
+                    backend: backend,
+                    localModelName: localModelName
                 )
                 let cleanedRawText = TranscriptionQualityService.cleanedTranscript(rawText)
                 guard !TranscriptionQualityService.isLikelyArtifact(cleanedRawText, recordingDuration: recordingDuration) else {
@@ -101,7 +116,8 @@ final class EmojiTextWorkflow: Workflow {
 
                 let result = try await LLMService.addEmojis(
                     text: cleanedRawText,
-                    settings: settings
+                    settings: settings,
+                    config: llmConfig
                 )
                 let cleanedResult = TranscriptionQualityService.cleanedTranscript(result)
                 guard cleanedResult != "KEINE_AUFNAHME_ERKANNT" else {

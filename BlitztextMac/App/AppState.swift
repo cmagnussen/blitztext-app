@@ -29,6 +29,7 @@ final class AppState {
     var localModelDownloadStatusText: String?
     var localModelDownloadErrorText: String?
     var onMenuBarStatusChange: ((MenuBarStatus) -> Void)?
+    var onMenuBarThemeChange: ((Bool) -> Void)?
     private var activeLaunchSource: WorkflowLaunchSource = .manual
     private var activePasteTarget: PasteTarget?
     private var lastPopoverPasteTarget: PasteTarget?
@@ -40,6 +41,9 @@ final class AppState {
         didSet {
             saveSettings()
             prewarmLocalTranscriptionIfNeeded()
+            if oldValue.useModernTheme != appSettings.useModernTheme {
+                onMenuBarThemeChange?(appSettings.useModernTheme)
+            }
         }
     }
     var transcriptionSettings: TranscriptionSettings {
@@ -52,6 +56,9 @@ final class AppState {
         didSet { saveSettings() }
     }
     var emojiTextSettings: EmojiTextSettings {
+        didSet { saveSettings() }
+    }
+    var translateSettings: TranslateSettings {
         didSet { saveSettings() }
     }
 
@@ -76,6 +83,7 @@ final class AppState {
         self.textImprovementSettings = Self.loadTextImprovementSettings()
         self.dampfAblassenSettings = Self.loadDampfAblassenSettings()
         self.emojiTextSettings = Self.loadEmojiTextSettings()
+        self.translateSettings = Self.loadTranslateSettings()
         refreshAccessibilityPermission()
         autoSelectFastLocalModelIfNeeded()
         prewarmLocalTranscriptionIfNeeded()
@@ -111,12 +119,35 @@ final class AppState {
             return "Online: Whisper über OpenAI."
         case .localTranscription:
             return "Nur lokal. Kein Server."
-        case .textImprover, .dampfAblassen, .emojiText:
+        case .textImprover, .dampfAblassen, .emojiText, .translate, .summarize, .format:
             if appSettings.secureLocalModeEnabled {
-                return "Im lokalen Modus pausiert."
+                if appSettings.localLLMEnabled {
+                    return selectedLocalModelIsInstalled
+                        ? "Lokal: \(LocalTranscriptionModel.displayName(for: selectedLocalModelName)) + lokales KI-Modell."
+                        : "Lokales WhisperKit-Modell fehlt."
+                }
+                return "Lokales KI-Modell nicht aktiviert."
+            }
+            if appSettings.localLLMEnabled {
+                return "Transkription online, KI lokal."
             }
             return type.subtitle
         }
+    }
+
+    /// Endpoint-Konfiguration für die Rewrite-Features (OpenAI oder lokaler Server).
+    var llmConfig: LLMConfig {
+        LLMConfig(
+            useLocal: appSettings.localLLMEnabled,
+            baseURL: appSettings.localLLMBaseURL,
+            fastModel: appSettings.localLLMFastModel,
+            strongModel: appSettings.localLLMStrongModel
+        )
+    }
+
+    /// Transkriptions-Backend für die KI-Workflows folgt dem Sicheren Lokalen Modus.
+    var rewriteTranscriptionBackend: TranscriptionBackend {
+        appSettings.secureLocalModeEnabled ? .local : .remote
     }
 
     var resolvedLocalModelName: String {
@@ -188,7 +219,10 @@ final class AppState {
         case .textImprover:
             let workflow = TextImprovementWorkflow(
                 settings: textImprovementSettings,
-                language: transcriptionSettings.language
+                language: transcriptionSettings.language,
+                backend: rewriteTranscriptionBackend,
+                localModelName: selectedLocalModelName,
+                llmConfig: llmConfig
             )
             configureWorkflowHandlers(workflow)
             activeWorkflow = workflow
@@ -198,7 +232,10 @@ final class AppState {
             let workflow = DampfAblassenWorkflow(
                 settings: dampfAblassenSettings,
                 customTerms: textImprovementSettings.customTerms,
-                language: transcriptionSettings.language
+                language: transcriptionSettings.language,
+                backend: rewriteTranscriptionBackend,
+                localModelName: selectedLocalModelName,
+                llmConfig: llmConfig
             )
             configureWorkflowHandlers(workflow)
             activeWorkflow = workflow
@@ -208,7 +245,47 @@ final class AppState {
             let workflow = EmojiTextWorkflow(
                 settings: emojiTextSettings,
                 customTerms: textImprovementSettings.customTerms,
-                language: transcriptionSettings.language
+                language: transcriptionSettings.language,
+                backend: rewriteTranscriptionBackend,
+                localModelName: selectedLocalModelName,
+                llmConfig: llmConfig
+            )
+            configureWorkflowHandlers(workflow)
+            activeWorkflow = workflow
+            workflow.start()
+
+        case .translate:
+            let workflow = TranslateWorkflow(
+                customTerms: textImprovementSettings.customTerms,
+                language: transcriptionSettings.language,
+                backend: rewriteTranscriptionBackend,
+                localModelName: selectedLocalModelName,
+                llmConfig: llmConfig,
+                tone: translateSettings.tone
+            )
+            configureWorkflowHandlers(workflow)
+            activeWorkflow = workflow
+            workflow.start()
+
+        case .summarize:
+            let workflow = SummarizeWorkflow(
+                customTerms: textImprovementSettings.customTerms,
+                language: transcriptionSettings.language,
+                backend: rewriteTranscriptionBackend,
+                localModelName: selectedLocalModelName,
+                llmConfig: llmConfig
+            )
+            configureWorkflowHandlers(workflow)
+            activeWorkflow = workflow
+            workflow.start()
+
+        case .format:
+            let workflow = FormatWorkflow(
+                customTerms: textImprovementSettings.customTerms,
+                language: transcriptionSettings.language,
+                backend: rewriteTranscriptionBackend,
+                localModelName: selectedLocalModelName,
+                llmConfig: llmConfig
             )
             configureWorkflowHandlers(workflow)
             activeWorkflow = workflow
@@ -226,8 +303,14 @@ final class AppState {
             return appSettings.secureLocalModeEnabled
                 ? selectedLocalModelIsInstalled
                 : KeychainService.isConfigured
-        case .textImprover, .dampfAblassen, .emojiText:
-            return !appSettings.secureLocalModeEnabled && KeychainService.isConfigured
+        case .textImprover, .dampfAblassen, .emojiText, .translate, .summarize, .format:
+            // Phase 1 (Transkription) folgt dem Sicheren Lokalen Modus,
+            // Phase 2 (Rewrite/Übersetzung/Format) dem lokalen KI-Modell. Beide müssen verfügbar sein.
+            let transcriptionReady = appSettings.secureLocalModeEnabled
+                ? selectedLocalModelIsInstalled
+                : KeychainService.isConfigured
+            let rewriteReady = appSettings.localLLMEnabled || KeychainService.isConfigured
+            return transcriptionReady && rewriteReady
         }
     }
 
@@ -375,7 +458,8 @@ final class AppState {
             transcription: transcriptionSettings,
             textImprovement: textImprovementSettings,
             dampfAblassen: dampfAblassenSettings,
-            emojiText: emojiTextSettings
+            emojiText: emojiTextSettings,
+            translate: translateSettings
         )
         if let data = try? JSONEncoder().encode(container) {
             try? data.write(to: Self.settingsURL)
@@ -400,6 +484,10 @@ final class AppState {
 
     private static func loadEmojiTextSettings() -> EmojiTextSettings {
         loadContainer()?.emojiText ?? EmojiTextSettings()
+    }
+
+    private static func loadTranslateSettings() -> TranslateSettings {
+        loadContainer()?.translate ?? TranslateSettings()
     }
 
     private static func loadContainer() -> SettingsContainer? {
@@ -448,7 +536,13 @@ final class AppState {
     }
 
     private func handleWorkflowOutput(_ text: String) {
-        pasteAtCursor(text, target: activePasteTarget)
+        // Gelernte Korrekturen auf den finalen Text anwenden (gilt für alle Workflows).
+        var output = TranscriptionQualityService.applyCorrections(text, appSettings.corrections)
+        // Leerzeichen anhängen, damit aufeinanderfolgende Diktate nicht zusammenkleben.
+        if appSettings.appendTrailingSpace, !output.isEmpty {
+            output += " "
+        }
+        pasteAtCursor(output, target: activePasteTarget)
         if activeLaunchSource == .hotkeyBackground {
             page = .main
         }
@@ -603,6 +697,7 @@ private struct SettingsContainer: Codable {
     var textImprovement: TextImprovementSettings
     var dampfAblassen: DampfAblassenSettings?
     var emojiText: EmojiTextSettings?
+    var translate: TranslateSettings?
 }
 
 // MARK: - Notification for Popover Dismissal

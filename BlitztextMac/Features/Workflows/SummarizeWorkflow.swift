@@ -4,8 +4,8 @@ import Observation
 
 @Observable
 @MainActor
-final class DampfAblassenWorkflow: Workflow {
-    let type = WorkflowType.dampfAblassen
+final class SummarizeWorkflow: Workflow {
+    let type = WorkflowType.summarize
     var phase: WorkflowPhase = .idle {
         didSet { onPhaseChange?(phase) }
     }
@@ -13,7 +13,6 @@ final class DampfAblassenWorkflow: Workflow {
     var onPhaseChange: WorkflowPhaseChangeHandler?
 
     private let recorder = AudioRecorder()
-    private let settings: DampfAblassenSettings
     private let customTerms: [String]
     private let language: String
     private let backend: TranscriptionBackend
@@ -22,14 +21,12 @@ final class DampfAblassenWorkflow: Workflow {
     private var processingTask: Task<Void, Never>?
 
     init(
-        settings: DampfAblassenSettings,
         customTerms: [String] = [],
         language: String = "de",
         backend: TranscriptionBackend = .remote,
         localModelName: String = LocalTranscriptionService.recommendedFastModelName,
         llmConfig: LLMConfig = .openAI
     ) {
-        self.settings = settings
         self.customTerms = customTerms
         self.language = language
         self.backend = backend
@@ -37,17 +34,12 @@ final class DampfAblassenWorkflow: Workflow {
         self.llmConfig = llmConfig
     }
 
-    // MARK: - Recording State
-
     var isRecording: Bool { recorder.isRecording }
     var audioLevel: Float { recorder.audioLevel }
-
-    // MARK: - Workflow Protocol
 
     func start() {
         phase = .running("Aufnahme läuft ...")
         recorder.startRecording()
-
         if let error = recorder.errorMessage {
             phase = .error(error)
         }
@@ -77,8 +69,6 @@ final class DampfAblassenWorkflow: Workflow {
         phase = .idle
     }
 
-    // MARK: - Two-Phase Processing: Whisper -> GPT Rage Mode
-
     private func processRecording() {
         guard let url = recorder.recordingURL else {
             phase = .error("Keine Aufnahme vorhanden.")
@@ -95,7 +85,6 @@ final class DampfAblassenWorkflow: Workflow {
             }
 
             do {
-                // Phase 1: Whisper transcription (remote oder lokal)
                 let rawText = try await TranscriptionService.transcribe(
                     audioURL: url,
                     customTerms: vocabularyHints,
@@ -111,21 +100,15 @@ final class DampfAblassenWorkflow: Workflow {
 
                 if Task.isCancelled { return }
 
-                // Phase 2: GPT dampf ablassen
-                phase = .running("Wird umformuliert ...")
+                phase = .running("Wird zusammengefasst ...")
 
-                let answer = try await LLMService.dampfAblassen(
+                let summary = try await LLMService.summarize(
                     text: cleanedRawText,
-                    systemPrompt: settings.systemPrompt,
                     config: llmConfig
                 )
-                let cleanedAnswer = TranscriptionQualityService.cleanedTranscript(answer)
-                guard cleanedAnswer != "KEINE_AUFNAHME_ERKANNT" else {
-                    phase = .error("Keine Aufnahme erkannt.")
-                    return
-                }
-                phase = .done(cleanedAnswer)
-                onOutput?(cleanedAnswer)
+                let cleaned = TranscriptionQualityService.cleanedTranscript(summary)
+                phase = .done(cleaned)
+                onOutput?(cleaned)
             } catch {
                 phase = .error(error.localizedDescription)
             }

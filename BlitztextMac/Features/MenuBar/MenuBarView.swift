@@ -2,8 +2,25 @@ import SwiftUI
 
 struct MenuBarView: View {
     @Bindable var appState: AppState
+    @State private var pulse = false
 
     var body: some View {
+        Group {
+            if appState.appSettings.useModernTheme {
+                ZStack {
+                    VisualEffectBackground()
+                    ambientGlow
+                    pageContent
+                }
+            } else {
+                pageContent
+            }
+        }
+        .frame(width: 340)
+        .animation(.easeInOut(duration: 0.2), value: appState.page)
+    }
+
+    private var pageContent: some View {
         VStack(spacing: 0) {
             switch appState.page {
             case .main:
@@ -16,8 +33,63 @@ struct MenuBarView: View {
                 workflowPage
             }
         }
-        .frame(width: 340)
-        .animation(.easeInOut(duration: 0.2), value: appState.page)
+    }
+
+    // MARK: - Modern Theme: Ambient Accent Glow
+
+    private var isRecordingStatus: Bool {
+        if case .recording = appState.menuBarStatus { return true }
+        return false
+    }
+
+    private var ambientAccent: Color {
+        switch appState.menuBarStatus {
+        case .recording(let type), .processing(let type):
+            return workflowIconColor(type)
+        case .success:
+            return .green
+        case .error:
+            return .orange
+        case .idle:
+            if let type = appState.activeWorkflow?.type {
+                return workflowIconColor(type)
+            }
+            return appState.appSettings.secureLocalModeEnabled ? .green : .blue
+        }
+    }
+
+    private var glowBaseIntensity: Double {
+        switch appState.menuBarStatus {
+        case .recording: return 0.18
+        case .processing: return 0.15
+        case .success, .error: return 0.16
+        case .idle: return 0.10
+        }
+    }
+
+    private var ambientGlow: some View {
+        RadialGradient(
+            colors: [ambientAccent.opacity(glowBaseIntensity), .clear],
+            center: .top,
+            startRadius: 0,
+            endRadius: 220
+        )
+        .blendMode(.plusLighter)
+        .opacity(isRecordingStatus ? (pulse ? 1.0 : 0.65) : 1.0)
+        .allowsHitTesting(false)
+        .animation(.easeInOut(duration: 0.45), value: glowBaseIntensity)
+        .animation(.easeInOut(duration: 0.45), value: ambientAccent)
+        .onChange(of: isRecordingStatus) { _, recording in
+            if recording {
+                withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) {
+                    pulse = true
+                }
+            } else {
+                withAnimation(.easeOut(duration: 0.3)) {
+                    pulse = false
+                }
+            }
+        }
     }
 
     // MARK: - Main Page
@@ -615,6 +687,18 @@ struct MenuBarView: View {
                     if let w = workflow as? EmojiTextWorkflow {
                         EmojiTextActiveView(workflow: w)
                     }
+                case .translate:
+                    if let w = workflow as? TranslateWorkflow {
+                        TranslateActiveView(workflow: w)
+                    }
+                case .summarize:
+                    if let w = workflow as? SummarizeWorkflow {
+                        SummarizeActiveView(workflow: w)
+                    }
+                case .format:
+                    if let w = workflow as? FormatWorkflow {
+                        FormatActiveView(workflow: w)
+                    }
                 }
 
                 Spacer(minLength: 0)
@@ -645,6 +729,9 @@ struct MenuBarView: View {
         case .textImprover: return .purple
         case .dampfAblassen: return .orange
         case .emojiText: return .cyan
+        case .translate: return .indigo
+        case .summarize: return .teal
+        case .format: return .mint
         }
     }
 }
@@ -657,6 +744,20 @@ struct SubtleButtonStyle: ButtonStyle {
             .opacity(configuration.isPressed ? 0.5 : 1.0)
             .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
     }
+}
+
+// MARK: - Frosted Glass Background (Theme "Modern")
+
+struct VisualEffectBackground: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = .popover
+        view.blendingMode = .behindWindow
+        view.state = .active
+        return view
+    }
+
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
 }
 
 // MARK: - Transcription Active View
@@ -935,6 +1036,232 @@ struct EmojiTextActiveView: View {
 
             Spacer().frame(height: 8)
         }
+    }
+}
+
+// MARK: - Translate Active View
+
+struct TranslateActiveView: View {
+    @Bindable var workflow: TranslateWorkflow
+
+    var body: some View {
+        VStack(spacing: 0) {
+            switch workflow.phase {
+            case .idle, .running:
+                if workflow.isRecording {
+                    recordingView(onStop: { workflow.stop() })
+                } else {
+                    VStack(spacing: 12) {
+                        Spacer().frame(height: 24)
+                        ProgressView()
+                            .scaleEffect(0.7)
+                            .controlSize(.small)
+                        if case .running(let msg) = workflow.phase {
+                            Text(msg)
+                                .font(.system(size: 11.5))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(nil)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer().frame(height: 24)
+                    }
+                }
+
+            case .done(let text):
+                autoPasteView(text: text)
+
+            case .error(let msg):
+                errorView(message: msg) {
+                    workflow.reset()
+                    workflow.start()
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 16)
+    }
+
+    @ViewBuilder
+    private func recordingView(onStop: @escaping () -> Void) -> some View {
+        VStack(spacing: 16) {
+            Spacer().frame(height: 20)
+
+            WaveformView(audioLevel: workflow.audioLevel, isRecording: true)
+                .frame(height: 44)
+                .padding(.horizontal, 24)
+
+            Button(action: onStop) {
+                ZStack {
+                    Circle()
+                        .strokeBorder(.primary.opacity(0.2), lineWidth: 1.5)
+                        .frame(width: 44, height: 44)
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(.primary.opacity(0.7))
+                        .frame(width: 14, height: 14)
+                }
+            }
+            .buttonStyle(.plain)
+
+            Text("Ich h\u{00F6}re zu \u{2026} Klicke zum Stoppen.")
+                .font(.system(size: 11))
+                .foregroundStyle(.tertiary)
+
+            Spacer().frame(height: 8)
+        }
+    }
+}
+
+// MARK: - Summarize Active View
+
+struct SummarizeActiveView: View {
+    @Bindable var workflow: SummarizeWorkflow
+
+    var body: some View {
+        VStack(spacing: 0) {
+            switch workflow.phase {
+            case .idle, .running:
+                if workflow.isRecording {
+                    dictationRecordingView(audioLevel: workflow.audioLevel) { workflow.stop() }
+                } else {
+                    dictationProcessingView(phase: workflow.phase)
+                }
+            case .done(let text):
+                autoPasteView(text: text)
+            case .error(let msg):
+                errorView(message: msg) {
+                    workflow.reset()
+                    workflow.start()
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 16)
+    }
+}
+
+// MARK: - Format Active View (mit Schnellwahl)
+
+struct FormatActiveView: View {
+    @Bindable var workflow: FormatWorkflow
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if workflow.selectedFormat == nil {
+                formatChooser
+            } else {
+                switch workflow.phase {
+                case .idle, .running:
+                    if workflow.isRecording {
+                        dictationRecordingView(audioLevel: workflow.audioLevel) { workflow.stop() }
+                    } else {
+                        dictationProcessingView(phase: workflow.phase)
+                    }
+                case .done(let text):
+                    autoPasteView(text: text)
+                case .error(let msg):
+                    errorView(message: msg) {
+                        workflow.reset()
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 16)
+    }
+
+    private var formatChooser: some View {
+        VStack(spacing: 10) {
+            Spacer().frame(height: 16)
+
+            Text("Format w\u{00E4}hlen")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.primary)
+
+            Text("Danach sprechen und stoppen.")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+
+            VStack(spacing: 8) {
+                ForEach(TextFormatKind.allCases) { kind in
+                    Button {
+                        workflow.selectFormat(kind)
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: kind.icon)
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(.mint)
+                                .frame(width: 22)
+                            Text(kind.displayName)
+                                .font(.system(size: 12.5, weight: .medium))
+                                .foregroundStyle(.primary)
+                            Spacer()
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .frame(maxWidth: .infinity)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color.primary.opacity(0.05))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .strokeBorder(Color.primary.opacity(0.07), lineWidth: 0.5)
+                        )
+                    }
+                    .buttonStyle(SubtleButtonStyle())
+                }
+            }
+
+            Spacer().frame(height: 8)
+        }
+    }
+}
+
+// MARK: - Shared Dictation Sub-Views
+
+private func dictationRecordingView(audioLevel: Float, onStop: @escaping () -> Void) -> some View {
+    VStack(spacing: 16) {
+        Spacer().frame(height: 20)
+
+        WaveformView(audioLevel: audioLevel, isRecording: true)
+            .frame(height: 44)
+            .padding(.horizontal, 24)
+
+        Button(action: onStop) {
+            ZStack {
+                Circle()
+                    .strokeBorder(.primary.opacity(0.2), lineWidth: 1.5)
+                    .frame(width: 44, height: 44)
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(.primary.opacity(0.7))
+                    .frame(width: 14, height: 14)
+            }
+        }
+        .buttonStyle(.plain)
+
+        Text("Ich h\u{00F6}re zu \u{2026} Klicke zum Stoppen.")
+            .font(.system(size: 11))
+            .foregroundStyle(.tertiary)
+
+        Spacer().frame(height: 8)
+    }
+}
+
+@ViewBuilder
+private func dictationProcessingView(phase: WorkflowPhase) -> some View {
+    VStack(spacing: 12) {
+        Spacer().frame(height: 24)
+        ProgressView()
+            .scaleEffect(0.7)
+            .controlSize(.small)
+        if case .running(let msg) = phase {
+            Text(msg)
+                .font(.system(size: 11.5))
+                .foregroundStyle(.secondary)
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        Spacer().frame(height: 24)
     }
 }
 

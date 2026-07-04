@@ -108,11 +108,11 @@ final class HotkeyService {
             return
         }
 
-        // fn + Command -> Emoji Mode
+        // fn + Command -> Übersetzen (Emoji-Modus nur noch per Menü)
         if flags == [.function, .command] {
             if activeCombo == nil {
-                activeCombo = .emojiText
-                onHotkeyEvent?(.down(.emojiText))
+                activeCombo = .translate
+                onHotkeyEvent?(.down(.translate))
             }
             return
         }

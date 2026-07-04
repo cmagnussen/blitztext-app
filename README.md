@@ -141,6 +141,20 @@ This preview has no formal support promise. See [SUPPORT.md](SUPPORT.md) for how
 
 The current direction is documented in [ROADMAP.md](ROADMAP.md). Maintainer-facing release checks live in [docs/open-source-preflight.md](docs/open-source-preflight.md).
 
+## Credits & Attribution
+
+This fork adds a **fully-offline path** (on-device WhisperKit transcription plus a local,
+OpenAI-compatible LLM server that the app can auto-start) and several new modes
+(translate DE→EN with tone, summarize, format to bullets/email/to-do, a classic/modern
+theme switch) on top of the original project. It stands on the shoulders of others:
+
+- **Base project:** [cmagnussen/blitztext-app](https://github.com/cmagnussen/blitztext-app) (MIT) — the original macOS menubar dictation app this builds on.
+- **Menu-bar ring icon & frosted-glass UI:** ported from [MForest-Dev/Blitztext-mac](https://github.com/MForest-Dev/Blitztext-mac) (MIT), a macOS fork of the original.
+- **Translate mode idea:** inspired by [ChepeKIP70/blixt](https://github.com/ChepeKIP70/blixt), a Windows port that introduced translate/prompt modes.
+- **Offline stack (external, not bundled):** [llama.cpp](https://github.com/ggml-org/llama.cpp) `llama-server` serving a local GGUF model, and [WhisperKit](https://github.com/argmaxinc/WhisperKit) for on-device transcription.
+
+All borrowed code is MIT-licensed; the original license is preserved in [LICENSE](LICENSE).
+
 ## License
 
 Code is released under the MIT License. See [LICENSE](LICENSE).

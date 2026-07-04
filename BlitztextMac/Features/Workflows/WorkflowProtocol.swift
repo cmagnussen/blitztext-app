@@ -8,6 +8,9 @@ enum WorkflowType: String, CaseIterable, Identifiable, Codable {
     case textImprover
     case dampfAblassen
     case emojiText
+    case translate
+    case summarize
+    case format
 
     var id: String { rawValue }
 
@@ -22,6 +25,9 @@ enum WorkflowType: String, CaseIterable, Identifiable, Codable {
         case .textImprover: return "Blitztext+"
         case .dampfAblassen: return "Blitztext $%&!"
         case .emojiText: return "Blitztext :)"
+        case .translate: return "Blitztext \u{2192}EN"
+        case .summarize: return "Zusammenfassen"
+        case .format: return "Format"
         }
     }
 
@@ -32,6 +38,9 @@ enum WorkflowType: String, CaseIterable, Identifiable, Codable {
         case .textImprover: return "text.badge.checkmark"
         case .dampfAblassen: return "flame.fill"
         case .emojiText: return "face.smiling"
+        case .translate: return "globe"
+        case .summarize: return "doc.plaintext"
+        case .format: return "list.bullet"
         }
     }
 
@@ -42,6 +51,9 @@ enum WorkflowType: String, CaseIterable, Identifiable, Codable {
         case .textImprover: return "Geschrieben sprechen."
         case .dampfAblassen: return "Frust rein. Entspannt raus."
         case .emojiText: return "Text rein. Emojis dazu."
+        case .translate: return "Deutsch sprechen. Englisch raus."
+        case .summarize: return "Sprechen. Kurzfassung raus."
+        case .format: return "Stichpunkte \u{00B7} E-Mail \u{00B7} To-do."
         }
     }
 
@@ -51,7 +63,10 @@ enum WorkflowType: String, CaseIterable, Identifiable, Codable {
         case .localTranscription: return "fn + Shift + Ctrl"
         case .textImprover: return "fn + Control"
         case .dampfAblassen: return "fn + Option"
-        case .emojiText: return "fn + Cmd"
+        case .emojiText: return "Men\u{00FC}"
+        case .translate: return "fn + Cmd"
+        case .summarize: return "Men\u{00FC}"
+        case .format: return "Men\u{00FC}"
         }
     }
 
@@ -62,6 +77,33 @@ enum WorkflowType: String, CaseIterable, Identifiable, Codable {
         case .textImprover: return "purple"
         case .dampfAblassen: return "orange"
         case .emojiText: return "cyan"
+        case .translate: return "indigo"
+        case .summarize: return "teal"
+        case .format: return "mint"
+        }
+    }
+}
+
+enum TextFormatKind: String, Codable, CaseIterable, Identifiable {
+    case bullets
+    case email
+    case todo
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .bullets: return "Stichpunkte"
+        case .email: return "E-Mail"
+        case .todo: return "To-do"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .bullets: return "list.bullet"
+        case .email: return "envelope"
+        case .todo: return "checklist"
         }
     }
 }
@@ -117,24 +159,66 @@ protocol Workflow: AnyObject, Observable {
 // MARK: - App Settings
 
 struct AppSettings: Codable {
+    static let defaultLocalLLMBaseURL = "http://localhost:8080/v1"
+    static let defaultLocalLLMModel = "qwen"
+    static let defaultLocalLLMServerPath = "/opt/homebrew/bin/llama-server"
+    static var defaultLocalLLMModelPath: String {
+        NSHomeDirectory() + "/Library/Application Support/app.cotypist.Cotypist/Models/Qwen3-8B.i1-Q4_K_M.gguf"
+    }
+
     var hotkeyMode: HotkeyMode = .hold
     var hasSeenOnboarding: Bool = false
     var secureLocalModeEnabled: Bool = false
     var selectedLocalTranscriptionModelName: String = LocalTranscriptionService.recommendedFastModelName
     var hasAutoSelectedFastLocalModel: Bool = false
+    // Lokales KI-Modell (offline Rewrite über OpenAI-kompatiblen Server, z. B. llama-server)
+    var localLLMEnabled: Bool = false
+    var localLLMBaseURL: String = AppSettings.defaultLocalLLMBaseURL
+    var localLLMFastModel: String = AppSettings.defaultLocalLLMModel
+    var localLLMStrongModel: String = AppSettings.defaultLocalLLMModel
+    // Autostart: Blitztext startet den llama-server beim App-Start selbst.
+    var localLLMAutostart: Bool = true
+    var localLLMServerPath: String = AppSettings.defaultLocalLLMServerPath
+    var localLLMModelPath: String = AppSettings.defaultLocalLLMModelPath
+    // Lernende Korrekturen: feste Ersetzungen, die auf jeden finalen Text angewendet werden.
+    var corrections: [TextCorrection] = []
+    // Hängt nach jedem Diktat ein Leerzeichen an, damit aufeinanderfolgende Diktate getrennt bleiben.
+    var appendTrailingSpace: Bool = true
+    // Darstellung: false = Klassisch, true = Modern (Ring-Icon + Frosted-Glass-Popover).
+    var useModernTheme: Bool = false
 
     init(
         hotkeyMode: HotkeyMode = .hold,
         hasSeenOnboarding: Bool = false,
         secureLocalModeEnabled: Bool = false,
         selectedLocalTranscriptionModelName: String = LocalTranscriptionService.recommendedFastModelName,
-        hasAutoSelectedFastLocalModel: Bool = false
+        hasAutoSelectedFastLocalModel: Bool = false,
+        localLLMEnabled: Bool = false,
+        localLLMBaseURL: String = AppSettings.defaultLocalLLMBaseURL,
+        localLLMFastModel: String = AppSettings.defaultLocalLLMModel,
+        localLLMStrongModel: String = AppSettings.defaultLocalLLMModel,
+        localLLMAutostart: Bool = true,
+        localLLMServerPath: String = AppSettings.defaultLocalLLMServerPath,
+        localLLMModelPath: String = AppSettings.defaultLocalLLMModelPath,
+        corrections: [TextCorrection] = [],
+        appendTrailingSpace: Bool = true,
+        useModernTheme: Bool = false
     ) {
         self.hotkeyMode = hotkeyMode
         self.hasSeenOnboarding = hasSeenOnboarding
         self.secureLocalModeEnabled = secureLocalModeEnabled
         self.selectedLocalTranscriptionModelName = selectedLocalTranscriptionModelName
         self.hasAutoSelectedFastLocalModel = hasAutoSelectedFastLocalModel
+        self.localLLMEnabled = localLLMEnabled
+        self.localLLMBaseURL = localLLMBaseURL
+        self.localLLMFastModel = localLLMFastModel
+        self.localLLMStrongModel = localLLMStrongModel
+        self.localLLMAutostart = localLLMAutostart
+        self.localLLMServerPath = localLLMServerPath
+        self.localLLMModelPath = localLLMModelPath
+        self.corrections = corrections
+        self.appendTrailingSpace = appendTrailingSpace
+        self.useModernTheme = useModernTheme
     }
 
     enum CodingKeys: String, CodingKey {
@@ -143,6 +227,16 @@ struct AppSettings: Codable {
         case secureLocalModeEnabled
         case selectedLocalTranscriptionModelName
         case hasAutoSelectedFastLocalModel
+        case localLLMEnabled
+        case localLLMBaseURL
+        case localLLMFastModel
+        case localLLMStrongModel
+        case localLLMAutostart
+        case localLLMServerPath
+        case localLLMModelPath
+        case corrections
+        case appendTrailingSpace
+        case useModernTheme
     }
 
     init(from decoder: Decoder) throws {
@@ -158,12 +252,45 @@ struct AppSettings: Codable {
             Bool.self,
             forKey: .hasAutoSelectedFastLocalModel
         ) ?? false
+        localLLMEnabled = try container.decodeIfPresent(Bool.self, forKey: .localLLMEnabled) ?? false
+        localLLMBaseURL = try container.decodeIfPresent(
+            String.self,
+            forKey: .localLLMBaseURL
+        ) ?? AppSettings.defaultLocalLLMBaseURL
+        localLLMFastModel = try container.decodeIfPresent(
+            String.self,
+            forKey: .localLLMFastModel
+        ) ?? AppSettings.defaultLocalLLMModel
+        localLLMStrongModel = try container.decodeIfPresent(
+            String.self,
+            forKey: .localLLMStrongModel
+        ) ?? AppSettings.defaultLocalLLMModel
+        localLLMAutostart = try container.decodeIfPresent(Bool.self, forKey: .localLLMAutostart) ?? true
+        localLLMServerPath = try container.decodeIfPresent(
+            String.self,
+            forKey: .localLLMServerPath
+        ) ?? AppSettings.defaultLocalLLMServerPath
+        localLLMModelPath = try container.decodeIfPresent(
+            String.self,
+            forKey: .localLLMModelPath
+        ) ?? AppSettings.defaultLocalLLMModelPath
+        corrections = try container.decodeIfPresent([TextCorrection].self, forKey: .corrections) ?? []
+        appendTrailingSpace = try container.decodeIfPresent(Bool.self, forKey: .appendTrailingSpace) ?? true
+        useModernTheme = try container.decodeIfPresent(Bool.self, forKey: .useModernTheme) ?? false
     }
 }
 
 enum TranscriptionBackend: String, Codable {
     case remote
     case local
+}
+
+/// Eine lernende Korrektur-Regel: ersetzt `from` (z. B. "CloudCode") im finalen Text
+/// durch `to` (z. B. "Claude Code"). Wird auf die Ausgabe aller Workflows angewendet.
+struct TextCorrection: Codable, Identifiable, Hashable {
+    var id = UUID()
+    var from: String
+    var to: String
 }
 
 // MARK: - Workflow Settings
@@ -220,4 +347,9 @@ struct TextImprovementSettings: Codable {
             }
         }
     }
+}
+
+struct TranslateSettings: Codable {
+    var tone: TextImprovementSettings.TextTone = .neutral
+    var customName: String = ""
 }
