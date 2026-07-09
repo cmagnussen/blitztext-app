@@ -9,9 +9,18 @@ final class AudioRecorder: NSObject, AVAudioRecorderDelegate {
     var audioLevel: Float = 0
     var lastRecordingDuration: TimeInterval = 0
 
+    private let pauseMediaDuringRecording: Bool
+    private var pausedPlayback: MediaPlaybackControlService.PausedPlayback?
+    private var pauseGeneration = 0
+
     private var audioRecorder: AVAudioRecorder?
     private var levelTimer: Timer?
     private var currentFileURL: URL?
+
+    init(pauseMediaDuringRecording: Bool = false) {
+        self.pauseMediaDuringRecording = pauseMediaDuringRecording
+        super.init()
+    }
 
     private func makeRecordingURL() -> URL {
         FileManager.default.temporaryDirectory
@@ -22,6 +31,7 @@ final class AudioRecorder: NSObject, AVAudioRecorderDelegate {
         errorMessage = nil
         lastRecordingDuration = 0
         recordingURL = nil
+        pausedPlayback = nil
         if let currentFileURL {
             try? FileManager.default.removeItem(at: currentFileURL)
         }
@@ -42,6 +52,20 @@ final class AudioRecorder: NSObject, AVAudioRecorderDelegate {
             audioRecorder?.record()
             isRecording = true
             startMetering()
+
+            if pauseMediaDuringRecording {
+                pauseGeneration += 1
+                let generation = pauseGeneration
+                MediaPlaybackControlService.pausePlayback { [weak self] paused in
+                    guard !paused.isEmpty else { return }
+                    guard let self, generation == self.pauseGeneration, self.isRecording else {
+                        // Aufnahme ist schon vorbei — sofort wieder fortsetzen.
+                        MediaPlaybackControlService.resume(paused)
+                        return
+                    }
+                    self.pausedPlayback = paused
+                }
+            }
         } catch {
             currentFileURL = nil
             errorMessage = "Aufnahme konnte nicht gestartet werden: \(error.localizedDescription)"
@@ -57,6 +81,12 @@ final class AudioRecorder: NSObject, AVAudioRecorderDelegate {
         currentFileURL = nil
         audioRecorder = nil
         audioLevel = 0
+        pauseGeneration += 1
+
+        if let pausedPlayback {
+            MediaPlaybackControlService.resume(pausedPlayback)
+            self.pausedPlayback = nil
+        }
     }
 
     func discardRecording() {
