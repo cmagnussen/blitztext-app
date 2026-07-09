@@ -626,6 +626,22 @@ struct CustomizeSettingsView: View {
                 }
             }
 
+            // MARK: Medienwiedergabe
+            VStack(alignment: .leading, spacing: 10) {
+                SectionLabel(text: "Medienwiedergabe")
+
+                Toggle(
+                    "Medienwiedergabe während Aufnahme pausieren",
+                    isOn: $appState.appSettings.pauseMediaDuringRecording
+                )
+                .toggleStyle(.switch)
+
+                Text("Pausiert automatisch Musik oder Videos (z. B. Spotify, YouTube) beim Start der Aufnahme und setzt sie beim Ende wieder fort.")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             // MARK: Blitztext+
             VStack(alignment: .leading, spacing: 10) {
                 SectionLabel(text: "Blitztext+")
