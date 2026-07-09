@@ -12,14 +12,15 @@ final class TextImprovementWorkflow: Workflow {
     var onOutput: WorkflowOutputHandler?
     var onPhaseChange: WorkflowPhaseChangeHandler?
 
-    private let recorder = AudioRecorder()
+    private let recorder: AudioRecorder
     private let settings: TextImprovementSettings
     private let language: String
     private var processingTask: Task<Void, Never>?
 
-    init(settings: TextImprovementSettings, language: String = "de") {
+    init(settings: TextImprovementSettings, language: String = "de", pauseMediaDuringRecording: Bool = true) {
         self.settings = settings
         self.language = language
+        self.recorder = AudioRecorder(pauseMediaDuringRecording: pauseMediaDuringRecording)
     }
 
     // MARK: - Recording State
