@@ -134,8 +134,23 @@ cp -f "$PROJECT_DIR/Resources/AppIcon.icns" "$RESOURCES_DIR/" 2>/dev/null || tru
 cp -f "$PROJECT_DIR/Resources/menubar_icon.png" "$RESOURCES_DIR/" 2>/dev/null || true
 cp -f "$PROJECT_DIR/Resources/menubar_icon@2x.png" "$RESOURCES_DIR/" 2>/dev/null || true
 
-# In Projektordner kopieren
-DEST="$SCRIPT_DIR/Blitztext.app"
+# Ziel bestimmen: mit --install direkt nach /Applications, sonst in den Projektordner
+LOCAL_DEST="$SCRIPT_DIR/Blitztext.app"
+
+if [ "$INSTALL_APP" = true ]; then
+    APPS_DIR="/Applications"
+    DEST="$APPS_DIR/Blitztext.app"
+    if [ ! -w "$APPS_DIR" ]; then
+        echo "❌ /Applications ist nicht beschreibbar."
+        echo "   Fuehre den Befehl mit passenden Rechten erneut aus oder ziehe die App manuell nach /Applications."
+        exit 1
+    fi
+    # Keine doppelte App: eventuelle Kopie im Projektordner entfernen
+    rm -rf "$LOCAL_DEST"
+else
+    DEST="$LOCAL_DEST"
+fi
+
 rm -rf "$DEST"
 cp -R "$APP_PATH" "$DEST"
 echo "🔏 Signiere lokale Development-App ad-hoc. Dieses Artefakt ist nicht notarisiert."
@@ -144,28 +159,9 @@ verify_universal_app "$DEST"
 
 RUN_TARGET="$DEST"
 
-if [ "$INSTALL_APP" = true ]; then
-    APPS_DIR="/Applications"
-    INSTALL_DEST="$APPS_DIR/Blitztext.app"
-    if [ ! -w "$APPS_DIR" ]; then
-        echo "❌ /Applications ist nicht beschreibbar."
-        echo "   Fuehre den Befehl mit passenden Rechten erneut aus oder ziehe die App manuell nach /Applications."
-        exit 1
-    fi
-    rm -rf "$INSTALL_DEST"
-    cp -R "$DEST" "$INSTALL_DEST"
-    echo "🔏 Signiere lokale Development-App ad-hoc. Dieses Artefakt ist nicht notarisiert."
-    codesign --force --sign - "$INSTALL_DEST" 2>&1
-    verify_universal_app "$INSTALL_DEST"
-    RUN_TARGET="$INSTALL_DEST"
-fi
-
 echo ""
 echo "✅ Fertig! App liegt unter:"
 echo "   $DEST"
-if [ "$INSTALL_APP" = true ]; then
-    echo "   $RUN_TARGET"
-fi
 echo ""
 echo "Build-Typ: $BUILD_CONFIGURATION"
 echo "Architekturen: $UNIVERSAL_ARCHS"
