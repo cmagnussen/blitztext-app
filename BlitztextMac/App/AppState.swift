@@ -40,6 +40,7 @@ final class AppState {
         didSet {
             saveSettings()
             prewarmLocalTranscriptionIfNeeded()
+            hotkeyService.combos = appSettings.hotkeyCombos
         }
     }
     var transcriptionSettings: TranscriptionSettings {
@@ -79,6 +80,34 @@ final class AppState {
         refreshAccessibilityPermission()
         autoSelectFastLocalModelIfNeeded()
         prewarmLocalTranscriptionIfNeeded()
+        hotkeyService.combos = appSettings.hotkeyCombos
+    }
+
+    // MARK: - Hotkeys
+
+    func hotkeyCombo(for type: WorkflowType) -> HotkeyCombo {
+        appSettings.hotkeyCombos[type] ?? HotkeyCombo.defaultCombo(for: type)
+    }
+
+    func hotkeyLabel(for type: WorkflowType) -> String {
+        hotkeyCombo(for: type).displayLabel
+    }
+
+    /// Liefert bei Konflikt den Workflow, der die Kombination schon nutzt.
+    func workflowUsingHotkeyCombo(_ combo: HotkeyCombo, excluding type: WorkflowType) -> WorkflowType? {
+        WorkflowType.allCases.first { $0 != type && hotkeyCombo(for: $0) == combo }
+    }
+
+    func setHotkeyCombo(_ combo: HotkeyCombo, for type: WorkflowType) {
+        appSettings.hotkeyCombos[type] = combo
+    }
+
+    func resetHotkeyCombos() {
+        appSettings.hotkeyCombos = HotkeyCombo.defaults
+    }
+
+    var hotkeyCombosAreDefault: Bool {
+        WorkflowType.allCases.allSatisfy { hotkeyCombo(for: $0) == HotkeyCombo.defaultCombo(for: $0) }
     }
 
     // MARK: - Custom Display Names
