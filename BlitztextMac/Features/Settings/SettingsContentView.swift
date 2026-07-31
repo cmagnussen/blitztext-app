@@ -513,6 +513,9 @@ struct AccessSettingsView: View {
 struct CustomizeSettingsView: View {
     @Bindable var appState: AppState
     @State private var newTerm = ""
+    @State private var hotkeyRecorder = HotkeyComboRecorder()
+    @State private var recordingHotkeyType: WorkflowType?
+    @State private var hotkeyErrorText: String?
 
     private var installedLocalModels: [LocalTranscriptionModel] {
         LocalTranscriptionService.installedModels()
@@ -598,17 +601,58 @@ struct CustomizeSettingsView: View {
                 SectionLabel(text: "Tastenk\u{00FC}rzel")
 
                 VStack(spacing: 6) {
-                    ForEach(WorkflowType.mainMenuCases) { type in
+                    ForEach(WorkflowType.allCases) { type in
                         HStack {
-                            Text(type.hotkeyLabel)
+                            Text(hotkeyRowLabel(for: type))
                                 .font(.system(size: 11, design: .monospaced))
-                                .foregroundStyle(.secondary)
-                                .frame(width: 124, alignment: .leading)
+                                .foregroundStyle(recordingHotkeyType == type ? .blue : .secondary)
+                                .frame(width: 148, alignment: .leading)
                             Text(appState.displayName(for: type))
                                 .font(.system(size: 11.5, weight: .medium))
                             Spacer()
+                            Button(recordingHotkeyType == type ? "Abbrechen" : "\u{00C4}ndern") {
+                                if recordingHotkeyType == type {
+                                    hotkeyRecorder.cancel()
+                                } else {
+                                    startRecordingHotkey(for: type)
+                                }
+                            }
+                            .font(.system(size: 10, weight: .medium))
+                            .buttonStyle(.plain)
+                            .foregroundStyle(recordingHotkeyType == type ? Color.red : .blue)
+                            .disabled(recordingHotkeyType != nil && recordingHotkeyType != type)
                         }
                     }
+                }
+
+                if recordingHotkeyType != nil {
+                    Text("Sondertasten (fn, Shift, Ctrl, Option, Cmd) dr\u{00FC}cken und loslassen \u{2013} oder Sondertaste(n) gedr\u{00FC}ckt halten und eine normale Taste tippen, z.B. fn + R. Escape bricht ab.")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.blue)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if let hotkeyErrorText {
+                    Text(hotkeyErrorText)
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if hotkeysNeedAccessibilityPermission {
+                    Text("Tastenk\u{00FC}rzel mit normaler Taste (z.B. fn + R) brauchen die Bedienungshilfen-Freigabe oben. Ohne sie wird die Taste ins Textfeld getippt statt Blitztext zu starten.")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if !appState.hotkeyCombosAreDefault {
+                    Button("Standard-Tastenk\u{00FC}rzel wiederherstellen") {
+                        hotkeyErrorText = nil
+                        appState.resetHotkeyCombos()
+                    }
+                    .buttonStyle(SubtleButtonStyle())
+                    .disabled(recordingHotkeyType != nil)
                 }
 
                 // Mode picker
@@ -791,6 +835,53 @@ struct CustomizeSettingsView: View {
             appState.textImprovementSettings.customTerms.append(trimmed)
         }
         newTerm = ""
+    }
+
+    // MARK: - Hotkey Recording
+
+    private var hotkeysNeedAccessibilityPermission: Bool {
+        guard !appState.hotkeyService.keyEventTapActive else { return false }
+        return WorkflowType.allCases.contains { appState.hotkeyCombo(for: $0).keyCode != nil }
+    }
+
+    private func hotkeyRowLabel(for type: WorkflowType) -> String {
+        guard recordingHotkeyType == type else {
+            return appState.hotkeyLabel(for: type)
+        }
+        let live = HotkeyCombo(modifiers: hotkeyRecorder.liveModifiers).displayLabel
+        return live.isEmpty ? "Tasten dr\u{00FC}cken \u{2026}" : live
+    }
+
+    private func startRecordingHotkey(for type: WorkflowType) {
+        hotkeyErrorText = nil
+        recordingHotkeyType = type
+        appState.hotkeyService.isSuspended = true
+
+        hotkeyRecorder.onFinish = { combo in
+            finishRecordingHotkey(for: type, combo: combo)
+        }
+        hotkeyRecorder.start()
+    }
+
+    private func finishRecordingHotkey(for type: WorkflowType, combo: HotkeyCombo?) {
+        recordingHotkeyType = nil
+        appState.hotkeyService.isSuspended = false
+
+        guard let combo else { return }  // abgebrochen
+
+        guard combo.isValid else {
+            hotkeyErrorText = combo.keyCode != nil
+                ? "Eine normale Taste bitte mit mindestens einer Sondertaste kombinieren, z.B. fn + R."
+                : "Reine Sondertasten-K\u{00FC}rzel brauchen mindestens zwei Tasten, z.B. fn + Shift."
+            return
+        }
+
+        if let conflict = appState.workflowUsingHotkeyCombo(combo, excluding: type) {
+            hotkeyErrorText = "\(combo.displayLabel) ist bereits f\u{00FC}r \u{201E}\(appState.displayName(for: conflict))\u{201C} vergeben."
+            return
+        }
+
+        appState.setHotkeyCombo(combo, for: type)
     }
 }
 

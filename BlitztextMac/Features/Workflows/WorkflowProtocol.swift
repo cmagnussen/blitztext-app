@@ -45,16 +45,6 @@ enum WorkflowType: String, CaseIterable, Identifiable, Codable {
         }
     }
 
-    var hotkeyLabel: String {
-        switch self {
-        case .transcription: return "fn + Shift"
-        case .localTranscription: return "fn + Shift + Ctrl"
-        case .textImprover: return "fn + Control"
-        case .dampfAblassen: return "fn + Option"
-        case .emojiText: return "fn + Cmd"
-        }
-    }
-
     var accentColor: String {
         switch self {
         case .transcription: return "blue"
@@ -122,19 +112,22 @@ struct AppSettings: Codable {
     var secureLocalModeEnabled: Bool = false
     var selectedLocalTranscriptionModelName: String = LocalTranscriptionService.recommendedFastModelName
     var hasAutoSelectedFastLocalModel: Bool = false
+    var hotkeyCombos: [WorkflowType: HotkeyCombo] = HotkeyCombo.defaults
 
     init(
         hotkeyMode: HotkeyMode = .hold,
         hasSeenOnboarding: Bool = false,
         secureLocalModeEnabled: Bool = false,
         selectedLocalTranscriptionModelName: String = LocalTranscriptionService.recommendedFastModelName,
-        hasAutoSelectedFastLocalModel: Bool = false
+        hasAutoSelectedFastLocalModel: Bool = false,
+        hotkeyCombos: [WorkflowType: HotkeyCombo] = HotkeyCombo.defaults
     ) {
         self.hotkeyMode = hotkeyMode
         self.hasSeenOnboarding = hasSeenOnboarding
         self.secureLocalModeEnabled = secureLocalModeEnabled
         self.selectedLocalTranscriptionModelName = selectedLocalTranscriptionModelName
         self.hasAutoSelectedFastLocalModel = hasAutoSelectedFastLocalModel
+        self.hotkeyCombos = hotkeyCombos
     }
 
     enum CodingKeys: String, CodingKey {
@@ -143,6 +136,7 @@ struct AppSettings: Codable {
         case secureLocalModeEnabled
         case selectedLocalTranscriptionModelName
         case hasAutoSelectedFastLocalModel
+        case hotkeyCombos
     }
 
     init(from decoder: Decoder) throws {
@@ -158,6 +152,9 @@ struct AppSettings: Codable {
             Bool.self,
             forKey: .hasAutoSelectedFastLocalModel
         ) ?? false
+        // Fehlende Eintraege (z.B. nach App-Update mit neuen Workflows) mit Defaults auffuellen
+        let storedCombos = try container.decodeIfPresent([WorkflowType: HotkeyCombo].self, forKey: .hotkeyCombos) ?? [:]
+        hotkeyCombos = HotkeyCombo.defaults.merging(storedCombos) { _, stored in stored }
     }
 }
 
