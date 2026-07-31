@@ -119,8 +119,13 @@ final class HotkeyService {
     private var fallbackKeyUpMonitors: [Any] = []
     private var eventTap: CFMachPort?
     private var eventTapRunLoopSource: CFRunLoopSource?
+    private var eventTapRetryTimer: Timer?
     private var activeCombo: WorkflowType?  // Which combo is currently held
     private var activeKeyCode: UInt16?      // Set when the active combo includes a regular key
+
+    /// false, solange der CGEventTap mangels Accessibility-Berechtigung nicht
+    /// laeuft -- Kombos mit normaler Taste funktionieren dann nicht.
+    private(set) var keyEventTapActive = false
 
     var combos: [WorkflowType: HotkeyCombo] = HotkeyCombo.defaults
 
@@ -167,10 +172,9 @@ final class HotkeyService {
         globalMonitor = nil
         localMonitor = nil
         keyMonitor = nil
-        fallbackKeyDownMonitors.forEach { NSEvent.removeMonitor($0) }
-        fallbackKeyUpMonitors.forEach { NSEvent.removeMonitor($0) }
-        fallbackKeyDownMonitors = []
-        fallbackKeyUpMonitors = []
+        stopFallbackKeyMonitors()
+        eventTapRetryTimer?.invalidate()
+        eventTapRetryTimer = nil
         if let eventTapRunLoopSource {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), eventTapRunLoopSource, .commonModes)
         }
@@ -179,14 +183,34 @@ final class HotkeyService {
         }
         eventTap = nil
         eventTapRunLoopSource = nil
+        keyEventTapActive = false
     }
 
     // MARK: - Key Event Tap (fuer Kombos mit normaler Taste, z.B. fn + R)
 
     /// Ein CGEventTap schluckt die normale Taste beim Ausloesen, damit sie nicht
     /// zusaetzlich in das fokussierte Textfeld getippt wird. Ohne Accessibility-
-    /// Berechtigung faellt der Service auf passive NSEvent-Monitore zurueck.
+    /// Berechtigung faellt der Service auf passive NSEvent-Monitore zurueck und
+    /// versucht periodisch erneut, den Tap zu erstellen -- sonst blieben
+    /// Tasten-Kombos nach spaeter erteilter Berechtigung bis zum Neustart tot.
     private func startKeyEventTap() {
+        guard !createKeyEventTap() else { return }
+        startFallbackKeyMonitors()
+        eventTapRetryTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.retryKeyEventTap()
+            }
+        }
+    }
+
+    private func retryKeyEventTap() {
+        guard createKeyEventTap() else { return }
+        eventTapRetryTimer?.invalidate()
+        eventTapRetryTimer = nil
+        stopFallbackKeyMonitors()
+    }
+
+    private func createKeyEventTap() -> Bool {
         let mask = (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue)
         let callback: CGEventTapCallBack = { _, type, cgEvent, userInfo in
             guard let userInfo else { return Unmanaged.passUnretained(cgEvent) }
@@ -207,13 +231,15 @@ final class HotkeyService {
         )
 
         guard let eventTap else {
-            startFallbackKeyMonitors()
-            return
+            keyEventTapActive = false
+            return false
         }
 
         eventTapRunLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, eventTap, 0)
         CFRunLoopAddSource(CFRunLoopGetMain(), eventTapRunLoopSource, .commonModes)
         CGEvent.tapEnable(tap: eventTap, enable: true)
+        keyEventTapActive = true
+        return true
     }
 
     private func startFallbackKeyMonitors() {
@@ -239,6 +265,13 @@ final class HotkeyService {
             guard let self else { return event }
             return self.handleKeyUp(keyCode: event.keyCode) ? nil : event
         } as Any)
+    }
+
+    private func stopFallbackKeyMonitors() {
+        fallbackKeyDownMonitors.forEach { NSEvent.removeMonitor($0) }
+        fallbackKeyUpMonitors.forEach { NSEvent.removeMonitor($0) }
+        fallbackKeyDownMonitors = []
+        fallbackKeyUpMonitors = []
     }
 
     private func handleKeyTapEvent(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {

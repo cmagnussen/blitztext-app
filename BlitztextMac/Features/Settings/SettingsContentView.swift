@@ -639,6 +639,13 @@ struct CustomizeSettingsView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
+                if hotkeysNeedAccessibilityPermission {
+                    Text("Tastenk\u{00FC}rzel mit normaler Taste (z.B. fn + R) brauchen die Bedienungshilfen-Freigabe oben. Ohne sie wird die Taste ins Textfeld getippt statt Blitztext zu starten.")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
                 if !appState.hotkeyCombosAreDefault {
                     Button("Standard-Tastenk\u{00FC}rzel wiederherstellen") {
                         hotkeyErrorText = nil
@@ -831,6 +838,11 @@ struct CustomizeSettingsView: View {
     }
 
     // MARK: - Hotkey Recording
+
+    private var hotkeysNeedAccessibilityPermission: Bool {
+        guard !appState.hotkeyService.keyEventTapActive else { return false }
+        return WorkflowType.allCases.contains { appState.hotkeyCombo(for: $0).keyCode != nil }
+    }
 
     private func hotkeyRowLabel(for type: WorkflowType) -> String {
         guard recordingHotkeyType == type else {
