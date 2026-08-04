@@ -65,11 +65,15 @@ enum TranscriptionService {
             request.cachePolicy = .reloadIgnoringLocalCacheData
 
             let audioData = try Data(contentsOf: audioURL, options: [.mappedIfSafe])
+            let audioFileName = audioURL.lastPathComponent
+            let audioMIMEType = audioURL.pathExtension.lowercased() == "wav"
+                ? "audio/wav"
+                : "audio/m4a"
 
             var body = Data()
             body.append("--\(boundary)\r\n")
-            body.append("Content-Disposition: form-data; name=\"file\"; filename=\"audio.m4a\"\r\n")
-            body.append("Content-Type: audio/m4a\r\n\r\n")
+            body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(audioFileName)\"\r\n")
+            body.append("Content-Type: \(audioMIMEType)\r\n\r\n")
             body.append(audioData)
             body.append("\r\n")
 

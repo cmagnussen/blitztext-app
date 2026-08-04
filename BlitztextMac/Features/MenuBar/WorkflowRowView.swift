@@ -5,6 +5,7 @@ struct WorkflowRowView: View {
     let enabled: Bool
     var customName: String? = nil
     var subtitle: String? = nil
+    let hotkeyLabel: String
     let action: () -> Void
 
     @State private var isHovered = false
@@ -39,7 +40,7 @@ struct WorkflowRowView: View {
                 Spacer()
 
                 // Hotkey badge
-                HotkeyBadge(label: type.hotkeyLabel, enabled: enabled)
+                HotkeyBadge(label: hotkeyLabel, enabled: enabled)
                     .opacity(enabled ? 1 : 0.4)
             }
             .padding(.horizontal, 12)

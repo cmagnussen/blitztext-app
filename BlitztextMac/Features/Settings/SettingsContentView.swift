@@ -513,6 +513,8 @@ struct AccessSettingsView: View {
 struct CustomizeSettingsView: View {
     @Bindable var appState: AppState
     @State private var newTerm = ""
+    @State private var hotkeyErrorText: String?
+    @State private var audioInputDevices: [AudioInputDevice] = []
 
     private var installedLocalModels: [LocalTranscriptionModel] {
         LocalTranscriptionService.installedModels()
@@ -524,6 +526,56 @@ struct CustomizeSettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
+
+            // MARK: Mikrofon
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    SectionLabel(text: "Mikrofon")
+                    Spacer()
+                    Button {
+                        refreshAudioInputDevices()
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 10, weight: .semibold))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .help("Mikrofonliste aktualisieren")
+                }
+
+                HStack(spacing: 8) {
+                    Image(systemName: "mic.fill")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 16)
+
+                    Picker("Eingabegerät", selection: Binding(
+                        get: { appState.appSettings.selectedAudioInputDeviceUID ?? "" },
+                        set: { appState.appSettings.selectedAudioInputDeviceUID = $0.isEmpty ? nil : $0 }
+                    )) {
+                        Text("Systemstandard").tag("")
+
+                        ForEach(audioInputDevices) { device in
+                            Text(device.isSystemDefault ? "\(device.name) · Standard" : device.name)
+                                .tag(device.id)
+                        }
+
+                        if let selectedUID = appState.appSettings.selectedAudioInputDeviceUID,
+                           !audioInputDevices.contains(where: { $0.id == selectedUID }) {
+                            Text("Ausgewähltes Mikrofon · nicht verfügbar")
+                                .tag(selectedUID)
+                        }
+                    }
+                    .labelsHidden()
+                    .controlSize(.small)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                Text("Blitztext verwendet dieses Gerät für alle Aufnahmen. Ist es nicht verbunden, wird automatisch das aktuelle Standardmikrofon verwendet.")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             // MARK: Lokaler Modus
             VStack(alignment: .leading, spacing: 10) {
@@ -595,25 +647,64 @@ struct CustomizeSettingsView: View {
 
             // MARK: Tastenkuerzel
             VStack(alignment: .leading, spacing: 10) {
-                SectionLabel(text: "Tastenk\u{00FC}rzel")
+                HStack {
+                    SectionLabel(text: "Tastenk\u{00FC}rzel")
+                    Spacer()
+                    Button("Standard") {
+                        appState.resetHotkeyShortcuts()
+                        hotkeyErrorText = nil
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(.blue)
+                }
 
                 VStack(spacing: 6) {
-                    ForEach(WorkflowType.mainMenuCases) { type in
-                        HStack {
-                            Text(type.hotkeyLabel)
-                                .font(.system(size: 11, design: .monospaced))
-                                .foregroundStyle(.secondary)
-                                .frame(width: 124, alignment: .leading)
+                    ForEach(WorkflowType.allCases) { type in
+                        HStack(spacing: 8) {
                             Text(appState.displayName(for: type))
-                                .font(.system(size: 11.5, weight: .medium))
+                                .font(.system(size: 11, weight: .medium))
+                                .lineLimit(1)
                             Spacer()
+
+                            ShortcutRecorderView(
+                                shortcut: appState.hotkeyShortcut(for: type),
+                                onCapture: { shortcut in
+                                    setHotkeyShortcut(shortcut, for: type)
+                                },
+                                onRecordingChanged: { isRecording in
+                                    appState.hotkeyService.isSuspended = isRecording
+                                }
+                            )
+                            .frame(width: 146, height: 26)
+
+                            Button {
+                                resetHotkeyShortcut(for: type)
+                            } label: {
+                                Image(systemName: "arrow.counterclockwise")
+                                    .font(.system(size: 10, weight: .semibold))
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.secondary)
+                            .help("Standard-Tastenkürzel wiederherstellen")
                         }
                     }
                 }
 
-                // Mode picker
+                Text("Klicke auf ein Kürzel und drücke deine neue Kombination. Normale Buchstabentasten brauchen mindestens eine Sondertaste.")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if let hotkeyErrorText {
+                    Text(hotkeyErrorText)
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Modus")
+                    Text("Start und Aufnahme")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
 
@@ -623,6 +714,11 @@ struct CustomizeSettingsView: View {
                         }
                     }
                     .pickerStyle(.segmented)
+
+                    Text(appState.appSettings.hotkeyMode.description)
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
@@ -782,6 +878,39 @@ struct CustomizeSettingsView: View {
 
         }
         .padding(16)
+        .onAppear {
+            refreshAudioInputDevices()
+        }
+        .onDisappear {
+            appState.hotkeyService.isSuspended = false
+        }
+    }
+
+    private func setHotkeyShortcut(_ shortcut: HotkeyShortcut, for type: WorkflowType) -> Bool {
+        if let validationError = shortcut.validationError {
+            hotkeyErrorText = validationError
+            return false
+        }
+
+        if let conflict = WorkflowType.allCases.first(where: {
+            $0 != type && appState.hotkeyShortcut(for: $0) == shortcut
+        }) {
+            hotkeyErrorText = "Dieses Kürzel ist bereits für \(appState.displayName(for: conflict)) belegt."
+            return false
+        }
+
+        appState.setHotkeyShortcut(shortcut, for: type)
+        hotkeyErrorText = nil
+        return true
+    }
+
+    private func resetHotkeyShortcut(for type: WorkflowType) {
+        let defaultShortcut = HotkeyShortcut.defaultShortcut(for: type)
+        _ = setHotkeyShortcut(defaultShortcut, for: type)
+    }
+
+    private func refreshAudioInputDevices() {
+        audioInputDevices = AudioInputDeviceService.availableDevices()
     }
 
     private func addTerm() {

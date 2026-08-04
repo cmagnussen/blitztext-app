@@ -1,6 +1,9 @@
 import SwiftUI
 import Observation
 import AppKit
+import OSLog
+
+private let pasteLogger = Logger(subsystem: "app.blitztext.mac", category: "Paste")
 
 enum PopoverPage: Equatable {
     case main
@@ -29,6 +32,7 @@ final class AppState {
     var localModelDownloadStatusText: String?
     var localModelDownloadErrorText: String?
     var onMenuBarStatusChange: ((MenuBarStatus) -> Void)?
+    var onPastePermissionRequired: (() -> Void)?
     private var activeLaunchSource: WorkflowLaunchSource = .manual
     private var activePasteTarget: PasteTarget?
     private var lastPopoverPasteTarget: PasteTarget?
@@ -39,6 +43,7 @@ final class AppState {
     var appSettings: AppSettings {
         didSet {
             saveSettings()
+            hotkeyService.updateShortcuts(appSettings.resolvedHotkeyShortcuts)
             prewarmLocalTranscriptionIfNeeded()
         }
     }
@@ -76,6 +81,7 @@ final class AppState {
         self.textImprovementSettings = Self.loadTextImprovementSettings()
         self.dampfAblassenSettings = Self.loadDampfAblassenSettings()
         self.emojiTextSettings = Self.loadEmojiTextSettings()
+        hotkeyService.updateShortcuts(appSettings.resolvedHotkeyShortcuts)
         refreshAccessibilityPermission()
         autoSelectFastLocalModelIfNeeded()
         prewarmLocalTranscriptionIfNeeded()
@@ -97,6 +103,22 @@ final class AppState {
         default:
             return type.displayName
         }
+    }
+
+    func hotkeyShortcut(for type: WorkflowType) -> HotkeyShortcut {
+        appSettings.shortcut(for: type)
+    }
+
+    func setHotkeyShortcut(_ shortcut: HotkeyShortcut, for type: WorkflowType) {
+        var settings = appSettings
+        settings.setShortcut(shortcut, for: type)
+        appSettings = settings
+    }
+
+    func resetHotkeyShortcuts() {
+        var settings = appSettings
+        settings.resetHotkeyShortcuts()
+        appSettings = settings
     }
 
     func workflowSubtitle(for type: WorkflowType) -> String {
@@ -167,7 +189,8 @@ final class AppState {
                 customTerms: textImprovementSettings.customTerms,
                 language: transcriptionSettings.language,
                 backend: appSettings.secureLocalModeEnabled ? .local : .remote,
-                localModelName: selectedLocalModelName
+                localModelName: selectedLocalModelName,
+                inputDeviceUID: appSettings.selectedAudioInputDeviceUID
             )
             configureWorkflowHandlers(workflow)
             activeWorkflow = workflow
@@ -179,7 +202,8 @@ final class AppState {
                 customTerms: textImprovementSettings.customTerms,
                 language: transcriptionSettings.language,
                 backend: .local,
-                localModelName: selectedLocalModelName
+                localModelName: selectedLocalModelName,
+                inputDeviceUID: appSettings.selectedAudioInputDeviceUID
             )
             configureWorkflowHandlers(workflow)
             activeWorkflow = workflow
@@ -188,7 +212,8 @@ final class AppState {
         case .textImprover:
             let workflow = TextImprovementWorkflow(
                 settings: textImprovementSettings,
-                language: transcriptionSettings.language
+                language: transcriptionSettings.language,
+                inputDeviceUID: appSettings.selectedAudioInputDeviceUID
             )
             configureWorkflowHandlers(workflow)
             activeWorkflow = workflow
@@ -198,7 +223,8 @@ final class AppState {
             let workflow = DampfAblassenWorkflow(
                 settings: dampfAblassenSettings,
                 customTerms: textImprovementSettings.customTerms,
-                language: transcriptionSettings.language
+                language: transcriptionSettings.language,
+                inputDeviceUID: appSettings.selectedAudioInputDeviceUID
             )
             configureWorkflowHandlers(workflow)
             activeWorkflow = workflow
@@ -208,7 +234,8 @@ final class AppState {
             let workflow = EmojiTextWorkflow(
                 settings: emojiTextSettings,
                 customTerms: textImprovementSettings.customTerms,
-                language: transcriptionSettings.language
+                language: transcriptionSettings.language,
+                inputDeviceUID: appSettings.selectedAudioInputDeviceUID
             )
             configureWorkflowHandlers(workflow)
             activeWorkflow = workflow
@@ -299,6 +326,7 @@ final class AppState {
     /// The text intentionally remains on the clipboard as a fallback if paste is blocked.
     private func pasteAtCursor(_ text: String, target: PasteTarget? = nil) {
         writeSensitiveTextToPasteboard(text)
+        let resolvedTarget = target ?? captureCurrentFrontmostApp()
 
         if isPopoverShown {
             NotificationCenter.default.post(name: .dismissPopover, object: nil)
@@ -307,12 +335,23 @@ final class AppState {
         let trusted = AccessibilityPermissionService.isTrusted(promptIfNeeded: true)
         accessibilityPermissionGranted = trusted
         guard trusted else {
+            pasteLogger.error("Auto-paste blocked: Accessibility permission is missing")
+            menuBarStatus = .error(activeWorkflow?.type)
+            onPastePermissionRequired?()
+            return
+        }
+
+        guard let resolvedTarget else {
+            pasteLogger.error("Auto-paste skipped: no target application was captured")
             menuBarStatus = .error(activeWorkflow?.type)
             return
         }
 
+        pasteLogger.info(
+            "Auto-paste scheduled for target pid \(resolvedTarget.processIdentifier, privacy: .public)"
+        )
         attemptPasteTrusted(
-            target: target,
+            target: resolvedTarget,
             attemptsRemaining: Self.pasteRetryInitialAttempts
         )
     }
@@ -535,23 +574,23 @@ final class AppState {
     }
 
     private func attemptPasteTrusted(
-        target: PasteTarget?,
+        target: PasteTarget,
         attemptsRemaining: Int
     ) {
         let frontmostPid = NSWorkspace.shared.frontmostApplication?.processIdentifier
 
-        if let target {
-            if frontmostPid == target.processIdentifier {
-                performPaste()
-                return
-            }
-
-            target.application.activate(options: [])
-        } else {
+        if frontmostPid == target.processIdentifier {
+            performPaste(targetPID: target.processIdentifier)
             return
         }
 
+        target.application.activate(options: [.activateAllWindows])
+
         guard attemptsRemaining > 0 else {
+            pasteLogger.warning(
+                "Target did not become frontmost; posting paste directly to pid \(target.processIdentifier, privacy: .public)"
+            )
+            performPaste(targetPID: target.processIdentifier)
             return
         }
 
@@ -573,14 +612,19 @@ final class AppState {
         }
     }
 
-    private func performPaste() {
+    private func performPaste(targetPID: pid_t) {
         let source = CGEventSource(stateID: .hidSystemState)
         let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true)
         keyDown?.flags = .maskCommand
         let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false)
         keyUp?.flags = .maskCommand
-        keyDown?.post(tap: .cghidEventTap)
-        keyUp?.post(tap: .cghidEventTap)
+        guard let keyDown, let keyUp else {
+            pasteLogger.error("Could not create synthetic paste events")
+            return
+        }
+        keyDown.postToPid(targetPID)
+        keyUp.postToPid(targetPID)
+        pasteLogger.info("Synthetic paste posted to pid \(targetPID, privacy: .public)")
     }
 
     private func captureCurrentFrontmostApp() -> PasteTarget? {

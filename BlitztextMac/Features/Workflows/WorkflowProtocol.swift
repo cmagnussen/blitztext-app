@@ -45,16 +45,6 @@ enum WorkflowType: String, CaseIterable, Identifiable, Codable {
         }
     }
 
-    var hotkeyLabel: String {
-        switch self {
-        case .transcription: return "fn + Shift"
-        case .localTranscription: return "fn + Shift + Ctrl"
-        case .textImprover: return "fn + Control"
-        case .dampfAblassen: return "fn + Option"
-        case .emojiText: return "fn + Cmd"
-        }
-    }
-
     var accentColor: String {
         switch self {
         case .transcription: return "blue"
@@ -118,36 +108,47 @@ protocol Workflow: AnyObject, Observable {
 
 struct AppSettings: Codable {
     var hotkeyMode: HotkeyMode = .hold
+    var hotkeyShortcuts: [String: HotkeyShortcut] = Self.defaultHotkeyShortcuts
     var hasSeenOnboarding: Bool = false
     var secureLocalModeEnabled: Bool = false
     var selectedLocalTranscriptionModelName: String = LocalTranscriptionService.recommendedFastModelName
     var hasAutoSelectedFastLocalModel: Bool = false
+    var selectedAudioInputDeviceUID: String?
 
     init(
         hotkeyMode: HotkeyMode = .hold,
+        hotkeyShortcuts: [String: HotkeyShortcut] = Self.defaultHotkeyShortcuts,
         hasSeenOnboarding: Bool = false,
         secureLocalModeEnabled: Bool = false,
         selectedLocalTranscriptionModelName: String = LocalTranscriptionService.recommendedFastModelName,
-        hasAutoSelectedFastLocalModel: Bool = false
+        hasAutoSelectedFastLocalModel: Bool = false,
+        selectedAudioInputDeviceUID: String? = nil
     ) {
         self.hotkeyMode = hotkeyMode
+        self.hotkeyShortcuts = Self.mergingWithDefaults(hotkeyShortcuts)
         self.hasSeenOnboarding = hasSeenOnboarding
         self.secureLocalModeEnabled = secureLocalModeEnabled
         self.selectedLocalTranscriptionModelName = selectedLocalTranscriptionModelName
         self.hasAutoSelectedFastLocalModel = hasAutoSelectedFastLocalModel
+        self.selectedAudioInputDeviceUID = selectedAudioInputDeviceUID
     }
 
     enum CodingKeys: String, CodingKey {
         case hotkeyMode
+        case hotkeyShortcuts
         case hasSeenOnboarding
         case secureLocalModeEnabled
         case selectedLocalTranscriptionModelName
         case hasAutoSelectedFastLocalModel
+        case selectedAudioInputDeviceUID
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         hotkeyMode = try container.decodeIfPresent(HotkeyMode.self, forKey: .hotkeyMode) ?? .hold
+        hotkeyShortcuts = Self.mergingWithDefaults(
+            try container.decodeIfPresent([String: HotkeyShortcut].self, forKey: .hotkeyShortcuts) ?? [:]
+        )
         hasSeenOnboarding = try container.decodeIfPresent(Bool.self, forKey: .hasSeenOnboarding) ?? false
         secureLocalModeEnabled = try container.decodeIfPresent(Bool.self, forKey: .secureLocalModeEnabled) ?? false
         selectedLocalTranscriptionModelName = try container.decodeIfPresent(
@@ -158,6 +159,38 @@ struct AppSettings: Codable {
             Bool.self,
             forKey: .hasAutoSelectedFastLocalModel
         ) ?? false
+        selectedAudioInputDeviceUID = try container.decodeIfPresent(
+            String.self,
+            forKey: .selectedAudioInputDeviceUID
+        )
+    }
+
+    func shortcut(for type: WorkflowType) -> HotkeyShortcut {
+        hotkeyShortcuts[type.rawValue] ?? HotkeyShortcut.defaultShortcut(for: type)
+    }
+
+    mutating func setShortcut(_ shortcut: HotkeyShortcut, for type: WorkflowType) {
+        hotkeyShortcuts[type.rawValue] = shortcut
+    }
+
+    mutating func resetHotkeyShortcuts() {
+        hotkeyShortcuts = Self.defaultHotkeyShortcuts
+    }
+
+    var resolvedHotkeyShortcuts: [WorkflowType: HotkeyShortcut] {
+        Dictionary(uniqueKeysWithValues: WorkflowType.allCases.map { ($0, shortcut(for: $0)) })
+    }
+
+    private static var defaultHotkeyShortcuts: [String: HotkeyShortcut] {
+        Dictionary(uniqueKeysWithValues: WorkflowType.allCases.map {
+            ($0.rawValue, HotkeyShortcut.defaultShortcut(for: $0))
+        })
+    }
+
+    private static func mergingWithDefaults(
+        _ shortcuts: [String: HotkeyShortcut]
+    ) -> [String: HotkeyShortcut] {
+        defaultHotkeyShortcuts.merging(shortcuts) { _, custom in custom }
     }
 }
 

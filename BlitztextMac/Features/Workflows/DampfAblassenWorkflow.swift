@@ -12,16 +12,22 @@ final class DampfAblassenWorkflow: Workflow {
     var onOutput: WorkflowOutputHandler?
     var onPhaseChange: WorkflowPhaseChangeHandler?
 
-    private let recorder = AudioRecorder()
+    private let recorder: AudioRecorder
     private let settings: DampfAblassenSettings
     private let customTerms: [String]
     private let language: String
     private var processingTask: Task<Void, Never>?
 
-    init(settings: DampfAblassenSettings, customTerms: [String] = [], language: String = "de") {
+    init(
+        settings: DampfAblassenSettings,
+        customTerms: [String] = [],
+        language: String = "de",
+        inputDeviceUID: String? = nil
+    ) {
         self.settings = settings
         self.customTerms = customTerms
         self.language = language
+        self.recorder = AudioRecorder(inputDeviceUID: inputDeviceUID)
     }
 
     // MARK: - Recording State
@@ -32,11 +38,12 @@ final class DampfAblassenWorkflow: Workflow {
     // MARK: - Workflow Protocol
 
     func start() {
-        phase = .running("Aufnahme läuft ...")
         recorder.startRecording()
 
         if let error = recorder.errorMessage {
             phase = .error(error)
+        } else {
+            phase = .running("Aufnahme läuft ...")
         }
     }
 
