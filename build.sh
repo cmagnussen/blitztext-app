@@ -8,6 +8,7 @@ RUN_AFTER=false
 INSTALL_APP=false
 BUILD_CONFIGURATION="Release"
 UNIVERSAL_ARCHS="arm64 x86_64"
+SIGNING_IDENTITY="${BLITZTEXT_SIGNING_IDENTITY:-}"
 
 for arg in "$@"; do
     case "$arg" in
@@ -83,6 +84,39 @@ ensure_xcodebuild_available() {
     exit 1
 }
 
+resolve_signing_identity() {
+    if [ -n "$SIGNING_IDENTITY" ]; then
+        return
+    fi
+
+    SIGNING_IDENTITY="$(
+        security find-identity -v -p codesigning 2>/dev/null \
+            | awk -F '"' '/Apple Development:/ { print $2; exit }'
+    )"
+
+    if [ -z "$SIGNING_IDENTITY" ]; then
+        SIGNING_IDENTITY="-"
+    fi
+}
+
+sign_local_app() {
+    local app_path="$1"
+    local entitlements_path="$PROJECT_DIR/Resources/BlitztextMac.entitlements"
+
+    if [ "$SIGNING_IDENTITY" = "-" ]; then
+        echo "🔏 Signiere lokale Development-App ad-hoc. Bedienungshilfen müssen nach jedem neuen Build erneut erlaubt werden."
+    else
+        echo "🔏 Signiere lokale Development-App stabil mit: $SIGNING_IDENTITY"
+    fi
+
+    codesign \
+        --force \
+        --sign "$SIGNING_IDENTITY" \
+        --options runtime \
+        --entitlements "$entitlements_path" \
+        "$app_path" 2>&1
+}
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$SCRIPT_DIR/BlitztextMac"
 PROJECT_FILE="$PROJECT_DIR/BlitztextMac.xcodeproj"
@@ -90,6 +124,7 @@ DERIVED_DATA_PATH="$SCRIPT_DIR/.derivedData-blitztextmac-build"
 cd "$PROJECT_DIR"
 
 ensure_xcodebuild_available
+resolve_signing_identity
 
 if command -v xcodegen &> /dev/null; then
     echo "⚙️  Generiere Xcode-Projekt ..."
@@ -138,8 +173,7 @@ cp -f "$PROJECT_DIR/Resources/menubar_icon@2x.png" "$RESOURCES_DIR/" 2>/dev/null
 DEST="$SCRIPT_DIR/Blitztext.app"
 rm -rf "$DEST"
 cp -R "$APP_PATH" "$DEST"
-echo "🔏 Signiere lokale Development-App ad-hoc. Dieses Artefakt ist nicht notarisiert."
-codesign --force --sign - "$DEST" 2>&1
+sign_local_app "$DEST"
 verify_universal_app "$DEST"
 
 RUN_TARGET="$DEST"
@@ -154,8 +188,7 @@ if [ "$INSTALL_APP" = true ]; then
     fi
     rm -rf "$INSTALL_DEST"
     cp -R "$DEST" "$INSTALL_DEST"
-    echo "🔏 Signiere lokale Development-App ad-hoc. Dieses Artefakt ist nicht notarisiert."
-    codesign --force --sign - "$INSTALL_DEST" 2>&1
+    sign_local_app "$INSTALL_DEST"
     verify_universal_app "$INSTALL_DEST"
     RUN_TARGET="$INSTALL_DEST"
 fi

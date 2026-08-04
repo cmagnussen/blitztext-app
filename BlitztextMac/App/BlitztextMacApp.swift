@@ -16,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var statusItem: NSStatusItem!
     private var popover: NSPopover!
     private let menuBarStatusController = MenuBarStatusController()
+    private let recordingOverlayController = RecordingOverlayController()
     let appState = AppState()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -41,8 +42,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
         appState.onMenuBarStatusChange = { [weak self] status in
             self?.menuBarStatusController.update(to: status)
+            self?.recordingOverlayController.update(
+                to: status,
+                allowsStopping: self?.appState.appSettings.hotkeyMode == .toggle
+            )
+        }
+        recordingOverlayController.onStopRecording = { [weak self] in
+            guard let workflow = self?.appState.activeWorkflow,
+                  workflow.isRecording else { return }
+            workflow.stop()
+        }
+        appState.onPastePermissionRequired = { [weak self] in
+            self?.recordingOverlayController.showPastePermissionWarning()
         }
         appState.hotkeyService.start()
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+            guard let self, !self.appState.accessibilityPermissionGranted else { return }
+            _ = AccessibilityPermissionService.isTrusted(promptIfNeeded: true)
+            self.appState.refreshAccessibilityPermission()
+        }
 
         // Listen for popover dismiss requests (from auto-paste)
         NotificationCenter.default.addObserver(
@@ -90,9 +109,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                active.phase.isActive {
                 active.stop()
             } else {
-                appState.prepareForPopoverPresentation()
-                appState.startWorkflow(type, source: .manual)
-                showPopover()
+                appState.startWorkflow(type, source: .hotkeyBackground)
             }
         }
     }

@@ -12,14 +12,19 @@ final class TextImprovementWorkflow: Workflow {
     var onOutput: WorkflowOutputHandler?
     var onPhaseChange: WorkflowPhaseChangeHandler?
 
-    private let recorder = AudioRecorder()
+    private let recorder: AudioRecorder
     private let settings: TextImprovementSettings
     private let language: String
     private var processingTask: Task<Void, Never>?
 
-    init(settings: TextImprovementSettings, language: String = "de") {
+    init(
+        settings: TextImprovementSettings,
+        language: String = "de",
+        inputDeviceUID: String? = nil
+    ) {
         self.settings = settings
         self.language = language
+        self.recorder = AudioRecorder(inputDeviceUID: inputDeviceUID)
     }
 
     // MARK: - Recording State
@@ -30,11 +35,12 @@ final class TextImprovementWorkflow: Workflow {
     // MARK: - Workflow Protocol
 
     func start() {
-        phase = .running("Aufnahme läuft ...")
         recorder.startRecording()
 
         if let error = recorder.errorMessage {
             phase = .error(error)
+        } else {
+            phase = .running("Aufnahme läuft ...")
         }
     }
 

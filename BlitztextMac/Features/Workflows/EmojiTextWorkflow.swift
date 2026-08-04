@@ -12,16 +12,22 @@ final class EmojiTextWorkflow: Workflow {
     var onOutput: WorkflowOutputHandler?
     var onPhaseChange: WorkflowPhaseChangeHandler?
 
-    private let recorder = AudioRecorder()
+    private let recorder: AudioRecorder
     private let settings: EmojiTextSettings
     private let customTerms: [String]
     private let language: String
     private var processingTask: Task<Void, Never>?
 
-    init(settings: EmojiTextSettings, customTerms: [String] = [], language: String = "de") {
+    init(
+        settings: EmojiTextSettings,
+        customTerms: [String] = [],
+        language: String = "de",
+        inputDeviceUID: String? = nil
+    ) {
         self.settings = settings
         self.customTerms = customTerms
         self.language = language
+        self.recorder = AudioRecorder(inputDeviceUID: inputDeviceUID)
     }
 
     // MARK: - Recording State
@@ -32,11 +38,12 @@ final class EmojiTextWorkflow: Workflow {
     // MARK: - Workflow Protocol
 
     func start() {
-        phase = .running("Aufnahme l\u{00E4}uft ...")
         recorder.startRecording()
 
         if let error = recorder.errorMessage {
             phase = .error(error)
+        } else {
+            phase = .running("Aufnahme l\u{00E4}uft ...")
         }
     }
 
