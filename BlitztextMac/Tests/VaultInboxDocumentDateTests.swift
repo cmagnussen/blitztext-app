@@ -1,6 +1,6 @@
 import XCTest
 
-/// Feste Zeitzone und fester Kalender, damit die Tests nicht davon abhaengen,
+/// Feste Zeitzone und fester Kalender, damit die Tests nicht davon abhängen,
 /// wo und wann sie laufen.
 enum TestCalendar {
     static let berlin: Calendar = {
@@ -61,12 +61,23 @@ final class VaultInboxDocumentDateTests: XCTestCase {
         XCTAssertEqual(VaultInboxDocument.isoDay(wirksam, calendar: calendar), "2026-12-31")
     }
 
-    /// In der Nacht auf den 25.10.2026 wird in Europe/Berlin die Uhr zurueckgestellt.
-    /// Der Tag hat 25 Stunden, das Datum muss trotzdem stimmen.
-    func testZeitumstellungAendertDasDatumNicht() {
-        let now = TestCalendar.date(2026, 10, 25, 2, 30)
+    /// In der Nacht auf den 2026-03-29 wird in Europe/Berlin vorgestellt, der
+    /// 29.03. hat 23 Stunden, und nur ein Schritt über diesen Tag entlarvt eine
+    /// naive Rechnung mit 86400 Sekunden.
+    func testNachDerFruehjahrsumstellungStimmtDerVortag() {
+        let now = TestCalendar.date(2026, 3, 30, 1, 30)
         let wirksam = VaultInboxDocument.effectiveDate(for: now, calendar: calendar)
-        XCTAssertEqual(VaultInboxDocument.isoDay(wirksam, calendar: calendar), "2026-10-24")
+        XCTAssertEqual(VaultInboxDocument.isoDay(wirksam, calendar: calendar), "2026-03-29")
+    }
+
+    /// In der Nacht auf den 25.10.2026 wird in Europe/Berlin die Uhr
+    /// zurückgestellt, der Tag hat 25 Stunden. Dieser Fall sichert die
+    /// Datumsarithmetik über den 25-Stunden-Tag ab, unterscheidet aber für
+    /// sich allein nicht zwischen kalendarischer und naiver Rechnung.
+    func testHerbstumstellungZwanzigNachMitternachtGehoertZumVortag() {
+        let now = TestCalendar.date(2026, 10, 26, 0, 20)
+        let wirksam = VaultInboxDocument.effectiveDate(for: now, calendar: calendar)
+        XCTAssertEqual(VaultInboxDocument.isoDay(wirksam, calendar: calendar), "2026-10-25")
     }
 
     func testDateinameAusWirksamemDatum() {

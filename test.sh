@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Fuehrt die Unit-Tests von BlitztextMac aus.
-# Beispiel fuer einen einzelnen Test:
+# Führt die Unit-Tests von BlitztextMac aus.
+# Beispiel für einen einzelnen Test:
 #   ./test.sh -only-testing:BlitztextMacTests/VaultInboxDocumentDateTests/testViertelVorVierGehoertZumVortag
 set -euo pipefail
 
