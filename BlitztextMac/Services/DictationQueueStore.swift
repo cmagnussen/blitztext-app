@@ -6,6 +6,17 @@ struct QueuedDictation: Codable, Equatable {
     let text: String
 }
 
+enum DictationQueueError: LocalizedError, Equatable {
+    case queueFileUnreadable(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .queueFileUnreadable(let pfad):
+            return "Warteschlange ist nicht lesbar: \(pfad)"
+        }
+    }
+}
+
 /// Hält Diktate, deren Schreiben fehlgeschlagen ist, und zieht sie später
 /// nach. Ein Eintrag verlässt die Warteschlange ausschließlich durch
 /// erfolgreiches Schreiben. Es gibt keine Obergrenze, die still verwerfen
@@ -14,6 +25,15 @@ actor DictationQueueStore {
     struct FlushResult: Equatable {
         let written: Int
         let remaining: Int
+        /// Gesetzt, wenn der Durchlauf vorzeitig endete: Klartextgrund, damit die
+        /// App ihn melden kann. nil heisst, es gab nichts Ungewöhnliches.
+        let stoppedBecause: String?
+
+        init(written: Int, remaining: Int, stoppedBecause: String? = nil) {
+            self.written = written
+            self.remaining = remaining
+            self.stoppedBecause = stoppedBecause
+        }
     }
 
     private let fileURL: URL
@@ -35,29 +55,46 @@ actor DictationQueueStore {
         self.decoder = decoder
     }
 
-    /// Offene Einträge, ältester zuerst.
-    func pending() -> [QueuedDictation] {
+    /// Offene Einträge, ältester zuerst. Fehlt die Datei, ist die Warteschlange
+    /// leer. Ist sie da, aber nicht lesbar oder nicht dekodierbar, wird das
+    /// gemeldet statt stillschweigend als leer behandelt zu werden: sonst
+    /// würde der nächste `enqueue` eine beschädigte Datei mit einem einzigen
+    /// neuen Eintrag überschreiben und alles andere wäre verloren.
+    func pending() throws -> [QueuedDictation] {
+        guard fileManager.fileExists(atPath: fileURL.path) else { return [] }
         guard let data = try? Data(contentsOf: fileURL),
               let eintraege = try? decoder.decode([QueuedDictation].self, from: data) else {
-            return []
+            throw DictationQueueError.queueFileUnreadable(fileURL.path)
         }
         return eintraege.sorted { $0.recordedAt < $1.recordedAt }
     }
 
     func enqueue(_ item: QueuedDictation) throws {
-        var eintraege = pending()
+        var eintraege = try pending()
         eintraege.append(item)
         try persist(eintraege.sorted { $0.recordedAt < $1.recordedAt })
     }
 
-    /// Schreibt die offenen Einträge, ältester zuerst. Beim ersten Fehler
-    /// bricht sie ab und lässt den Rest liegen: scheitert der Ordner, scheitern
-    /// alle weiteren ohnehin, und ein Abbruch bewahrt die Reihenfolge.
+    /// Schreibt die offenen Einträge, ältester zuerst. Nach jedem erfolgreichen
+    /// Schreiben wird die verkürzte Warteschlange sofort persistiert, damit ein
+    /// Eintrag, der schon im Vault steht, nicht noch einmal als offen gilt.
+    /// Scheitert entweder das Schreiben in den Vault oder das Persistieren,
+    /// bricht der Durchlauf ab und lässt den Rest liegen: scheitert der
+    /// Ordner, scheitern alle weiteren ohnehin, und ein Abbruch bewahrt die
+    /// Reihenfolge sowie das Sicherheitsversprechen, nie einen Eintrag zu
+    /// verlieren.
     func flush(using service: VaultInboxService, settings: DictationSettings) async -> FlushResult {
-        var offen = pending()
+        var offen: [QueuedDictation]
+        do {
+            offen = try pending()
+        } catch {
+            return FlushResult(written: 0, remaining: 0, stoppedBecause: error.localizedDescription)
+        }
         guard !offen.isEmpty else { return FlushResult(written: 0, remaining: 0) }
 
         var geschrieben = 0
+        var abbruchgrund: String?
+
         while let naechster = offen.first {
             do {
                 _ = try await service.append(
@@ -65,15 +102,23 @@ actor DictationQueueStore {
                     recordedAt: naechster.recordedAt,
                     settings: settings
                 )
-                offen.removeFirst()
-                geschrieben += 1
             } catch {
+                abbruchgrund = error.localizedDescription
+                break
+            }
+
+            offen.removeFirst()
+            geschrieben += 1
+
+            do {
+                try persist(offen)
+            } catch {
+                abbruchgrund = error.localizedDescription
                 break
             }
         }
 
-        try? persist(offen)
-        return FlushResult(written: geschrieben, remaining: offen.count)
+        return FlushResult(written: geschrieben, remaining: offen.count, stoppedBecause: abbruchgrund)
     }
 
     /// Auch die Warteschlange wird atomar geschrieben. Ein Absturz mitten im

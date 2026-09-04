@@ -16,6 +16,10 @@ final class DictationQueueStoreTests: XCTestCase {
     }
 
     override func tearDownWithError() throws {
+        try? FileManager.default.setAttributes(
+            [.posixPermissions: 0o700],
+            ofItemAtPath: arbeitsordner.path
+        )
         try? FileManager.default.removeItem(at: arbeitsordner)
         try super.tearDownWithError()
     }
@@ -36,9 +40,9 @@ final class DictationQueueStoreTests: XCTestCase {
         )
     }
 
-    func testLeereWarteschlangeOhneDatei() async {
+    func testLeereWarteschlangeOhneDatei() async throws {
         let store = DictationQueueStore(fileURL: warteschlangeURL)
-        let offen = await store.pending()
+        let offen = try await store.pending()
         XCTAssertTrue(offen.isEmpty)
     }
 
@@ -51,7 +55,7 @@ final class DictationQueueStoreTests: XCTestCase {
         try await store.enqueue(eintrag)
 
         let zweiterStore = DictationQueueStore(fileURL: warteschlangeURL)
-        let offen = await zweiterStore.pending()
+        let offen = try await zweiterStore.pending()
         XCTAssertEqual(offen, [eintrag])
     }
 
@@ -71,7 +75,7 @@ final class DictationQueueStoreTests: XCTestCase {
             encoding: .utf8
         )
         XCTAssertTrue(text.contains("## 14:07\nNachgezogener Gedanke."))
-        let offen = await store.pending()
+        let offen = try await store.pending()
         XCTAssertTrue(offen.isEmpty)
     }
 
@@ -116,8 +120,10 @@ final class DictationQueueStoreTests: XCTestCase {
         let service = VaultInboxService(calendar: calendar)
         let ergebnis = await store.flush(using: service, settings: kaputteSettings)
 
-        XCTAssertEqual(ergebnis, DictationQueueStore.FlushResult(written: 0, remaining: 1))
-        let offen = await store.pending()
+        XCTAssertEqual(ergebnis.written, 0)
+        XCTAssertEqual(ergebnis.remaining, 1)
+        XCTAssertNotNil(ergebnis.stoppedBecause)
+        let offen = try await store.pending()
         XCTAssertEqual(offen, [eintrag])
     }
 
@@ -153,5 +159,74 @@ final class DictationQueueStoreTests: XCTestCase {
 
         let dateien = try FileManager.default.contentsOfDirectory(atPath: arbeitsordner.path)
         XCTAssertEqual(dateien.filter { $0.contains(".tmp-") }, [])
+    }
+
+    func testBeschaedigteWarteschlangeWirdNichtUeberschrieben() async throws {
+        let kaputt = Data("{ das ist keine Liste".utf8)
+        try kaputt.write(to: warteschlangeURL)
+
+        let store = DictationQueueStore(fileURL: warteschlangeURL)
+        do {
+            try await store.enqueue(QueuedDictation(
+                recordedAt: TestCalendar.date(2026, 9, 4, 14, 7),
+                text: "Gedanke."
+            ))
+            XCTFail("enqueue haette werfen muessen")
+        } catch DictationQueueError.queueFileUnreadable {
+            // erwartet
+        }
+
+        let aufDerPlatte = try Data(contentsOf: warteschlangeURL)
+        XCTAssertEqual(aufDerPlatte, kaputt)
+    }
+
+    func testFlushRuehrtEineBeschaedigteWarteschlangeNichtAn() async throws {
+        let kaputt = Data("{ das ist keine Liste".utf8)
+        try kaputt.write(to: warteschlangeURL)
+
+        let store = DictationQueueStore(fileURL: warteschlangeURL)
+        let service = VaultInboxService(calendar: calendar)
+        let ergebnis = await store.flush(using: service, settings: settings)
+
+        XCTAssertEqual(ergebnis.written, 0)
+        XCTAssertNotNil(ergebnis.stoppedBecause)
+
+        let aufDerPlatte = try Data(contentsOf: warteschlangeURL)
+        XCTAssertEqual(aufDerPlatte, kaputt)
+
+        let vaultDateien = try FileManager.default.contentsOfDirectory(atPath: vaultOrdner.path)
+        XCTAssertTrue(vaultDateien.isEmpty)
+    }
+
+    func testAbbruchWennDieWarteschlangeNichtGeschriebenWerdenKann() async throws {
+        let store = DictationQueueStore(fileURL: warteschlangeURL)
+        try await store.enqueue(QueuedDictation(
+            recordedAt: TestCalendar.date(2026, 9, 3, 11, 15),
+            text: "Gedanke von Donnerstag."
+        ))
+        try await store.enqueue(QueuedDictation(
+            recordedAt: TestCalendar.date(2026, 9, 4, 11, 15),
+            text: "Gedanke von Freitag."
+        ))
+
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o500],
+            ofItemAtPath: arbeitsordner.path
+        )
+        defer {
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: 0o700],
+                ofItemAtPath: arbeitsordner.path
+            )
+        }
+
+        let service = VaultInboxService(calendar: calendar)
+        let ergebnis = await store.flush(using: service, settings: settings)
+
+        XCTAssertEqual(ergebnis.written, 1)
+        XCTAssertNotNil(ergebnis.stoppedBecause)
+
+        let freitagDatei = vaultOrdner.appendingPathComponent("2026-09-04-diktat.md")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: freitagDatei.path))
     }
 }
