@@ -943,6 +943,94 @@ struct CustomizeSettingsView: View {
                 }
             }
 
+            // MARK: Diktat
+            VStack(alignment: .leading, spacing: 10) {
+                SectionLabel(text: "Diktat")
+
+                Text("fn + Shift + Option h\u{00E4}lt einen Gedanken in einer Tagesdatei fest, statt ihn am Cursor einzusetzen.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Ablageordner")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+
+                    HStack(spacing: 8) {
+                        Text(appState.vaultFolderConfigured
+                             ? appState.dictationSettings.vaultFolderPath
+                             : "Kein Ordner gew\u{00E4}hlt")
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(appState.vaultFolderConfigured ? .primary : .secondary)
+                            .lineLimit(1)
+                            .truncationMode(.head)
+                        Spacer()
+                        Button("Ordner w\u{00E4}hlen") {
+                            chooseVaultFolder()
+                        }
+                        .font(.system(size: 11))
+                    }
+                }
+
+                Toggle("Second-Brain-Frontmatter schreiben", isOn: $appState.dictationSettings.writesSecondBrainFrontmatter)
+                    .toggleStyle(.switch)
+                    .font(.system(size: 11.5))
+
+                if appState.dictationSettings.writesSecondBrainFrontmatter {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Sph\u{00E4}re")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+
+                        Picker("", selection: $appState.dictationSettings.sphere) {
+                            ForEach(DictationSphere.allCases) { sphere in
+                                Text(sphere.displayName).tag(sphere)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                    }
+                }
+
+                if appState.dictationQueueCount > 0 {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.orange)
+                        Text(appState.dictationQueueCount == 1
+                             ? "1 Diktat wartet auf die Ablage."
+                             : "\(appState.dictationQueueCount) Diktate warten auf die Ablage.")
+                            .font(.system(size: 11))
+                        Spacer()
+                        Button("Jetzt nachziehen") {
+                            appState.flushDictationQueue()
+                        }
+                        .font(.system(size: 11))
+                    }
+
+                    if let issue = appState.dictationQueueIssue {
+                        HStack(spacing: 6) {
+                            Image(systemName: "info.circle.fill")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                            Text("Letzter Versuch abgebrochen: \(issue)")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                if appState.notificationsDenied {
+                    HStack(spacing: 6) {
+                        Image(systemName: "bell.slash.fill")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                        Text("Benachrichtigungen sind aus. Die Best\u{00E4}tigung erscheint dann nur im Men\u{00FC}leisten-Symbol.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
             // MARK: Blitztext+
             VStack(alignment: .leading, spacing: 10) {
                 SectionLabel(text: "Blitztext+")
@@ -1099,6 +1187,10 @@ struct CustomizeSettingsView: View {
 
         }
         .padding(16)
+        .onAppear {
+            appState.refreshNotificationPermission()
+            appState.refreshDictationQueueCount()
+        }
     }
 
     private func addTerm() {
@@ -1108,6 +1200,23 @@ struct CustomizeSettingsView: View {
             appState.textImprovementSettings.customTerms.append(trimmed)
         }
         newTerm = ""
+    }
+
+    private func chooseVaultFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Ausw\u{00E4}hlen"
+        panel.message = "Ordner f\u{00FC}r die Diktat-Tagesdateien w\u{00E4}hlen"
+
+        if appState.vaultFolderConfigured {
+            panel.directoryURL = URL(fileURLWithPath: appState.dictationSettings.vaultFolderPath)
+        }
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        appState.setVaultFolder(url)
+        appState.flushDictationQueue()
     }
 }
 

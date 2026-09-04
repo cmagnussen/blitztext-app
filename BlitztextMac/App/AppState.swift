@@ -68,6 +68,7 @@ final class AppState {
     /// Grund, warum der letzte Nachziehversuch vorzeitig endete. nil heisst,
     /// es gab nichts Ungewöhnliches. Wird in den Einstellungen angezeigt.
     var dictationQueueIssue: String?
+    var notificationsDenied = false
 
     // Computed
 
@@ -274,6 +275,7 @@ final class AppState {
             )
             configureWorkflowHandlers(workflow)
             activeWorkflow = workflow
+            Task { await UserNotificationService.requestAuthorizationIfNeeded() }
             workflow.start()
         }
 
@@ -632,6 +634,13 @@ final class AppState {
             if let offen = try? await self.dictationQueue.pending() {
                 self.dictationQueueCount = offen.count
             }
+        }
+    }
+
+    func refreshNotificationPermission() {
+        Task { [weak self] in
+            guard let self else { return }
+            self.notificationsDenied = await UserNotificationService.authorizationDenied()
         }
     }
 
