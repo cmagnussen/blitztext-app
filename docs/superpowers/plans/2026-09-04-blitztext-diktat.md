@@ -1241,9 +1241,10 @@ git commit -m "Diktat: VaultInboxService mit atomarem Schreiben"
   - `struct QueuedDictation: Codable, Equatable` mit `recordedAt: Date`, `text: String`
   - `actor DictationQueueStore`, `init(fileURL: URL, fileManager: FileManager = .default)`
   - `func enqueue(_ item: QueuedDictation) throws`
-  - `func pending() -> [QueuedDictation]`
+  - `func pending() throws -> [QueuedDictation]`
   - `func flush(using service: VaultInboxService, settings: DictationSettings) async -> DictationQueueStore.FlushResult`
-  - `struct FlushResult: Equatable` mit `written: Int`, `remaining: Int`
+  - `struct FlushResult: Equatable` mit `written: Int`, `remaining: Int`, `stoppedBecause: String?` (Vorgabe nil)
+  - `enum DictationQueueError: LocalizedError, Equatable` mit `queueFileUnreadable(String)`
   - `AppSupportPaths.dictationQueueURL: URL`
 
 - [ ] **Step 1: Testziel-Quellen erweitern**
@@ -1420,6 +1421,29 @@ final class DictationQueueStoreTests: XCTestCase {
 }
 ```
 
+> **Nachtrag nach dem Review dieses Tasks.** Der hier abgedruckte Code hatte
+> zwei Defekte, die das Review gefunden hat und die im Repo behoben sind:
+>
+> 1. `pending()` lieferte `[]`, wenn die Warteschlangendatei vorhanden aber
+>    nicht dekodierbar war. Weil `enqueue` erst `pending()` liest und danach
+>    schreibt, ersetzte der naechste Eintrag eine beschaedigte Datei durch
+>    sich selbst und alle vorher gesicherten Diktate waren weg. `pending()`
+>    ist jetzt `throws` und wirft in diesem Fall
+>    `DictationQueueError.queueFileUnreadable`. `[]` bedeutet nur noch: es
+>    gibt keine Datei.
+> 2. `try? persist(offen)` am Ende von `flush` verschluckte einen Fehler.
+>    Geschriebene Eintraege blieben dann als offen in der Datei stehen und
+>    wurden beim naechsten Durchlauf ein zweites Mal in die Tagesdatei
+>    geschrieben. Persistiert wird jetzt nach jedem einzelnen erfolgreichen
+>    Schreibvorgang, und der Durchlauf bricht ab, wenn das misslingt. Das
+>    Duplikatfenster sinkt damit auf hoechstens einen Eintrag. Vollstaendig
+>    verhindern liesse sich Duplizierung nur mit einer Schreibmarke in der
+>    Tagesdatei, was ein neues Konzept waere und nicht in der Spec steht.
+>
+> Dazu kam `FlushResult.stoppedBecause: String?`, damit ein vorzeitiger
+> Abbruch nicht stumm bleibt. Drei Tests sichern das ab, die Klasse hat
+> dadurch 10 statt 7 Tests und die Suite 45 statt 42.
+
 - [ ] **Step 3: Test laufen lassen und Fehlschlag bestaetigen**
 
 Run: `./test.sh -only-testing:BlitztextMacTests/DictationQueueStoreTests`
@@ -1552,12 +1576,12 @@ In `BlitztextMac/Services/AppSupportPaths.swift` nach `settingsURL` einfuegen:
 - [ ] **Step 6: Test laufen lassen und Erfolg bestaetigen**
 
 Run: `./test.sh -only-testing:BlitztextMacTests/DictationQueueStoreTests`
-Expected: PASS, 7 Tests.
+Expected: PASS, 10 Tests.
 
 - [ ] **Step 7: Alle Tests laufen lassen**
 
 Run: `./test.sh`
-Expected: PASS, 42 Tests.
+Expected: PASS, 45 Tests.
 
 - [ ] **Step 8: Commit**
 
@@ -1706,7 +1730,7 @@ Expected: Build erfolgreich. Kommen Fehler der Form `switch must be exhaustive`,
 - [ ] **Step 7: Tests laufen lassen, damit nichts zurueckgefallen ist**
 
 Run: `./test.sh`
-Expected: PASS, 42 Tests.
+Expected: PASS, 45 Tests.
 
 - [ ] **Step 8: Commit**
 
@@ -1927,7 +1951,7 @@ Neuer Abschnitt in `AppState`, direkt unter `handleWorkflowOutput`:
         try? await dictationQueue.enqueue(
             QueuedDictation(recordedAt: recordedAt, text: text)
         )
-        dictationQueueCount = await dictationQueue.pending().count
+        dictationQueueCount = (try? await dictationQueue.pending())?.count ?? dictationQueueCount
 
         menuBarStatus = .error(.vaultDictation)
         UserNotificationService.notifyDictationFailed(reason: reason)
@@ -1950,7 +1974,12 @@ Neuer Abschnitt in `AppState`, direkt unter `handleWorkflowOutput`:
     func refreshDictationQueueCount() {
         Task { [weak self] in
             guard let self else { return }
-            self.dictationQueueCount = await self.dictationQueue.pending().count
+            // Ist die Warteschlangendatei beschaedigt, bleibt der letzte
+            // bekannte Zaehler stehen. Ein stilles 0 waere die falsche
+            // Auskunft, denn die Eintraege sind ja noch da.
+            if let offen = try? await self.dictationQueue.pending() {
+                self.dictationQueueCount = offen.count
+            }
         }
     }
 
@@ -1979,7 +2008,7 @@ Expected: Build erfolgreich. `UserNotificationService` fehlt noch, deshalb brich
 - [ ] **Step 10: Tests laufen lassen**
 
 Run: `./test.sh`
-Expected: PASS, 42 Tests.
+Expected: PASS, 45 Tests.
 
 - [ ] **Step 11: Commit**
 
@@ -2332,7 +2361,7 @@ Und unter `## Important Preview Notes` ergaenzen:
 - [ ] **Step 2: Alle Tests laufen lassen**
 
 Run: `./test.sh`
-Expected: PASS, 42 Tests, keine Fehlschlaege.
+Expected: PASS, 45 Tests, keine Fehlschlaege.
 
 - [ ] **Step 3: Sauberen Build pruefen**
 
