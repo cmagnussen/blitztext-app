@@ -55,7 +55,7 @@ final class VaultInboxDocumentAppendTests: XCTestCase {
     func testAnhaengenSetztAktualisiertUndLaesstErstelltStehen() {
         let ergebnis = VaultInboxDocument.appended(
             to: bestehendMitFrontmatter,
-            text: "Nachtrag am naechsten Tag.",
+            text: "Nachtrag am nächsten Tag.",
             recordedAt: TestCalendar.date(2026, 9, 5, 10, 0),
             calendar: calendar
         )

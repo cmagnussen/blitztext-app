@@ -133,7 +133,7 @@ final class VaultInboxServiceTests: XCTestCase {
                 recordedAt: TestCalendar.date(2026, 9, 4, 9, 42),
                 settings: DictationSettings()
             )
-            XCTFail("Es haette ein Fehler kommen muessen.")
+            XCTFail("Es hätte ein Fehler kommen müssen.")
         } catch let fehler as VaultInboxError {
             XCTAssertEqual(fehler, .folderNotConfigured)
         } catch {
@@ -153,7 +153,7 @@ final class VaultInboxServiceTests: XCTestCase {
                 recordedAt: TestCalendar.date(2026, 9, 4, 9, 42),
                 settings: konfiguration
             )
-            XCTFail("Es haette ein Fehler kommen muessen.")
+            XCTFail("Es hätte ein Fehler kommen müssen.")
         } catch let fehler as VaultInboxError {
             XCTAssertEqual(fehler, .folderMissing(verschwunden.path))
         } catch {
@@ -180,7 +180,7 @@ final class VaultInboxServiceTests: XCTestCase {
                 recordedAt: TestCalendar.date(2026, 9, 4, 9, 42),
                 settings: konfiguration
             )
-            XCTFail("Es haette ein Fehler kommen muessen.")
+            XCTFail("Es hätte ein Fehler kommen müssen.")
         } catch let fehler as VaultInboxError {
             guard case .folderMissing(let pfad) = fehler else {
                 XCTFail("Falscher Fehlerfall: \(fehler)")
@@ -206,7 +206,7 @@ final class VaultInboxServiceTests: XCTestCase {
                 recordedAt: TestCalendar.date(2026, 9, 4, 9, 42),
                 settings: settings()
             )
-            XCTFail("Es haette ein Fehler kommen muessen.")
+            XCTFail("Es hätte ein Fehler kommen müssen.")
         } catch let fehler as VaultInboxError {
             XCTAssertEqual(fehler, .existingFileUnreadable(ziel.path))
         } catch {

@@ -106,7 +106,7 @@ final class VaultInboxDocumentNewFileTests: XCTestCase {
 
     func testNeueDateiUmZwanzigNachMitternachtTraegtDasDatumDesVortags() {
         let inhalt = VaultInboxDocument.newDocument(
-            text: "Spaeter Gedanke.",
+            text: "Später Gedanke.",
             recordedAt: TestCalendar.date(2026, 9, 4, 0, 20),
             settings: mitFrontmatter,
             calendar: calendar
