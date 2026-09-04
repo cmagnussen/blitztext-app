@@ -193,12 +193,23 @@ final class VaultInboxDocumentDateTests: XCTestCase {
         XCTAssertEqual(VaultInboxDocument.isoDay(wirksam, calendar: calendar), "2026-12-31")
     }
 
-    /// In der Nacht auf den 25.10.2026 wird in Europe/Berlin die Uhr zurueckgestellt.
-    /// Der Tag hat 25 Stunden, das Datum muss trotzdem stimmen.
-    func testZeitumstellungAendertDasDatumNicht() {
-        let now = TestCalendar.date(2026, 10, 25, 2, 30)
+    /// In der Nacht auf den 29.03.2026 wird in Europe/Berlin vorgestellt, der
+    /// 29.03. hat 23 Stunden. Nur ein Schritt ueber diesen Tag entlarvt eine
+    /// naive Rechnung mit 86400 Sekunden: kalendarisch ergibt sich der 29.03.,
+    /// naiv der 28.03.
+    func testNachDerFruehjahrsumstellungStimmtDerVortag() {
+        let now = TestCalendar.date(2026, 3, 30, 1, 30)
         let wirksam = VaultInboxDocument.effectiveDate(for: now, calendar: calendar)
-        XCTAssertEqual(VaultInboxDocument.isoDay(wirksam, calendar: calendar), "2026-10-24")
+        XCTAssertEqual(VaultInboxDocument.isoDay(wirksam, calendar: calendar), "2026-03-29")
+    }
+
+    /// Sichert die Datumsarithmetik ueber den 25-Stunden-Tag des 25.10.2026 ab.
+    /// Unterscheidet fuer sich allein nicht zwischen kalendarischer und naiver
+    /// Rechnung, ergaenzt aber die Fruehjahrsumstellung um die Gegenrichtung.
+    func testHerbstumstellungZwanzigNachMitternachtGehoertZumVortag() {
+        let now = TestCalendar.date(2026, 10, 26, 0, 20)
+        let wirksam = VaultInboxDocument.effectiveDate(for: now, calendar: calendar)
+        XCTAssertEqual(VaultInboxDocument.isoDay(wirksam, calendar: calendar), "2026-10-25")
     }
 
     func testDateinameAusWirksamemDatum() {
@@ -354,7 +365,7 @@ enum VaultInboxDocument {
 - [ ] **Step 7: Test laufen lassen und Erfolg bestaetigen**
 
 Run: `./test.sh`
-Expected: PASS, 11 Tests in `VaultInboxDocumentDateTests`.
+Expected: PASS, 12 Tests in `VaultInboxDocumentDateTests`.
 
 - [ ] **Step 8: Pruefen, dass der App-Build weiter laeuft**
 
@@ -822,7 +833,7 @@ Expected: PASS, 8 Tests.
 - [ ] **Step 5: Alle bisherigen Tests laufen lassen**
 
 Run: `./test.sh`
-Expected: PASS, 25 Tests.
+Expected: PASS, 26 Tests.
 
 - [ ] **Step 6: Commit**
 
@@ -1546,7 +1557,7 @@ Expected: PASS, 7 Tests.
 - [ ] **Step 7: Alle Tests laufen lassen**
 
 Run: `./test.sh`
-Expected: PASS, 41 Tests.
+Expected: PASS, 42 Tests.
 
 - [ ] **Step 8: Commit**
 
@@ -1695,7 +1706,7 @@ Expected: Build erfolgreich. Kommen Fehler der Form `switch must be exhaustive`,
 - [ ] **Step 7: Tests laufen lassen, damit nichts zurueckgefallen ist**
 
 Run: `./test.sh`
-Expected: PASS, 41 Tests.
+Expected: PASS, 42 Tests.
 
 - [ ] **Step 8: Commit**
 
@@ -1968,7 +1979,7 @@ Expected: Build erfolgreich. `UserNotificationService` fehlt noch, deshalb brich
 - [ ] **Step 10: Tests laufen lassen**
 
 Run: `./test.sh`
-Expected: PASS, 41 Tests.
+Expected: PASS, 42 Tests.
 
 - [ ] **Step 11: Commit**
 
@@ -2321,7 +2332,7 @@ Und unter `## Important Preview Notes` ergaenzen:
 - [ ] **Step 2: Alle Tests laufen lassen**
 
 Run: `./test.sh`
-Expected: PASS, 41 Tests, keine Fehlschlaege.
+Expected: PASS, 42 Tests, keine Fehlschlaege.
 
 - [ ] **Step 3: Sauberen Build pruefen**
 

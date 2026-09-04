@@ -364,7 +364,7 @@ nerven:
 **Wirksames Datum**
 - 03:59 ergibt den Vortag, 04:00 den laufenden Tag
 - Monats- und Jahreswechsel um 00:20
-- Tag mit Zeitumstellung
+- Frühjahrsumstellung und Herbstumstellung, wobei der Frühjahrsfall so gewählt ist, dass eine naive Rechnung mit 86400 Sekunden auffällt
 
 **Dateiaufbau**
 - neue Datei mit Frontmatter entspricht dem Format aus der Notiz, Feld für Feld
