@@ -65,6 +65,7 @@ targets:
       - path: Tests
       - path: Services/DictationSettings.swift
       - path: Services/VaultInboxDocument.swift
+      - path: Services/VaultInboxService.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.blitztext.mac.tests
