@@ -1006,16 +1006,16 @@ struct CustomizeSettingsView: View {
                         }
                         .font(.system(size: 11))
                     }
+                }
 
-                    if let issue = appState.dictationQueueIssue {
-                        HStack(spacing: 6) {
-                            Image(systemName: "info.circle.fill")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(.secondary)
-                            Text("Letzter Versuch abgebrochen: \(issue)")
-                                .font(.system(size: 11))
-                                .foregroundStyle(.secondary)
-                        }
+                if let issue = appState.dictationQueueIssue {
+                    HStack(spacing: 6) {
+                        Image(systemName: "info.circle.fill")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                        Text("Letzter Versuch abgebrochen: \(issue)")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
                     }
                 }
 
