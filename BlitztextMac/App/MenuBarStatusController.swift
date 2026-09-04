@@ -181,7 +181,7 @@ private enum MenuBarStatusIconRenderer {
         case .recording:
             let values: [CGFloat]
             switch type {
-            case .transcription, .localTranscription:
+            case .transcription, .localTranscription, .vaultDictation:
                 values = [0.74, 1.0, 0.82, 0.92]
             case .textImprover:
                 values = [0.66, 0.84, 1.0, 0.8]
@@ -195,7 +195,7 @@ private enum MenuBarStatusIconRenderer {
         case .processing:
             let values: [CGFloat]
             switch type {
-            case .transcription, .localTranscription:
+            case .transcription, .localTranscription, .vaultDictation:
                 values = [0.58, 0.72, 0.9, 0.72]
             case .textImprover:
                 values = [0.48, 0.68, 0.92, 0.84]
@@ -284,7 +284,7 @@ private enum MenuBarStatusIconRenderer {
 
     private static func recordingAlphaValues(for type: WorkflowType, frame: Int) -> [CGFloat] {
         switch type {
-        case .transcription, .localTranscription:
+        case .transcription, .localTranscription, .vaultDictation:
             let patterns: [[CGFloat]] = [
                 [1.0, 0.42, 0.28, 0.18],
                 [0.82, 1.0, 0.4, 0.24],
@@ -321,7 +321,7 @@ private enum MenuBarStatusIconRenderer {
 
     private static func processingAlphaValues(for type: WorkflowType, frame: Int) -> [CGFloat] {
         switch type {
-        case .transcription, .localTranscription:
+        case .transcription, .localTranscription, .vaultDictation:
             let patterns: [[CGFloat]] = [
                 [1.0, 0.84, 0.68, 0.52],
                 [0.92, 0.8, 0.64, 0.5],
@@ -362,6 +362,8 @@ private enum MenuBarStatusIconRenderer {
             return "mic.fill"
         case .localTranscription:
             return "lock.shield.fill"
+        case .vaultDictation:
+            return "tray.and.arrow.down.fill"
         case .textImprover:
             return "text.alignleft"
         case .dampfAblassen:

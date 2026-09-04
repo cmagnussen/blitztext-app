@@ -20,6 +20,8 @@
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Blitztext benötigt Mikrofon-Zugriff für die Sprach-Transkription.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>Blitztext schreibt dein Diktat in den Ordner, den du dafür eingestellt hast.</string>
 	<key>LSUIElement</key>
 	<true/>
 	<key>CFBundleIconFile</key>

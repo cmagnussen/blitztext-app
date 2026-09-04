@@ -5,6 +5,7 @@ import Foundation
 enum WorkflowType: String, CaseIterable, Identifiable, Codable {
     case transcription
     case localTranscription
+    case vaultDictation
     case textImprover
     case dampfAblassen
     case emojiText
@@ -19,6 +20,7 @@ enum WorkflowType: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .transcription: return "Blitztext"
         case .localTranscription: return "Blitztext Lokal"
+        case .vaultDictation: return "Blitztext Notiz"
         case .textImprover: return "Blitztext+"
         case .dampfAblassen: return "Blitztext $%&!"
         case .emojiText: return "Blitztext :)"
@@ -29,6 +31,7 @@ enum WorkflowType: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .transcription: return "mic.fill"
         case .localTranscription: return "lock.shield.fill"
+        case .vaultDictation: return "tray.and.arrow.down.fill"
         case .textImprover: return "text.badge.checkmark"
         case .dampfAblassen: return "flame.fill"
         case .emojiText: return "face.smiling"
@@ -39,6 +42,7 @@ enum WorkflowType: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .transcription: return "Sprache rein. Text raus."
         case .localTranscription: return "Nur lokal. Kein Server."
+        case .vaultDictation: return "Gedanke rein. Inbox raus."
         case .textImprover: return "Geschrieben sprechen."
         case .dampfAblassen: return "Frust rein. Entspannt raus."
         case .emojiText: return "Text rein. Emojis dazu."
@@ -49,6 +53,7 @@ enum WorkflowType: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .transcription: return "fn + Shift"
         case .localTranscription: return "fn + Shift + Ctrl"
+        case .vaultDictation: return "fn + Shift + Option"
         case .textImprover: return "fn + Control"
         case .dampfAblassen: return "fn + Option"
         case .emojiText: return "fn + Cmd"
@@ -59,9 +64,29 @@ enum WorkflowType: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .transcription: return "blue"
         case .localTranscription: return "green"
+        case .vaultDictation: return "indigo"
         case .textImprover: return "purple"
         case .dampfAblassen: return "orange"
         case .emojiText: return "cyan"
+        }
+    }
+}
+
+// MARK: - Output Destination
+
+/// Wohin das Ergebnis eines Workflows geht. Alle bisherigen Workflows setzen
+/// den Text am Cursor ein, das Diktat schreibt in die Tagesdatei im Vault.
+enum WorkflowOutputDestination {
+    case cursor
+    case vaultInbox
+}
+
+extension WorkflowType {
+    var outputDestination: WorkflowOutputDestination {
+        switch self {
+        case .vaultDictation: return .vaultInbox
+        case .transcription, .localTranscription, .textImprover, .dampfAblassen, .emojiText:
+            return .cursor
         }
     }
 }

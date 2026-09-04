@@ -81,6 +81,15 @@ final class HotkeyService {
             return
         }
 
+        // fn + Shift + Option -> Diktat in die Tagesdatei
+        if flags == [.function, .shift, .option] {
+            if activeCombo == nil {
+                activeCombo = .vaultDictation
+                onHotkeyEvent?(.down(.vaultDictation))
+            }
+            return
+        }
+
         // fn + Shift -> transcription
         if flags == [.function, .shift] {
             if activeCombo == nil {

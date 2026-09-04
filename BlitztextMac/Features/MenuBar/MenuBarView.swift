@@ -599,7 +599,7 @@ struct MenuBarView: View {
 
                 // Content
                 switch workflow.type {
-                case .transcription, .localTranscription:
+                case .transcription, .localTranscription, .vaultDictation:
                     if let w = workflow as? TranscriptionWorkflow {
                         TranscriptionActiveView(workflow: w)
                     }
@@ -651,6 +651,7 @@ struct MenuBarView: View {
         switch type {
         case .transcription: return .blue
         case .localTranscription: return .green
+        case .vaultDictation: return .indigo
         case .textImprover: return .purple
         case .dampfAblassen: return .orange
         case .emojiText: return .cyan
