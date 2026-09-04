@@ -45,4 +45,54 @@ enum VaultInboxDocument {
         formatter.dateFormat = pattern
         return formatter.string(from: date)
     }
+
+    // MARK: - Bausteine
+
+    /// Ein Abschnitt ist die Uhrzeit als H2 und darunter der rohe
+    /// Transkripttext. Nichts sonst.
+    static func section(text: String, at time: Date, calendar: Calendar) -> String {
+        let roh = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return "## \(clockTime(time, calendar: calendar))\n\(roh)"
+    }
+
+    /// Inhalt einer Tagesdatei, die es noch nicht gibt. Legt Frontmatter,
+    /// Marker, H1 und den ersten Abschnitt an.
+    static func newDocument(
+        text: String,
+        recordedAt: Date,
+        settings: DictationSettings,
+        calendar: Calendar
+    ) -> String {
+        let tag = effectiveDate(for: recordedAt, calendar: calendar)
+        var bloecke: [String] = []
+
+        if settings.writesSecondBrainFrontmatter {
+            bloecke.append(frontmatter(day: isoDay(tag, calendar: calendar), sphere: settings.sphere))
+            bloecke.append("<!-- diktat: offen -->")
+        }
+
+        bloecke.append("# Diktate \(headingDay(tag, calendar: calendar))")
+        bloecke.append(section(text: text, at: recordedAt, calendar: calendar))
+
+        return bloecke.joined(separator: "\n\n") + "\n"
+    }
+
+    /// Feste Werte laut Konzeptnotiz. Die Sphäre ist der einzige Wert, der
+    /// variiert.
+    private static func frontmatter(day: String, sphere: DictationSphere) -> String {
+        """
+        ---
+        typ: log
+        status: aktiv
+        topf: inbox
+        sphaere: \(sphere.rawValue)
+        themen: []
+        quelle: gespräch
+        stichworte: [diktat, schnellerfassung]
+        erstellt: \(day)
+        aktualisiert: \(day)
+        geprüft:
+        ---
+        """
+    }
 }
