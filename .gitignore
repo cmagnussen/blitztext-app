@@ -29,6 +29,7 @@ Secrets.swift
 *.xcconfig
 
 # Tooling
+.vite/
 node_modules/
 
 # IDEs
