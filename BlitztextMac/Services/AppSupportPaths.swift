@@ -13,6 +13,10 @@ enum AppSupportPaths {
         appSupportDirectoryURL.appendingPathComponent("settings.json")
     }
 
+    static var dictationQueueURL: URL {
+        appSupportDirectoryURL.appendingPathComponent("dictation-queue.json")
+    }
+
     static var localModelsDirectoryURL: URL {
         appSupportDirectoryURL.appendingPathComponent("models", isDirectory: true)
     }
