@@ -41,6 +41,13 @@ actor DictationQueueStore {
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
 
+    /// Verhindert zwei gleichzeitige Durchläufe. Actors sind an
+    /// Suspension-Points reentrant: ohne diese Sperre könnten zwei sich
+    /// überlappende `flush`-Aufrufe denselben Eintrag beide in den Vault
+    /// schreiben. Wird synchron gesetzt und per `defer` zurückgesetzt, ohne
+    /// `await` dazwischen, damit die Prüfung selbst nicht racy ist.
+    private var isFlushing = false
+
     init(fileURL: URL, fileManager: FileManager = .default) {
         self.fileURL = fileURL
         self.fileManager = fileManager
@@ -75,15 +82,42 @@ actor DictationQueueStore {
         try persist(eintraege.sorted { $0.recordedAt < $1.recordedAt })
     }
 
-    /// Schreibt die offenen Einträge, ältester zuerst. Nach jedem erfolgreichen
-    /// Schreiben wird die verkürzte Warteschlange sofort persistiert, damit ein
-    /// Eintrag, der schon im Vault steht, nicht noch einmal als offen gilt.
+    /// Schreibt die offenen Einträge, ältester zuerst.
+    ///
+    /// `await service.append(...)` ruft eine andere Actor-Instanz auf und ist
+    /// damit ein echter Suspension-Point: Actors sind dort reentrant, ein
+    /// paralleler `enqueue`-Aufruf auf diesem Actor kann währenddessen
+    /// vollständig durchlaufen und die Datei ändern. Eine lokale Kopie der
+    /// Warteschlange, die vor dem `await` gelesen und danach blind
+    /// zurückgeschrieben würde, wäre deshalb potenziell veraltet und könnte
+    /// einen frisch eingereihten Eintrag beim Zurückschreiben verwerfen.
+    ///
+    /// Deshalb wird nach jedem erfolgreichen Schreiben die Warteschlange neu
+    /// von der Platte gelesen, der geschriebene Eintrag per Gleichheit
+    /// entfernt (genau ein Vorkommen, nicht alle) und sofort persistiert.
+    /// Das geschieht alles synchron, ohne weiteres `await` dazwischen, sodass
+    /// zwischen Lesen und Schreiben kein weiterer Suspension-Point liegt, an
+    /// dem sich wieder etwas ändern könnte. `isFlushing` verhindert
+    /// zusätzlich, dass zwei überlappende Durchläufe denselben Eintrag
+    /// doppelt schreiben.
+    ///
     /// Scheitert entweder das Schreiben in den Vault oder das Persistieren,
     /// bricht der Durchlauf ab und lässt den Rest liegen: scheitert der
     /// Ordner, scheitern alle weiteren ohnehin, und ein Abbruch bewahrt die
     /// Reihenfolge sowie das Sicherheitsversprechen, nie einen Eintrag zu
     /// verlieren.
     func flush(using service: VaultInboxService, settings: DictationSettings) async -> FlushResult {
+        guard !isFlushing else {
+            let restlich = (try? pending())?.count ?? 0
+            return FlushResult(
+                written: 0,
+                remaining: restlich,
+                stoppedBecause: "Ein Nachziehen läuft bereits."
+            )
+        }
+        isFlushing = true
+        defer { isFlushing = false }
+
         var offen: [QueuedDictation]
         do {
             offen = try pending()
@@ -107,11 +141,15 @@ actor DictationQueueStore {
                 break
             }
 
-            offen.removeFirst()
             geschrieben += 1
 
             do {
-                try persist(offen)
+                var aktuell = try pending()
+                if let index = aktuell.firstIndex(of: naechster) {
+                    aktuell.remove(at: index)
+                }
+                try persist(aktuell)
+                offen = aktuell
             } catch {
                 abbruchgrund = error.localizedDescription
                 break
