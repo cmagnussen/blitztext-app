@@ -19,10 +19,12 @@ This is a learning and experimentation project, not a polished product.
 - **Blitztext+**: record speech, transcribe it, then turn the rough draft into cleaner writing.
 - **Blitztext $%&!**: turn frustrated speech into a calmer message.
 - **Blitztext :)**: add fitting emojis to dictated text.
+- **Blitztext Notiz**: record a short thought and append it to a dated Markdown file in a folder you choose, instead of pasting at the cursor. Optional Second-Brain-style frontmatter.
 
 ## Important Preview Notes
 
 - The macOS app (below) is the more complete one; the Windows app is an earlier preview — see [BlitztextWin/README.md](BlitztextWin/README.md).
+- **Blitztext Notiz** needs a target folder in Settings before it becomes available. Files are named `YYYY-MM-DD-diktat.md`, and the day rolls over at 04:00 local time.
 - Bring your own OpenAI API key (macOS) or LiteLLM gateway URL + key (Windows).
 - No hosted Blitztext backend is included or provided.
 - In online mode, audio and text are sent directly from the app to the OpenAI API.
