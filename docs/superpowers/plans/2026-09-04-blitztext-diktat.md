@@ -1444,6 +1444,24 @@ final class DictationQueueStoreTests: XCTestCase {
 > Abbruch nicht stumm bleibt. Drei Tests sichern das ab, die Klasse hat
 > dadurch 10 statt 7 Tests und die Suite 45 statt 42.
 
+> **Zweiter Nachtrag, aus dem Abschlussreview des Branches.** Auch die
+> ueberarbeitete Fassung hatte noch einen Verlustpfad, den keines der neun
+> Task-Reviews gesehen hat: Swift-Actors sind an Suspendierungspunkten
+> reentrant. `flush` las die Liste in eine lokale Variable, wartete dann auf
+> `service.append` (Wechsel in einen anderen actor, also ein echter
+> Suspendierungspunkt) und persistierte danach den veralteten Schnappschuss.
+> Ein `enqueue`, das waehrend dieser Suspendierung lief, wurde damit
+> ueberschrieben, und sein Diktat war weg, ohne je im Vault gelandet zu sein.
+> Erreichbar im Normalbetrieb, weil `AppState.init()` beim Start einen
+> Durchlauf startet und `writeToVaultInbox` vor jedem Schreiben selbst einen.
+>
+> Behoben durch zwei Aenderungen: nach jedem erfolgreichen Schreiben wird die
+> Liste neu von der Platte gelesen und der geschriebene Eintrag per Gleichheit
+> statt per Index entfernt, und eine Sperre im actor verhindert ueberlappende
+> Durchlaeufe. Zwei Tests mit je 150 gleichzeitigen Durchlaeufen sichern das
+> ab; beide fallen unter Sabotage der alten Fassung durch. Die Suite hat
+> dadurch 47 statt 45 Tests.
+
 - [ ] **Step 3: Test laufen lassen und Fehlschlag bestaetigen**
 
 Run: `./test.sh -only-testing:BlitztextMacTests/DictationQueueStoreTests`
@@ -1576,12 +1594,12 @@ In `BlitztextMac/Services/AppSupportPaths.swift` nach `settingsURL` einfuegen:
 - [ ] **Step 6: Test laufen lassen und Erfolg bestaetigen**
 
 Run: `./test.sh -only-testing:BlitztextMacTests/DictationQueueStoreTests`
-Expected: PASS, 10 Tests.
+Expected: PASS, 12 Tests.
 
 - [ ] **Step 7: Alle Tests laufen lassen**
 
 Run: `./test.sh`
-Expected: PASS, 45 Tests.
+Expected: PASS, 47 Tests.
 
 - [ ] **Step 8: Commit**
 
@@ -1730,7 +1748,7 @@ Expected: Build erfolgreich. Kommen Fehler der Form `switch must be exhaustive`,
 - [ ] **Step 7: Tests laufen lassen, damit nichts zurueckgefallen ist**
 
 Run: `./test.sh`
-Expected: PASS, 45 Tests.
+Expected: PASS, 47 Tests.
 
 - [ ] **Step 8: Commit**
 
@@ -2008,7 +2026,7 @@ Expected: Build erfolgreich. `UserNotificationService` fehlt noch, deshalb brich
 - [ ] **Step 10: Tests laufen lassen**
 
 Run: `./test.sh`
-Expected: PASS, 45 Tests.
+Expected: PASS, 47 Tests.
 
 - [ ] **Step 11: Commit**
 
@@ -2361,7 +2379,7 @@ Und unter `## Important Preview Notes` ergaenzen:
 - [ ] **Step 2: Alle Tests laufen lassen**
 
 Run: `./test.sh`
-Expected: PASS, 45 Tests, keine Fehlschlaege.
+Expected: PASS, 47 Tests, keine Fehlschlaege.
 
 - [ ] **Step 3: Sauberen Build pruefen**
 
