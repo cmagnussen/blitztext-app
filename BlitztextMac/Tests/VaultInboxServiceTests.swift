@@ -163,24 +163,34 @@ final class VaultInboxServiceTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: verschwunden.path))
     }
 
-    func testTildeImPfadWirdAufgeloest() async throws {
+    func testTildeImPfadWirdZuEinemAbsolutenPfadAufgeloest() async {
         let service = VaultInboxService(calendar: calendar)
+        let name = "blitztext-gibtesnicht-\(UUID().uuidString)"
         var konfiguration = settings()
-        konfiguration.vaultFolderPath = "~"
+        konfiguration.vaultFolderPath = "~/\(name)"
 
-        // Der Test schreibt bewusst nicht ins Home-Verzeichnis, er prueft nur,
-        // dass die Tilde nicht als Ordnername missverstanden wird.
+        // Die Tilde-Auflösung lässt sich am geworfenen Pfad ablesen, ohne
+        // irgendwo außerhalb des Temp-Ordners zu schreiben: Der Ordner
+        // existiert garantiert nicht, also nimmt append() deterministisch den
+        // folderMissing-Fehlerpfad, und der darin enthaltene Pfad ist genau
+        // der aufgelöste, den der Service tatsächlich geprüft hat.
         do {
             _ = try await service.append(
                 text: "Gedanke.",
                 recordedAt: TestCalendar.date(2026, 9, 4, 9, 42),
                 settings: konfiguration
             )
-            let ziel = FileManager.default.homeDirectoryForCurrentUser
-                .appendingPathComponent("2026-09-04-diktat.md")
-            try? FileManager.default.removeItem(at: ziel)
+            XCTFail("Es haette ein Fehler kommen muessen.")
         } catch let fehler as VaultInboxError {
-            XCTAssertNotEqual(fehler, .folderMissing("~"))
+            guard case .folderMissing(let pfad) = fehler else {
+                XCTFail("Falscher Fehlerfall: \(fehler)")
+                return
+            }
+            XCTAssertFalse(pfad.contains("~"))
+            XCTAssertTrue(pfad.hasPrefix(FileManager.default.homeDirectoryForCurrentUser.path))
+            XCTAssertTrue(pfad.hasSuffix(name))
+        } catch {
+            XCTFail("Falscher Fehlertyp: \(error)")
         }
     }
 
