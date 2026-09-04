@@ -38,11 +38,18 @@ enum UserNotificationService {
         return settings.authorizationStatus == .denied
     }
 
-    static func notifyDictationSaved(preview: String, fileName: String) {
+    static func notifyDictationSaved(preview: String, fileName: String, olderPending: Int = 0) {
+        var body = shortened(preview)
+        if olderPending > 0 {
+            let hinweis = olderPending == 1
+                ? "1 älteres Diktat wartet noch."
+                : "\(olderPending) ältere Diktate warten noch."
+            body += " \(hinweis)"
+        }
         post(
             title: "Diktat gespeichert",
             subtitle: fileName,
-            body: shortened(preview)
+            body: body
         )
     }
 

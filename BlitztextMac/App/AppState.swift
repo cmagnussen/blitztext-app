@@ -65,6 +65,9 @@ final class AppState {
     private let vaultInboxService = VaultInboxService()
     private let dictationQueue = DictationQueueStore(fileURL: AppSupportPaths.dictationQueueURL)
     var dictationQueueCount = 0
+    /// Grund, warum der letzte Nachziehversuch vorzeitig endete. nil heisst,
+    /// es gab nichts Ungewöhnliches. Wird in den Einstellungen angezeigt.
+    var dictationQueueIssue: String?
 
     // Computed
 
@@ -516,8 +519,8 @@ final class AppState {
         }
     }
 
-    private func handleWorkflowOutput(_ text: String) {
-        let destination = activeWorkflow?.type.outputDestination ?? .cursor
+    private func handleWorkflowOutput(_ text: String, from workflow: any Workflow) {
+        let destination = workflow.type.outputDestination
 
         switch destination {
         case .cursor:
@@ -549,6 +552,7 @@ final class AppState {
                 using: self.vaultInboxService,
                 settings: settings
             )
+            self.dictationQueueIssue = vorlauf.stoppedBecause
 
             do {
                 let ziel = try await self.vaultInboxService.append(
@@ -573,7 +577,11 @@ final class AppState {
 
     private func finishVaultWrite(text: String, fileName: String, queueRemaining: Int) async {
         dictationQueueCount = queueRemaining
-        UserNotificationService.notifyDictationSaved(preview: text, fileName: fileName)
+        UserNotificationService.notifyDictationSaved(
+            preview: text,
+            fileName: fileName,
+            olderPending: queueRemaining
+        )
     }
 
     private func handleVaultWriteFailure(text: String, recordedAt: Date, reason: String) async {
@@ -611,6 +619,7 @@ final class AppState {
                 settings: settings
             )
             self.dictationQueueCount = ergebnis.remaining
+            self.dictationQueueIssue = ergebnis.stoppedBecause
         }
     }
 
@@ -631,8 +640,9 @@ final class AppState {
     }
 
     private func configureWorkflowHandlers<T: Workflow>(_ workflow: T) {
-        workflow.onOutput = { [weak self] text in
-            self?.handleWorkflowOutput(text)
+        workflow.onOutput = { [weak self, weak workflow] text in
+            guard let self, let workflow else { return }
+            self.handleWorkflowOutput(text, from: workflow)
         }
         workflow.onPhaseChange = { [weak self, weak workflow] phase in
             guard let self, let workflow else { return }
