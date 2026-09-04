@@ -77,6 +77,50 @@ enum VaultInboxDocument {
         return bloecke.joined(separator: "\n\n") + "\n"
     }
 
+    /// Hängt einen Abschnitt an eine bestehende Tagesdatei. Berührt sonst
+    /// nur das Feld `aktualisiert` im Frontmatter. H1 und Marker bleiben, wie
+    /// sie sind.
+    static func appended(
+        to existing: String,
+        text: String,
+        recordedAt: Date,
+        calendar: Calendar
+    ) -> String {
+        let tag = effectiveDate(for: recordedAt, calendar: calendar)
+        let aktualisiert = updatingFrontmatterDate(
+            in: existing,
+            to: isoDay(tag, calendar: calendar)
+        )
+
+        var rumpf = aktualisiert
+        while rumpf.hasSuffix("\n") {
+            rumpf.removeLast()
+        }
+
+        let abschnitt = section(text: text, at: recordedAt, calendar: calendar)
+        return "\(rumpf)\n\n\(abschnitt)\n"
+    }
+
+    /// Setzt `aktualisiert` ausschließlich innerhalb des ersten `---` bis
+    /// `---` Blocks am Dateianfang. Eine Zeile im Diktattext, die wie
+    /// Frontmatter aussieht, wird nicht angefasst. Fehlt der Block oder das
+    /// Feld, bleibt der Inhalt unverändert.
+    static func updatingFrontmatterDate(in content: String, to isoDay: String) -> String {
+        var zeilen = content.components(separatedBy: "\n")
+        guard zeilen.first == "---" else { return content }
+        guard let ende = zeilen.dropFirst().firstIndex(of: "---") else { return content }
+        guard ende > 1 else { return content }
+
+        var geaendert = false
+        for index in 1..<ende where zeilen[index].hasPrefix("aktualisiert:") {
+            zeilen[index] = "aktualisiert: \(isoDay)"
+            geaendert = true
+        }
+
+        guard geaendert else { return content }
+        return zeilen.joined(separator: "\n")
+    }
+
     /// Feste Werte laut Konzeptnotiz. Die Sphäre ist der einzige Wert, der
     /// variiert.
     private static func frontmatter(day: String, sphere: DictationSphere) -> String {
