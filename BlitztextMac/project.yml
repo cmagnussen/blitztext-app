@@ -54,3 +54,21 @@ targets:
         com.apple.security.app-sandbox: false
         com.apple.security.device.audio-input: true
         com.apple.security.network.client: true
+    scheme:
+      testTargets:
+        - BlitztextMacTests
+
+  BlitztextMacTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests
+      - path: Services/DictationSettings.swift
+      - path: Services/VaultInboxDocument.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.blitztext.mac.tests
+        GENERATE_INFOPLIST_FILE: true
+        SWIFT_VERSION: "5.10"
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        ONLY_ACTIVE_ARCH: YES
