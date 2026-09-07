@@ -16,19 +16,22 @@ enum UpdateInstallError: LocalizedError {
             return "Die Signatur des Downloads passt nicht. "
                 + "Das Update wurde verworfen und nicht installiert."
         case .zielNichtBeschreibbar:
-            return "Der Ordner mit der Blitztext-Installation ist nicht beschreibbar. "
-                + "Pruefe die Rechte an /Applications."
+            return "Der Ordner mit der Blitztext-Installation ist nicht beschreibbar, "
+                + "die bisherige Version ist unverändert. Prüfe die Rechte an /Applications."
         case .entpackenFehlgeschlagen(let text):
-            return "Das Archiv liess sich nicht entpacken. \(text)"
+            return "Das Archiv ließ sich nicht entpacken, die bisherige Version "
+                + "ist unverändert. \(text)"
         case .keinBundleImArchiv:
-            return "Im Archiv steckt nicht genau eine App."
+            return "Im Archiv steckt nicht genau eine App. "
+                + "Die bisherige Version ist unverändert."
         case .fremdesBundle:
-            return "Die App im Archiv gehoert nicht zu Blitztext."
+            return "Die App im Archiv gehört nicht zu Blitztext. "
+                + "Die bisherige Version ist unverändert."
         case .nichtNeuer:
             return "Die App im Archiv ist nicht neuer als die installierte Version."
         case .tauschFehlgeschlagen(let text):
             return "Der Austausch ist fehlgeschlagen, die bisherige Version "
-                + "ist unveraendert. \(text)"
+                + "ist unverändert. \(text)"
         }
     }
 }

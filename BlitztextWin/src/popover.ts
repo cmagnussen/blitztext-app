@@ -461,7 +461,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   function letztePruefungText(): string {
     if (!settings.lastUpdateCheck) return "Noch nicht nach Updates gesucht.";
-    return `Zuletzt geprueft: ${new Date(settings.lastUpdateCheck).toLocaleString("de-DE")}`;
+    return `Zuletzt geprüft: ${new Date(settings.lastUpdateCheck).toLocaleString("de-DE")}`;
   }
 
   function amSelbenTag(a: Date, b: Date): boolean {
@@ -471,7 +471,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   function zeigeUpdateHinweis(sichtbar: boolean): void {
     const gear = el<HTMLButtonElement>("gear");
     gear.textContent = sichtbar ? "⚙•" : "⚙";
-    gear.title = sichtbar ? "Ein Update ist verfuegbar" : "Einstellungen";
+    gear.title = sichtbar ? "Ein Update ist verfügbar" : "Einstellungen";
   }
 
   // Das Plugin liefert nur bei HTTP 204 ein sauberes "kein Update". Jeder andere
@@ -490,7 +490,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     if (import.meta.env.DEV) {
       if (manuell) {
         updateStatusEl.textContent =
-          "Entwicklungs-Build. Updates kommen ueber einen eigenen Build.";
+          "Entwicklungs-Build. Updates kommen über einen eigenen Build.";
       }
       return;
     }
@@ -513,8 +513,8 @@ window.addEventListener("DOMContentLoaded", async () => {
       zeigeUpdateHinweis(verfuegbaresUpdate !== null);
       updateInstallEl.hidden = false;
       updateInstallEl.textContent = `Version ${treffer.version} laden und installieren`;
-      updateStatusEl.textContent = `Version ${treffer.version} ist verfuegbar. `
-        + "Blitztext startet sich fuer das Update neu.";
+      updateStatusEl.textContent = `Version ${treffer.version} ist verfügbar. `
+        + "Blitztext startet sich für das Update neu.";
     } catch (error) {
       verfuegbaresUpdate = null;
       zeigeUpdateHinweis(verfuegbaresUpdate !== null);
@@ -529,7 +529,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
       // Der automatische Check scheitert still, damit ein fehlendes Netz
       // beim Start niemanden stoert.
-      updateStatusEl.textContent = manuell ? `Update-Pruefung fehlgeschlagen: ${error}` : "";
+      updateStatusEl.textContent = manuell ? `Update-Prüfung fehlgeschlagen: ${error}` : "";
     }
   }
 
@@ -547,7 +547,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     if (!verfuegbaresUpdate) return;
     if (recording || busy) {
       updateStatusEl.textContent =
-        "Blitztext nimmt gerade auf. Das Update laeuft, sobald die Aufnahme fertig ist.";
+        "Blitztext nimmt gerade auf. Das Update läuft, sobald die Aufnahme fertig ist.";
       return;
     }
 
@@ -569,7 +569,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       // Abbruch folgenlos, ab install() nicht mehr.
       if (recording || busy) {
         updateStatusEl.textContent =
-          "Blitztext nimmt gerade auf. Das Update laeuft, sobald die Aufnahme fertig ist.";
+          "Blitztext nimmt gerade auf. Das Update läuft, sobald die Aufnahme fertig ist.";
         updateInstallEl.disabled = false;
         return;
       }

@@ -114,7 +114,7 @@ final class UpdateController {
             return
         }
         guard let publicKey else {
-            state = .failed("In dieser App ist kein Update-Schluessel hinterlegt.")
+            state = .failed("In dieser App ist kein Update-Schlüssel hinterlegt.")
             return
         }
 

@@ -22,10 +22,10 @@ enum UpdatePolicy {
         var hinweis: String {
             switch self {
             case .entwicklungsBuild:
-                return "Dieser Build laeuft nicht aus dem Programme-Ordner. "
+                return "Dieser Build läuft nicht aus dem Programme-Ordner. "
                     + "Aktualisiere ihn mit git pull und einem eigenen Build."
             case .beschaeftigt:
-                return "Blitztext nimmt gerade auf. Das Update laeuft, "
+                return "Blitztext nimmt gerade auf. Das Update läuft, "
                     + "sobald die Aufnahme fertig ist."
             }
         }

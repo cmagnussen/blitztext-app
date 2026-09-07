@@ -371,7 +371,7 @@ struct AccessSettingsView: View {
                         .foregroundStyle(.secondary)
 
                 case .available(let release):
-                    Text("Version \(release.version.description) ist verfuegbar.")
+                    Text("Version \(release.version.description) ist verfügbar.")
                         .font(.system(size: 11, weight: .medium))
 
                     if !release.releaseNotes.isEmpty {
@@ -392,7 +392,7 @@ struct AccessSettingsView: View {
                         }
                         .buttonStyle(SubtleButtonStyle())
 
-                        Text("Blitztext startet sich fuer das Update neu.")
+                        Text("Blitztext startet sich für das Update neu.")
                             .font(.system(size: 10.5))
                             .foregroundStyle(.secondary)
                     }
@@ -403,7 +403,7 @@ struct AccessSettingsView: View {
                         .foregroundStyle(.secondary)
 
                 case .verifying:
-                    Text("Pruefe die Signatur ...")
+                    Text("Prüfe die Signatur ...")
                         .font(.system(size: 10.5))
                         .foregroundStyle(.secondary)
 
@@ -594,7 +594,7 @@ struct AccessSettingsView: View {
         let formatierer = DateFormatter()
         formatierer.dateStyle = .medium
         formatierer.timeStyle = .short
-        return "Zuletzt geprueft: \(formatierer.string(from: zeitpunkt))"
+        return "Zuletzt geprüft: \(formatierer.string(from: zeitpunkt))"
     }
 
     // MARK: - Provider Sections

@@ -657,8 +657,8 @@ struct MenuBarView: View {
             }
             .buttonStyle(.plain)
             .help(appState.updateController.hasAvailableUpdate
-                ? "Ein Update ist verfuegbar"
-                : "Einstellungen oeffnen")
+                ? "Ein Update ist verfügbar"
+                : "Einstellungen öffnen")
             .padding(.trailing, 12)
         }
         .padding(.vertical, 8)

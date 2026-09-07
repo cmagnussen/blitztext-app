@@ -49,6 +49,33 @@ final class UpdateSignatureVerifierTests: XCTestCase {
         ))
     }
 
+    /// Sauberes Base64, aber keine 32 Bytes: Der PublicKey-Init wirft, und die
+    /// Pruefung muss das als Ablehnung behandeln statt als Ausnahme.
+    func testSchluesselMitFalscherLaengeWirdAbgelehnt() throws {
+        let schluessel = Curve25519.Signing.PrivateKey()
+        let signatur = try schluessel.signature(for: inhalt)
+
+        XCTAssertFalse(UpdateSignatureVerifier.isValid(
+            signature: signatur,
+            for: inhalt,
+            publicKeyBase64: Data(repeating: 0, count: 31).base64EncodedString()
+        ))
+    }
+
+    /// Genau der Zustand, in dem dieser Branch ausgeliefert wird: In der
+    /// Info.plist steht noch kein Schluessel. Ohne Schluessel wird nichts
+    /// installiert.
+    func testLeererSchluesselWirdAbgelehnt() throws {
+        let schluessel = Curve25519.Signing.PrivateKey()
+        let signatur = try schluessel.signature(for: inhalt)
+
+        XCTAssertFalse(UpdateSignatureVerifier.isValid(
+            signature: signatur,
+            for: inhalt,
+            publicKeyBase64: ""
+        ))
+    }
+
     func testSignaturdateiWirdAusBase64Gelesen() throws {
         let schluessel = Curve25519.Signing.PrivateKey()
         let signatur = try schluessel.signature(for: inhalt)
