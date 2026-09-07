@@ -17,6 +17,11 @@ final class AppState {
 
     var activeWorkflow: (any Workflow)?
     var page: PopoverPage = .main
+    /// Tab, auf dem die Einstellungen einmalig oeffnen sollen. Wer gezielt in
+    /// einen Abschnitt fuehrt, setzt den Wert vor dem Wechsel auf `.settings`.
+    /// `SettingsContentView` verbraucht ihn beim Erscheinen und setzt ihn
+    /// zurueck, danach greift wieder die uebliche Vorauswahl.
+    var settingsTabSeed: Int?
     var isPopoverShown = false
     var menuBarStatus: MenuBarStatus = .idle {
         didSet {
@@ -69,6 +74,24 @@ final class AppState {
     /// es gab nichts Ungewöhnliches. Wird in den Einstellungen angezeigt.
     var dictationQueueIssue: String?
     var notificationsDenied = false
+
+    // Update
+    @ObservationIgnored
+    private(set) lazy var updateController: UpdateController = {
+        UpdateController(
+            automaticChecksEnabled: appSettings.automaticUpdateChecksEnabled,
+            lastCheck: appSettings.lastUpdateCheck,
+            isBusy: { [weak self] in
+                guard let self else { return false }
+                return self.activeWorkflow?.phase.isActive ?? false
+            },
+            onSettingsChange: { [weak self] automatik, zeitpunkt in
+                guard let self else { return }
+                self.appSettings.automaticUpdateChecksEnabled = automatik
+                self.appSettings.lastUpdateCheck = zeitpunkt
+            }
+        )
+    }()
 
     // Computed
 

@@ -39,6 +39,10 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
+      - name: Verify versions match the tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: bash Scripts/check-release-version.sh "$GITHUB_REF_NAME"
+
       - name: Install XcodeGen
         run: brew install xcodegen
 
@@ -49,6 +53,28 @@ jobs:
         run: |
           ditto -c -k --sequesterRsrc --keepParent Blitztext.app Blitztext-macos-universal.zip
           ls -lh Blitztext-macos-universal.zip
+
+      - name: Sign update archive
+        if: github.event_name != 'pull_request'
+        env:
+          BLITZTEXT_UPDATE_PRIVATE_KEY: ${{ secrets.BLITZTEXT_UPDATE_PRIVATE_KEY }}
+        run: |
+          # Auf einem Versions-Tag muss die Signatur da sein: ein Release ohne
+          # sie ist fuer den Updater wertlos. Auf jedem anderen Ereignis darf
+          # sie fehlen, solange das Secret noch nicht angelegt ist. Sonst waere
+          # der main-Job ab dem Merge dauerhaft rot.
+          if [ -z "$BLITZTEXT_UPDATE_PRIVATE_KEY" ]; then
+            if [ "${GITHUB_REF#refs/tags/v}" != "$GITHUB_REF" ]; then
+              echo "::error::Secret BLITZTEXT_UPDATE_PRIVATE_KEY fehlt. Ohne Signatur ist dieses Release fuer den Updater unbrauchbar."
+              exit 1
+            fi
+            echo "::notice::Secret BLITZTEXT_UPDATE_PRIVATE_KEY fehlt, dieser Build bleibt ohne Signatur. Das .sig-Asset entsteht, sobald der Schluessel hinterlegt ist."
+            exit 0
+          fi
+          swift Scripts/sign-update.swift \
+            Blitztext-macos-universal.zip \
+            Blitztext-macos-universal.zip.sig
+          ls -lh Blitztext-macos-universal.zip.sig
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
@@ -70,13 +96,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="main-${GITHUB_SHA:0:7}"
+          # Die Asset-Liste entsteht aus dem, was wirklich da ist. Solange kein
+          # Signier-Schluessel hinterlegt ist, gibt es keine .sig-Datei.
+          ASSETS=(Blitztext-macos-universal.zip)
+          if [ -f Blitztext-macos-universal.zip.sig ]; then
+            ASSETS+=(Blitztext-macos-universal.zip.sig)
+          fi
           gh release create "$TAG" \
-            Blitztext-macos-universal.zip \
+            "${ASSETS[@]}" \
             --title "Blitztext main build (${GITHUB_SHA:0:7})" \
             --prerelease \
             --target "$GITHUB_SHA" \
             --notes "Automatic build from main (commit ${GITHUB_SHA:0:7}). macOS: universal (Apple Silicon + Intel), ad-hoc signed (not notarized) — first launch: right-click → Open, or run: xattr -dr com.apple.quarantine /Applications/Blitztext.app. Windows: unsigned NSIS/MSI — SmartScreen may warn on first launch." \
-          || gh release upload "$TAG" Blitztext-macos-universal.zip --clobber
+          || gh release upload "$TAG" "${ASSETS[@]}" --clobber
 
       # Manual version tag (e.g. v1.0.0): publish a full, official release.
       - name: Publish release (version tag)
@@ -86,8 +118,15 @@ jobs:
         run: |
           # The Windows job may publish the same tag's release first, so fall
           # back to uploading into the existing release.
+          # Auf einem Versions-Tag ist die .sig-Datei durch den Signier-Schritt
+          # garantiert; die Pruefung kostet nichts und haelt beide Publish-
+          # Schritte gleich.
+          ASSETS=(Blitztext-macos-universal.zip)
+          if [ -f Blitztext-macos-universal.zip.sig ]; then
+            ASSETS+=(Blitztext-macos-universal.zip.sig)
+          fi
           gh release create "$GITHUB_REF_NAME" \
-            Blitztext-macos-universal.zip \
+            "${ASSETS[@]}" \
             --title "Blitztext $GITHUB_REF_NAME" \
             --notes "Universal macOS build (Apple Silicon + Intel), ad-hoc signed (not notarized). First launch: right-click the app and choose Open, or run: xattr -dr com.apple.quarantine /Applications/Blitztext.app" \
-          || gh release upload "$GITHUB_REF_NAME" Blitztext-macos-universal.zip --clobber
+          || gh release upload "$GITHUB_REF_NAME" "${ASSETS[@]}" --clobber

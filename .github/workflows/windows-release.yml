@@ -44,6 +44,12 @@ jobs:
           cache: npm
           cache-dependency-path: BlitztextWin/package-lock.json
 
+      - name: Verify versions match the tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        working-directory: ${{ github.workspace }}
+        run: bash Scripts/check-release-version.sh "$GITHUB_REF_NAME"
+
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
@@ -55,8 +61,41 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Mit createUpdaterArtifacts bricht der Bundler ohne privaten Schluessel
+      # ab, und zwar sowohl bei leerer als auch bei fehlender Variable
+      # ("A public key has been found, but no private key"). Solange das Secret
+      # nicht existiert, muss der Build also ohne Update-Artefakte laufen,
+      # sonst ist der Job ab dem Merge dauerhaft rot.
+      - name: Check updater signing key
+        id: signing
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "updater=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Auf einem Versions-Tag muss die Signatur da sein: ein Release ohne
+          # sie ist fuer den Updater wertlos.
+          if [ "${GITHUB_REF#refs/tags/v}" != "$GITHUB_REF" ]; then
+            echo "::error::Secret TAURI_SIGNING_PRIVATE_KEY fehlt. Ohne Signatur ist dieses Release fuer den Updater unbrauchbar."
+            exit 1
+          fi
+          echo "::notice::Secret TAURI_SIGNING_PRIVATE_KEY fehlt, dieser Build entsteht ohne Update-Artefakte. Sie entstehen, sobald der Schluessel hinterlegt ist."
+          echo "updater=false" >> "$GITHUB_OUTPUT"
+
       - name: Build Tauri app (Release)
-        run: npm run tauri build
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if [ "${{ steps.signing.outputs.updater }}" = "true" ]; then
+            npm run tauri build
+          else
+            npm run tauri build -- --config '{"bundle":{"createUpdaterArtifacts":false}}'
+          fi
 
       # Gather the NSIS + MSI installers into a single folder at the repo root
       # (artifact/release paths are relative to the workspace, not this job's
@@ -68,6 +107,25 @@ jobs:
           cp src-tauri/target/release/bundle/nsis/*-setup.exe "$GITHUB_WORKSPACE/dist-installers/" 2>/dev/null || true
           cp src-tauri/target/release/bundle/msi/*.msi "$GITHUB_WORKSPACE/dist-installers/" 2>/dev/null || true
           ls -lh "$GITHUB_WORKSPACE/dist-installers"
+
+      - name: Build updater manifest
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: node scripts/make-updater-manifest.mjs "$GITHUB_REF_NAME" "$GITHUB_WORKSPACE/dist-installers/latest.json"
+
+      - name: Validate updater manifest
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        working-directory: ${{ github.workspace }}
+        run: |
+          jq -e '
+            (.version | type) == "string" and (.version | length) > 0
+            and (.platforms["windows-x86_64"].signature | type) == "string"
+            and (.platforms["windows-x86_64"].signature | length) > 0
+            and (.platforms["windows-x86_64"].url | type) == "string"
+            and (.platforms["windows-x86_64"].url | startswith("https://github.com/"))
+          ' dist-installers/latest.json > /dev/null
+          echo "Manifest ist vollstaendig."
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4

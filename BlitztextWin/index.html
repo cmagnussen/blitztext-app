@@ -323,6 +323,25 @@
                 Blitztext automatisch starten
               </label>
             </div>
+
+            <div class="section">
+              <div class="section-label">Updates</div>
+              <p id="update-installed" class="field-status"></p>
+              <p id="update-status" class="field-status"></p>
+              <div class="actions">
+                <button type="button" id="update-check">Nach Updates suchen</button>
+                <button type="button" id="update-releases">Releases im Browser</button>
+                <button type="button" id="update-install" hidden>Installieren</button>
+              </div>
+              <label class="switch-row">
+                <input type="checkbox" id="update-automatic" />
+                Automatisch nach Updates suchen
+              </label>
+              <p class="field-status">
+                Der Installer ist nicht signiert. Windows SmartScreen kann beim
+                Ausführen einmal warnen.
+              </p>
+            </div>
           </div>
 
           <!-- Tab: Verlauf -->

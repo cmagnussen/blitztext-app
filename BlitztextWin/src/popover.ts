@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import {
@@ -16,8 +17,15 @@ import {
   type HotkeyMode,
 } from "./config";
 import { systemPromptFor } from "./prompts";
+import { check, type Update } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { getVersion } from "@tauri-apps/api/app";
 
 const OPENAI_KEY_ACCOUNT = "openAIApiKey";
+
+// Fallback fuer jeden Fehlerfall: die Release-Seite im Browser.
+const RELEASES_URL = "https://github.com/geninOne/blitztext-app/releases/latest";
 
 function el<T extends HTMLElement = HTMLElement>(id: string): T {
   return document.getElementById(id) as T;
@@ -108,7 +116,12 @@ window.addEventListener("DOMContentLoaded", async () => {
     viewMenu.hidden = false;
     await invoke("set_popover_pinned", { pinned: false });
   }
-  el("gear").addEventListener("click", () => void showSettingsView());
+  el("gear").addEventListener("click", () => {
+    // Der Abschnitt Updates liegt im Tab "Zugang". Ohne diesen Wechsel landet
+    // der Klick auf dem Update-Punkt bei "Anpassen".
+    if (verfuegbaresUpdate) showTab("access");
+    void showSettingsView();
+  });
   el("back").addEventListener("click", () => void showMenuView());
   el("quit").addEventListener("click", () => void invoke("quit_app"));
   await listen("open-settings", () => void showSettingsView());
@@ -426,6 +439,157 @@ window.addEventListener("DOMContentLoaded", async () => {
       saveStatus.textContent = `Autostart-Fehler: ${error}`;
     }
   });
+
+  // Updates
+  const updateInstalledEl = el<HTMLParagraphElement>("update-installed");
+  const updateStatusEl = el<HTMLParagraphElement>("update-status");
+  const updateCheckEl = el<HTMLButtonElement>("update-check");
+  const updateInstallEl = el<HTMLButtonElement>("update-install");
+  const updateAutomaticEl = el<HTMLInputElement>("update-automatic");
+
+  let verfuegbaresUpdate: Update | null = null;
+
+  getVersion().then((version) => {
+    updateInstalledEl.textContent = `Installiert: Version ${version}`;
+  });
+
+  updateAutomaticEl.checked = settings.automaticUpdateChecks;
+  updateAutomaticEl.addEventListener("change", () => {
+    settings.automaticUpdateChecks = updateAutomaticEl.checked;
+    saveSettings(settings);
+  });
+
+  function letztePruefungText(): string {
+    if (!settings.lastUpdateCheck) return "Noch nicht nach Updates gesucht.";
+    return `Zuletzt geprüft: ${new Date(settings.lastUpdateCheck).toLocaleString("de-DE")}`;
+  }
+
+  function amSelbenTag(a: Date, b: Date): boolean {
+    return a.toDateString() === b.toDateString();
+  }
+
+  function zeigeUpdateHinweis(sichtbar: boolean): void {
+    const gear = el<HTMLButtonElement>("gear");
+    gear.textContent = sichtbar ? "⚙•" : "⚙";
+    gear.title = sichtbar ? "Ein Update ist verfügbar" : "Einstellungen";
+  }
+
+  // Das Plugin liefert nur bei HTTP 204 ein sauberes "kein Update". Jeder andere
+  // Nicht-2xx-Status, auch ein 404, kommt als Fehler mit diesem Text an. Ein 404
+  // heisst hier aber bloss, dass am neuesten Release kein latest.json haengt, und
+  // das ist keine Stoerung. Die Erkennung haengt am Wortlaut des Plugins: aendert
+  // der sich, zeigt die App wieder die rohe Fehlermeldung, mehr passiert nicht.
+  function istKeinManifestVorhanden(fehler: unknown): boolean {
+    const text = String(fehler);
+    return text.includes("Could not fetch a valid release JSON")
+      || text.includes("ReleaseNotFound");
+  }
+
+  async function pruefeAufUpdates(manuell: boolean): Promise<void> {
+    // Im Entwicklungs-Build gibt es kein Release, gegen das geprueft wuerde.
+    if (import.meta.env.DEV) {
+      if (manuell) {
+        updateStatusEl.textContent =
+          "Entwicklungs-Build. Updates kommen über einen eigenen Build.";
+      }
+      return;
+    }
+
+    updateStatusEl.textContent = "Suche nach Updates ...";
+    try {
+      const treffer = await check();
+      settings.lastUpdateCheck = new Date().toISOString();
+      saveSettings(settings);
+
+      if (!treffer) {
+        verfuegbaresUpdate = null;
+        zeigeUpdateHinweis(verfuegbaresUpdate !== null);
+        updateInstallEl.hidden = true;
+        updateStatusEl.textContent = `Blitztext ist aktuell. ${letztePruefungText()}`;
+        return;
+      }
+
+      verfuegbaresUpdate = treffer;
+      zeigeUpdateHinweis(verfuegbaresUpdate !== null);
+      updateInstallEl.hidden = false;
+      updateInstallEl.textContent = `Version ${treffer.version} laden und installieren`;
+      updateStatusEl.textContent = `Version ${treffer.version} ist verfügbar. `
+        + "Blitztext startet sich für das Update neu.";
+    } catch (error) {
+      verfuegbaresUpdate = null;
+      zeigeUpdateHinweis(verfuegbaresUpdate !== null);
+      updateInstallEl.hidden = true;
+
+      if (istKeinManifestVorhanden(error)) {
+        settings.lastUpdateCheck = new Date().toISOString();
+        saveSettings(settings);
+        updateStatusEl.textContent = `Blitztext ist aktuell. ${letztePruefungText()}`;
+        return;
+      }
+
+      // Der automatische Check scheitert still, damit ein fehlendes Netz
+      // beim Start niemanden stoert.
+      updateStatusEl.textContent = manuell ? `Update-Prüfung fehlgeschlagen: ${error}` : "";
+    }
+  }
+
+  updateCheckEl.addEventListener("click", () => {
+    void pruefeAufUpdates(true);
+  });
+
+  // Ausweg aus jedem Fehlerzustand: die Release-Seite im Browser. Damit endet
+  // kein Fehler in einer Sackgasse, genau wie in der Mac-App.
+  el<HTMLButtonElement>("update-releases").addEventListener("click", () => {
+    void openUrl(RELEASES_URL);
+  });
+
+  updateInstallEl.addEventListener("click", async () => {
+    if (!verfuegbaresUpdate) return;
+    if (recording || busy) {
+      updateStatusEl.textContent =
+        "Blitztext nimmt gerade auf. Das Update läuft, sobald die Aufnahme fertig ist.";
+      return;
+    }
+
+    updateInstallEl.disabled = true;
+    try {
+      // Bewusst download() und install() getrennt statt downloadAndInstall():
+      // nur so liegt zwischen beiden ein Punkt, an dem die Sperre noch einmal
+      // greifen kann. install() beendet die App unter Windows selbst, danach
+      // laeuft hier nichts mehr.
+      await verfuegbaresUpdate.download((fortschritt) => {
+        if (fortschritt.event === "Progress") {
+          updateStatusEl.textContent = "Lade Update ...";
+        }
+      });
+
+      // Die Sperre gilt nicht nur beim Klick: der Download dauert, und ein
+      // globaler Hotkey kann in dieser Zeit eine Aufnahme gestartet haben.
+      // Ein Neustart mitten im Diktat waere Datenverlust. Bis hierher ist ein
+      // Abbruch folgenlos, ab install() nicht mehr.
+      if (recording || busy) {
+        updateStatusEl.textContent =
+          "Blitztext nimmt gerade auf. Das Update läuft, sobald die Aufnahme fertig ist.";
+        updateInstallEl.disabled = false;
+        return;
+      }
+
+      updateStatusEl.textContent = "Installiere und starte neu ...";
+      await verfuegbaresUpdate.install();
+      await relaunch();
+    } catch (error) {
+      updateStatusEl.textContent = `Installation fehlgeschlagen: ${error}`;
+      updateInstallEl.disabled = false;
+    }
+  });
+
+  updateStatusEl.textContent = letztePruefungText();
+
+  // Beim Start pruefen, danach hoechstens einmal pro Kalendertag.
+  const letzte = settings.lastUpdateCheck ? new Date(settings.lastUpdateCheck) : null;
+  if (settings.automaticUpdateChecks && (!letzte || !amSelbenTag(letzte, new Date()))) {
+    void pruefeAufUpdates(false);
+  }
 
   // Per-workflow tuning
   setupSegmented("tone-seg", settings.improve.tone, (value) => {

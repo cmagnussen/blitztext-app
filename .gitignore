@@ -35,3 +35,6 @@ node_modules/
 # IDEs
 .idea/
 .vscode/
+
+# Superpowers-Arbeitsdateien
+.superpowers/

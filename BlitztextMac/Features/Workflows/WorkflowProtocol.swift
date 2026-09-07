@@ -171,6 +171,10 @@ struct AppSettings: Codable {
     var liteLLMStrongModel: String = "gpt-4o"
     var liteLLMTranscriptionModel: String = "whisper-1"
 
+    // Automatische Update-Pruefung, hoechstens einmal pro Kalendertag.
+    var automaticUpdateChecksEnabled: Bool = true
+    var lastUpdateCheck: Date?
+
     init(
         hotkeyMode: HotkeyMode = .hold,
         hasSeenOnboarding: Bool = false,
@@ -181,7 +185,9 @@ struct AppSettings: Codable {
         liteLLMBaseURL: String = "",
         liteLLMFastModel: String = "gpt-4o-mini",
         liteLLMStrongModel: String = "gpt-4o",
-        liteLLMTranscriptionModel: String = "whisper-1"
+        liteLLMTranscriptionModel: String = "whisper-1",
+        automaticUpdateChecksEnabled: Bool = true,
+        lastUpdateCheck: Date? = nil
     ) {
         self.hotkeyMode = hotkeyMode
         self.hasSeenOnboarding = hasSeenOnboarding
@@ -193,6 +199,8 @@ struct AppSettings: Codable {
         self.liteLLMFastModel = liteLLMFastModel
         self.liteLLMStrongModel = liteLLMStrongModel
         self.liteLLMTranscriptionModel = liteLLMTranscriptionModel
+        self.automaticUpdateChecksEnabled = automaticUpdateChecksEnabled
+        self.lastUpdateCheck = lastUpdateCheck
     }
 
     enum CodingKeys: String, CodingKey {
@@ -206,6 +214,8 @@ struct AppSettings: Codable {
         case liteLLMFastModel
         case liteLLMStrongModel
         case liteLLMTranscriptionModel
+        case automaticUpdateChecksEnabled
+        case lastUpdateCheck
     }
 
     init(from decoder: Decoder) throws {
@@ -229,6 +239,11 @@ struct AppSettings: Codable {
             String.self,
             forKey: .liteLLMTranscriptionModel
         ) ?? "whisper-1"
+        automaticUpdateChecksEnabled = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .automaticUpdateChecksEnabled
+        ) ?? true
+        lastUpdateCheck = try container.decodeIfPresent(Date.self, forKey: .lastUpdateCheck)
     }
 }
 
