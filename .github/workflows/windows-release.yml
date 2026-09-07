@@ -88,10 +88,13 @@ jobs:
         shell: bash
         working-directory: ${{ github.workspace }}
         run: |
-          jq -e '.version
-            and .platforms["windows-x86_64"].signature
-            and (.platforms["windows-x86_64"].url | startswith("https://github.com/"))' \
-            dist-installers/latest.json > /dev/null
+          jq -e '
+            (.version | type) == "string" and (.version | length) > 0
+            and (.platforms["windows-x86_64"].signature | type) == "string"
+            and (.platforms["windows-x86_64"].signature | length) > 0
+            and (.platforms["windows-x86_64"].url | type) == "string"
+            and (.platforms["windows-x86_64"].url | startswith("https://github.com/"))
+          ' dist-installers/latest.json > /dev/null
           echo "Manifest ist vollstaendig."
 
       - name: Upload build artifact
