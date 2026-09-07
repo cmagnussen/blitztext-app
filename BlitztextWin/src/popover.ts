@@ -465,6 +465,17 @@ window.addEventListener("DOMContentLoaded", async () => {
     gear.title = sichtbar ? "Ein Update ist verfuegbar" : "Einstellungen";
   }
 
+  // Das Plugin liefert nur bei HTTP 204 ein sauberes "kein Update". Jeder andere
+  // Nicht-2xx-Status, auch ein 404, kommt als Fehler mit diesem Text an. Ein 404
+  // heisst hier aber bloss, dass am neuesten Release kein latest.json haengt, und
+  // das ist keine Stoerung. Die Erkennung haengt am Wortlaut des Plugins: aendert
+  // der sich, zeigt die App wieder die rohe Fehlermeldung, mehr passiert nicht.
+  function istKeinManifestVorhanden(fehler: unknown): boolean {
+    const text = String(fehler);
+    return text.includes("Could not fetch a valid release JSON")
+      || text.includes("ReleaseNotFound");
+  }
+
   async function pruefeAufUpdates(manuell: boolean): Promise<void> {
     // Im Entwicklungs-Build gibt es kein Release, gegen das geprueft wuerde.
     if (import.meta.env.DEV) {
@@ -499,9 +510,16 @@ window.addEventListener("DOMContentLoaded", async () => {
       verfuegbaresUpdate = null;
       zeigeUpdateHinweis(verfuegbaresUpdate !== null);
       updateInstallEl.hidden = true;
+
+      if (istKeinManifestVorhanden(error)) {
+        settings.lastUpdateCheck = new Date().toISOString();
+        saveSettings(settings);
+        updateStatusEl.textContent = `Blitztext ist aktuell. ${letztePruefungText()}`;
+        return;
+      }
+
       // Der automatische Check scheitert still, damit ein fehlendes Netz
-      // beim Start niemanden stoert. Ein 404 heisst nur, dass das neueste
-      // Release kein Windows-Manifest enthaelt.
+      // beim Start niemanden stoert.
       updateStatusEl.textContent = manuell ? `Update-Pruefung fehlgeschlagen: ${error}` : "";
     }
   }
