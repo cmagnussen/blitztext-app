@@ -25,8 +25,8 @@ enum UpdatePolicy {
                 return "Dieser Build laeuft nicht aus dem Programme-Ordner. "
                     + "Aktualisiere ihn mit git pull und einem eigenen Build."
             case .beschaeftigt:
-                return "Blitztext arbeitet gerade. Das Update laeuft, "
-                    + "sobald Aufnahme und Warteschlange fertig sind."
+                return "Blitztext nimmt gerade auf. Das Update laeuft, "
+                    + "sobald die Aufnahme fertig ist."
             }
         }
     }

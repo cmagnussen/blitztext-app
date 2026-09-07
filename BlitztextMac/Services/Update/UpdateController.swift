@@ -146,6 +146,16 @@ final class UpdateController {
                     )
                 }.value
 
+                // Die Sperre gilt nicht nur beim Klick: zwischen Klick und
+                // hier liegen Download und Pruefung, und ein globaler Hotkey
+                // kann in dieser Zeit eine Aufnahme gestartet haben. Bis zu
+                // diesem Punkt ist ein Abbruch folgenlos, nach dem
+                // Bundle-Tausch waere er es nicht mehr. Deshalb genau hier.
+                if let sperre = self.currentInstallBlock {
+                    self.state = .failed(sperre.hinweis)
+                    return
+                }
+
                 self.state = .installing
                 try await Task.detached(priority: .userInitiated) {
                     // Beendet die App im Erfolgsfall, damit sie neu startet.
