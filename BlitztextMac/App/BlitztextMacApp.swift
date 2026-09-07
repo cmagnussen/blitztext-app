@@ -52,6 +52,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             object: nil
         )
 
+        appState.updateController.startAutomaticCheckIfNeeded()
+
         DispatchQueue.main.async { [weak self] in
             self?.showOnboardingIfNeeded()
         }

@@ -70,6 +70,24 @@ final class AppState {
     var dictationQueueIssue: String?
     var notificationsDenied = false
 
+    // Update
+    @ObservationIgnored
+    private(set) lazy var updateController: UpdateController = {
+        UpdateController(
+            automaticChecksEnabled: appSettings.automaticUpdateChecksEnabled,
+            lastCheck: appSettings.lastUpdateCheck,
+            isBusy: { [weak self] in
+                guard let self else { return false }
+                return self.activeWorkflow?.phase.isActive ?? false
+            },
+            onSettingsChange: { [weak self] automatik, zeitpunkt in
+                guard let self else { return }
+                self.appSettings.automaticUpdateChecksEnabled = automatik
+                self.appSettings.lastUpdateCheck = zeitpunkt
+            }
+        )
+    }()
+
     // Computed
 
     /// The resolved remote configuration for the currently selected provider,
