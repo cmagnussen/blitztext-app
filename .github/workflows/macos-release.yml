@@ -39,6 +39,10 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
+      - name: Verify versions match the tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: bash Scripts/check-release-version.sh "$GITHUB_REF_NAME"
+
       - name: Install XcodeGen
         run: brew install xcodegen
 
