@@ -4,6 +4,7 @@ enum UpdateDownloadError: LocalizedError {
     case serverAntwortet(Int)
     case signaturFehlt
     case abgebrochen
+    case bereitsGestartet
 
     var errorDescription: String? {
         switch self {
@@ -13,6 +14,8 @@ enum UpdateDownloadError: LocalizedError {
             return "Zum Archiv gibt es keine lesbare Signatur."
         case .abgebrochen:
             return "Der Download wurde abgebrochen."
+        case .bereitsGestartet:
+            return "Dieser Downloader hat bereits einen Download gestartet."
         }
     }
 }
@@ -22,6 +25,11 @@ enum UpdateDownloadError: LocalizedError {
 /// Der Fortschritt kommt ueber den Delegate der klassischen Download-API.
 /// Die async-Variante von URLSession meldet keinen Fortschritt, und ein
 /// byteweises AsyncSequence waere bei einem Archiv dieser Groesse zu langsam.
+///
+/// Eine Instanz ist nur fuer einen einzigen Aufruf von `download(...)` gedacht:
+/// am Ende des Aufrufs wird die interne URLSession invalidiert, danach ist die
+/// Instanz verbraucht. Fuer jeden Installationsversuch gehoert eine frische
+/// `UpdateDownloader()`-Instanz angelegt.
 final class UpdateDownloader: NSObject, @unchecked Sendable {
     struct Ergebnis {
         let archivURL: URL
@@ -29,6 +37,13 @@ final class UpdateDownloader: NSObject, @unchecked Sendable {
     }
 
     private var session: URLSession!
+
+    // `fortschritt`, `weiter` und `zielURL` werden aus dem Aufrufer-Kontext
+    // geschrieben und aus der Delegate-Queue der URLSession (nebenlaeufig zum
+    // Aufrufer) gelesen und geschrieben. `sperre` schuetzt alle drei Zugriffe.
+    // Damit ist `@unchecked Sendable` eine ehrliche Zusage und keine
+    // unterdrueckte Warnung.
+    private let sperre = NSLock()
     private var fortschritt: ((Double) -> Void)?
     private var weiter: CheckedContinuation<URL, Error>?
     private var zielURL: URL?
@@ -38,11 +53,31 @@ final class UpdateDownloader: NSObject, @unchecked Sendable {
         session = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
     }
 
+    /// Laedt Signatur und Archiv des Release nach `ordner`.
+    ///
+    /// `fortschritt` wird auf einem Hintergrund-Thread aufgerufen (der
+    /// Delegate-Queue der URLSession), niemals auf dem Main-Thread. Wer damit
+    /// UI-Zustand aktualisiert, muss selbst auf den Main-Thread wechseln.
+    ///
+    /// Diese Instanz ist nur fuer einen Aufruf gedacht: am Ende wird die
+    /// interne URLSession invalidiert. Ein zweiter Aufruf auf derselben
+    /// Instanz, ob gleichzeitig oder danach, scheitert mit
+    /// `UpdateDownloadError.bereitsGestartet`.
     func download(
         _ release: UpdateRelease,
         into ordner: URL,
         fortschritt: @escaping (Double) -> Void
     ) async throws -> Ergebnis {
+        sperre.lock()
+        guard self.fortschritt == nil else {
+            sperre.unlock()
+            throw UpdateDownloadError.bereitsGestartet
+        }
+        self.fortschritt = fortschritt
+        sperre.unlock()
+
+        defer { session.finishTasksAndInvalidate() }
+
         try FileManager.default.createDirectory(at: ordner, withIntermediateDirectories: true)
 
         // Erst die Signatur, sie ist klein. Fehlt sie, sparen wir das Archiv.
@@ -54,11 +89,14 @@ final class UpdateDownloader: NSObject, @unchecked Sendable {
         let ziel = ordner.appendingPathComponent(UpdateFeedClient.archiveAssetName)
         try? FileManager.default.removeItem(at: ziel)
 
-        self.fortschritt = fortschritt
+        sperre.lock()
         self.zielURL = ziel
+        sperre.unlock()
 
         let archiv: URL = try await withCheckedThrowingContinuation { weiter in
+            sperre.lock()
             self.weiter = weiter
+            sperre.unlock()
             session.downloadTask(with: release.archiveURL).resume()
         }
         return Ergebnis(archivURL: archiv, signatur: signatur)
@@ -88,7 +126,12 @@ extension UpdateDownloader: URLSessionDownloadDelegate {
     ) {
         guard totalBytesExpectedToWrite > 0 else { return }
         let anteil = min(Double(totalBytesWritten) / Double(totalBytesExpectedToWrite), 1)
-        fortschritt?(anteil)
+
+        sperre.lock()
+        let aufruf = fortschritt
+        sperre.unlock()
+
+        aufruf?(anteil)
     }
 
     func urlSession(
@@ -97,7 +140,11 @@ extension UpdateDownloader: URLSessionDownloadDelegate {
         didFinishDownloadingTo location: URL
     ) {
         // Die Datei an location verschwindet, sobald diese Methode zurueckkehrt.
-        guard let ziel = zielURL else {
+        sperre.lock()
+        let ziel = zielURL
+        sperre.unlock()
+
+        guard let ziel else {
             beende(mit: .failure(UpdateDownloadError.abgebrochen))
             return
         }
@@ -118,8 +165,14 @@ extension UpdateDownloader: URLSessionDownloadDelegate {
     }
 
     private func beende(mit ergebnis: Result<URL, Error>) {
-        guard let weiter else { return }
+        sperre.lock()
+        guard let weiter else {
+            sperre.unlock()
+            return
+        }
         self.weiter = nil
+        sperre.unlock()
+
         switch ergebnis {
         case .success(let url): weiter.resume(returning: url)
         case .failure(let fehler): weiter.resume(throwing: fehler)
