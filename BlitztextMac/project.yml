@@ -68,6 +68,8 @@ targets:
       - path: Services/VaultInboxService.swift
       - path: Services/DictationQueueStore.swift
       - path: Services/Update/AppVersion.swift
+      - path: Services/Update/UpdateRelease.swift
+      - path: Services/Update/UpdateFeedClient.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.blitztext.mac.tests
