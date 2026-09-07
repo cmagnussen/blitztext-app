@@ -340,20 +340,101 @@ struct AccessSettingsView: View {
             VStack(alignment: .leading, spacing: 8) {
                 SectionLabel(text: "Updates")
 
-                Text("Diese Preview hat keinen oeffentlichen Update-Feed. Baue neue Versionen selbst aus dem Repo.")
+                Text("Installiert: Version \(Self.installierteVersion)")
                     .font(.system(size: 10.5))
                     .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+
+                switch appState.updateController.state {
+                case .idle:
+                    Text(letztePruefungText)
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.secondary)
+
+                case .checking:
+                    Text("Suche nach Updates ...")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.secondary)
+
+                case .upToDate:
+                    Text("Blitztext ist aktuell. \(letztePruefungText)")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.secondary)
+
+                case .available(let release):
+                    Text("Version \(release.version.description) ist verfuegbar.")
+                        .font(.system(size: 11, weight: .medium))
+
+                    if !release.releaseNotes.isEmpty {
+                        Text(release.releaseNotes.prefix(400))
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    if let sperre = appState.updateController.currentInstallBlock {
+                        Text(sperre.hinweis)
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        Button("Version \(release.version.description) laden und installieren") {
+                            appState.updateController.installAvailableUpdate()
+                        }
+                        .buttonStyle(SubtleButtonStyle())
+
+                        Text("Blitztext startet sich fuer das Update neu.")
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(.secondary)
+                    }
+
+                case .downloading(let anteil):
+                    Text("Lade Update ... \(Int(anteil * 100)) Prozent")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.secondary)
+
+                case .verifying:
+                    Text("Pruefe die Signatur ...")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.secondary)
+
+                case .installing:
+                    Text("Installiere und starte neu ...")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.secondary)
+
+                case .failed(let text):
+                    Text(text)
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                HStack(spacing: 8) {
+                    Button("Nach Updates suchen") {
+                        appState.updateController.checkForUpdates(manuell: true)
+                    }
+                    .buttonStyle(SubtleButtonStyle())
+
+                    if let seite = UpdateConfiguration.releasesPageURL {
+                        Button("Releases im Browser") {
+                            NSWorkspace.shared.open(seite)
+                        }
+                        .buttonStyle(SubtleButtonStyle())
+                    }
+                }
+
+                Toggle("Automatisch nach Updates suchen", isOn: Binding(
+                    get: { appState.updateController.automaticChecksEnabled },
+                    set: { appState.updateController.automaticChecksEnabled = $0 }
+                ))
+                .toggleStyle(.switch)
 
                 if !currentInstallLocation.isCanonicalInstall {
-                    Text("Hotkeys und Login-Start laufen am stabilsten, wenn Blitztext aus /Applications gestartet wird.")
+                    Text("Hotkeys und Login-Start laufen am stabilsten, "
+                        + "wenn Blitztext aus /Applications gestartet wird.")
                         .font(.system(size: 10.5))
                         .foregroundStyle(.orange)
                         .fixedSize(horizontal: false, vertical: true)
-                } else {
-                    Text("Updates sind in dieser Preview manuell: pull, build, starten.")
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(.secondary)
                 }
             }
 
@@ -491,6 +572,19 @@ struct AccessSettingsView: View {
                 focusedField = .liteLLMAPIKey
             }
         }
+    }
+
+    private static let installierteVersion: String =
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+
+    private var letztePruefungText: String {
+        guard let zeitpunkt = appState.updateController.lastCheck else {
+            return "Noch nicht nach Updates gesucht."
+        }
+        let formatierer = DateFormatter()
+        formatierer.dateStyle = .medium
+        formatierer.timeStyle = .short
+        return "Zuletzt geprueft: \(formatierer.string(from: zeitpunkt))"
     }
 
     // MARK: - Provider Sections

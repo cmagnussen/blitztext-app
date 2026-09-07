@@ -636,10 +636,25 @@ struct MenuBarView: View {
             Spacer()
         }
         .overlay(alignment: .trailing) {
-            Text("v\(Self.appVersion)")
-                .font(.system(size: 9, weight: .medium))
-                .foregroundStyle(.quaternary)
-                .padding(.trailing, 12)
+            Button {
+                appState.page = .settings
+            } label: {
+                HStack(spacing: 4) {
+                    if appState.updateController.hasAvailableUpdate {
+                        Circle()
+                            .fill(Color.accentColor)
+                            .frame(width: 5, height: 5)
+                    }
+                    Text("v\(Self.appVersion)")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(.quaternary)
+                }
+            }
+            .buttonStyle(.plain)
+            .help(appState.updateController.hasAvailableUpdate
+                ? "Ein Update ist verfuegbar"
+                : "Einstellungen oeffnen")
+            .padding(.trailing, 12)
         }
         .padding(.vertical, 8)
     }
