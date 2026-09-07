@@ -19,9 +19,13 @@ import {
 import { systemPromptFor } from "./prompts";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { getVersion } from "@tauri-apps/api/app";
 
 const OPENAI_KEY_ACCOUNT = "openAIApiKey";
+
+// Fallback fuer jeden Fehlerfall: die Release-Seite im Browser.
+const RELEASES_URL = "https://github.com/geninOne/blitztext-app/releases/latest";
 
 function el<T extends HTMLElement = HTMLElement>(id: string): T {
   return document.getElementById(id) as T;
@@ -112,7 +116,12 @@ window.addEventListener("DOMContentLoaded", async () => {
     viewMenu.hidden = false;
     await invoke("set_popover_pinned", { pinned: false });
   }
-  el("gear").addEventListener("click", () => void showSettingsView());
+  el("gear").addEventListener("click", () => {
+    // Der Abschnitt Updates liegt im Tab "Zugang". Ohne diesen Wechsel landet
+    // der Klick auf dem Update-Punkt bei "Anpassen".
+    if (verfuegbaresUpdate) showTab("access");
+    void showSettingsView();
+  });
   el("back").addEventListener("click", () => void showMenuView());
   el("quit").addEventListener("click", () => void invoke("quit_app"));
   await listen("open-settings", () => void showSettingsView());
@@ -528,6 +537,12 @@ window.addEventListener("DOMContentLoaded", async () => {
     void pruefeAufUpdates(true);
   });
 
+  // Ausweg aus jedem Fehlerzustand: die Release-Seite im Browser. Damit endet
+  // kein Fehler in einer Sackgasse, genau wie in der Mac-App.
+  el<HTMLButtonElement>("update-releases").addEventListener("click", () => {
+    void openUrl(RELEASES_URL);
+  });
+
   updateInstallEl.addEventListener("click", async () => {
     if (!verfuegbaresUpdate) return;
     if (recording || busy) {
@@ -538,14 +553,29 @@ window.addEventListener("DOMContentLoaded", async () => {
 
     updateInstallEl.disabled = true;
     try {
-      await verfuegbaresUpdate.downloadAndInstall((fortschritt) => {
+      // Bewusst download() und install() getrennt statt downloadAndInstall():
+      // nur so liegt zwischen beiden ein Punkt, an dem die Sperre noch einmal
+      // greifen kann. install() beendet die App unter Windows selbst, danach
+      // laeuft hier nichts mehr.
+      await verfuegbaresUpdate.download((fortschritt) => {
         if (fortschritt.event === "Progress") {
           updateStatusEl.textContent = "Lade Update ...";
         }
-        if (fortschritt.event === "Finished") {
-          updateStatusEl.textContent = "Installiere und starte neu ...";
-        }
       });
+
+      // Die Sperre gilt nicht nur beim Klick: der Download dauert, und ein
+      // globaler Hotkey kann in dieser Zeit eine Aufnahme gestartet haben.
+      // Ein Neustart mitten im Diktat waere Datenverlust. Bis hierher ist ein
+      // Abbruch folgenlos, ab install() nicht mehr.
+      if (recording || busy) {
+        updateStatusEl.textContent =
+          "Blitztext nimmt gerade auf. Das Update laeuft, sobald die Aufnahme fertig ist.";
+        updateInstallEl.disabled = false;
+        return;
+      }
+
+      updateStatusEl.textContent = "Installiere und starte neu ...";
+      await verfuegbaresUpdate.install();
       await relaunch();
     } catch (error) {
       updateStatusEl.textContent = `Installation fehlgeschlagen: ${error}`;
