@@ -48,7 +48,7 @@ final class UpdateFeedClientTests: XCTestCase {
     }
 
     func testUeberspringtPrereleases() throws {
-        let daten = liste(release(tag: "main-abc1234", prerelease: true), release(tag: "v1.5.0"))
+        let daten = liste(release(tag: "v1.7.0", prerelease: true), release(tag: "v1.5.0"))
         let treffer = try UpdateFeedClient.selectRelease(from: daten, repository: repository)
         XCTAssertEqual(treffer?.tagName, "v1.5.0")
     }
