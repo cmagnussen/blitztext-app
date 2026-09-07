@@ -62,6 +62,9 @@ jobs:
         run: npm ci
 
       - name: Build Tauri app (Release)
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: npm run tauri build
 
       # Gather the NSIS + MSI installers into a single folder at the repo root
@@ -74,6 +77,22 @@ jobs:
           cp src-tauri/target/release/bundle/nsis/*-setup.exe "$GITHUB_WORKSPACE/dist-installers/" 2>/dev/null || true
           cp src-tauri/target/release/bundle/msi/*.msi "$GITHUB_WORKSPACE/dist-installers/" 2>/dev/null || true
           ls -lh "$GITHUB_WORKSPACE/dist-installers"
+
+      - name: Build updater manifest
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: node scripts/make-updater-manifest.mjs "$GITHUB_REF_NAME" "$GITHUB_WORKSPACE/dist-installers/latest.json"
+
+      - name: Validate updater manifest
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        working-directory: ${{ github.workspace }}
+        run: |
+          jq -e '.version
+            and .platforms["windows-x86_64"].signature
+            and (.platforms["windows-x86_64"].url | startswith("https://github.com/"))' \
+            dist-installers/latest.json > /dev/null
+          echo "Manifest ist vollstaendig."
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
