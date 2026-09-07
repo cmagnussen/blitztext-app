@@ -52,6 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             object: nil
         )
 
+        BlitztextCleanupService.removeStaleUpdateDownloads()
         appState.updateController.startAutomaticCheckIfNeeded()
 
         DispatchQueue.main.async { [weak self] in

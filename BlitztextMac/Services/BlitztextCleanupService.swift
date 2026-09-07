@@ -59,6 +59,12 @@ enum BlitztextCleanupService {
         )
     }
 
+    /// Loescht Reste abgebrochener Update-Downloads. Wird beim Start gerufen,
+    /// dann laeuft garantiert kein Download.
+    static func removeStaleUpdateDownloads() {
+        try? FileManager.default.removeItem(at: AppSupportPaths.updatesDirectoryURL)
+    }
+
     static func knownInstallBundleURLs() -> [URL] {
         BlitztextInstallLocationService.knownInstallBundleURLs
     }
