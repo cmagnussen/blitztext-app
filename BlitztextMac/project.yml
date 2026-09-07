@@ -71,6 +71,7 @@ targets:
       - path: Services/Update/UpdateRelease.swift
       - path: Services/Update/UpdateFeedClient.swift
       - path: Services/Update/UpdateSignatureVerifier.swift
+      - path: Services/Update/UpdatePolicy.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.blitztext.mac.tests
