@@ -138,7 +138,10 @@ enum UpdateInstaller {
     private static func starteNeu(bundle: URL) {
         let prozess = Process()
         prozess.executableURL = URL(fileURLWithPath: "/bin/sh")
-        prozess.arguments = ["-c", "sleep 1; /usr/bin/open \"\(bundle.path)\""]
+        // Der Pfad wird als Argument uebergeben und landet in $0. Wuerde er in den
+        // Befehl geschrieben, koennte ein Anfuehrungszeichen oder Backtick im Pfad
+        // aus der Quotierung ausbrechen.
+        prozess.arguments = ["-c", "sleep 1; exec /usr/bin/open \"$0\"", bundle.path]
         try? prozess.run()
 
         DispatchQueue.main.async {
