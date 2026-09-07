@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import {
@@ -16,6 +17,9 @@ import {
   type HotkeyMode,
 } from "./config";
 import { systemPromptFor } from "./prompts";
+import { check, type Update } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
+import { getVersion } from "@tauri-apps/api/app";
 
 const OPENAI_KEY_ACCOUNT = "openAIApiKey";
 
@@ -426,6 +430,118 @@ window.addEventListener("DOMContentLoaded", async () => {
       saveStatus.textContent = `Autostart-Fehler: ${error}`;
     }
   });
+
+  // Updates
+  const updateInstalledEl = el<HTMLParagraphElement>("update-installed");
+  const updateStatusEl = el<HTMLParagraphElement>("update-status");
+  const updateCheckEl = el<HTMLButtonElement>("update-check");
+  const updateInstallEl = el<HTMLButtonElement>("update-install");
+  const updateAutomaticEl = el<HTMLInputElement>("update-automatic");
+
+  let verfuegbaresUpdate: Update | null = null;
+
+  getVersion().then((version) => {
+    updateInstalledEl.textContent = `Installiert: Version ${version}`;
+  });
+
+  updateAutomaticEl.checked = settings.automaticUpdateChecks;
+  updateAutomaticEl.addEventListener("change", () => {
+    settings.automaticUpdateChecks = updateAutomaticEl.checked;
+    saveSettings(settings);
+  });
+
+  function letztePruefungText(): string {
+    if (!settings.lastUpdateCheck) return "Noch nicht nach Updates gesucht.";
+    return `Zuletzt geprueft: ${new Date(settings.lastUpdateCheck).toLocaleString("de-DE")}`;
+  }
+
+  function amSelbenTag(a: Date, b: Date): boolean {
+    return a.toDateString() === b.toDateString();
+  }
+
+  function zeigeUpdateHinweis(sichtbar: boolean): void {
+    const gear = el<HTMLButtonElement>("gear");
+    gear.textContent = sichtbar ? "⚙•" : "⚙";
+    gear.title = sichtbar ? "Ein Update ist verfuegbar" : "Einstellungen";
+  }
+
+  async function pruefeAufUpdates(manuell: boolean): Promise<void> {
+    // Im Entwicklungs-Build gibt es kein Release, gegen das geprueft wuerde.
+    if (import.meta.env.DEV) {
+      if (manuell) {
+        updateStatusEl.textContent =
+          "Entwicklungs-Build. Updates kommen ueber einen eigenen Build.";
+      }
+      return;
+    }
+
+    updateStatusEl.textContent = "Suche nach Updates ...";
+    try {
+      const treffer = await check();
+      settings.lastUpdateCheck = new Date().toISOString();
+      saveSettings(settings);
+
+      if (!treffer) {
+        verfuegbaresUpdate = null;
+        zeigeUpdateHinweis(verfuegbaresUpdate !== null);
+        updateInstallEl.hidden = true;
+        updateStatusEl.textContent = `Blitztext ist aktuell. ${letztePruefungText()}`;
+        return;
+      }
+
+      verfuegbaresUpdate = treffer;
+      zeigeUpdateHinweis(verfuegbaresUpdate !== null);
+      updateInstallEl.hidden = false;
+      updateInstallEl.textContent = `Version ${treffer.version} laden und installieren`;
+      updateStatusEl.textContent = `Version ${treffer.version} ist verfuegbar. `
+        + "Blitztext startet sich fuer das Update neu.";
+    } catch (error) {
+      verfuegbaresUpdate = null;
+      zeigeUpdateHinweis(verfuegbaresUpdate !== null);
+      updateInstallEl.hidden = true;
+      // Der automatische Check scheitert still, damit ein fehlendes Netz
+      // beim Start niemanden stoert. Ein 404 heisst nur, dass das neueste
+      // Release kein Windows-Manifest enthaelt.
+      updateStatusEl.textContent = manuell ? `Update-Pruefung fehlgeschlagen: ${error}` : "";
+    }
+  }
+
+  updateCheckEl.addEventListener("click", () => {
+    void pruefeAufUpdates(true);
+  });
+
+  updateInstallEl.addEventListener("click", async () => {
+    if (!verfuegbaresUpdate) return;
+    if (recording || busy) {
+      updateStatusEl.textContent =
+        "Blitztext nimmt gerade auf. Das Update laeuft, sobald die Aufnahme fertig ist.";
+      return;
+    }
+
+    updateInstallEl.disabled = true;
+    try {
+      await verfuegbaresUpdate.downloadAndInstall((fortschritt) => {
+        if (fortschritt.event === "Progress") {
+          updateStatusEl.textContent = "Lade Update ...";
+        }
+        if (fortschritt.event === "Finished") {
+          updateStatusEl.textContent = "Installiere und starte neu ...";
+        }
+      });
+      await relaunch();
+    } catch (error) {
+      updateStatusEl.textContent = `Installation fehlgeschlagen: ${error}`;
+      updateInstallEl.disabled = false;
+    }
+  });
+
+  updateStatusEl.textContent = letztePruefungText();
+
+  // Beim Start pruefen, danach hoechstens einmal pro Kalendertag.
+  const letzte = settings.lastUpdateCheck ? new Date(settings.lastUpdateCheck) : null;
+  if (settings.automaticUpdateChecks && (!letzte || !amSelbenTag(letzte, new Date()))) {
+    void pruefeAufUpdates(false);
+  }
 
   // Per-workflow tuning
   setupSegmented("tone-seg", settings.improve.tone, (value) => {

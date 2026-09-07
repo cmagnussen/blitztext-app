@@ -13,6 +13,10 @@ export interface Settings {
   // Launch the app on login (Windows: registry Run key / macOS: LaunchAgent).
   autostart: boolean;
   hotkeyMode: HotkeyMode;
+  // Automatische Update-Pruefung, hoechstens einmal pro Kalendertag.
+  automaticUpdateChecks: boolean;
+  // ISO-Zeitstempel der letzten Pruefung, null wenn noch nie geprueft.
+  lastUpdateCheck: string | null;
   liteLLM: {
     baseURL: string;
     fastModel: string;
@@ -63,6 +67,8 @@ export const defaultSettings: Settings = {
   apiProvider: "liteLLM",
   autostart: false,
   hotkeyMode: "hold",
+  automaticUpdateChecks: true,
+  lastUpdateCheck: null,
   liteLLM: {
     baseURL: "",
     fastModel: "gpt-4o-mini",
