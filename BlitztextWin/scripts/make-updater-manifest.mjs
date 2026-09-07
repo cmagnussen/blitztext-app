@@ -30,11 +30,25 @@ try {
 }
 
 const setup = dateien.find((name) => name.endsWith("-setup.exe"));
-const signaturDatei = dateien.find((name) => name.endsWith("-setup.exe.sig"));
 
-if (!setup || !signaturDatei) {
+if (!setup) {
   console.error(
-    `Kein signiertes NSIS-Setup in ${NSIS_ORDNER}. Gefunden: ${dateien.join(", ") || "nichts"}`
+    `Kein NSIS-Setup in ${NSIS_ORDNER}. Gefunden: ${dateien.join(", ") || "nichts"}`
+  );
+  process.exit(1);
+}
+
+// Der Name der Signatur wird aus dem Setup-Namen abgeleitet, nicht unabhaengig
+// gesucht. Bei einem alten Artefakt im Ordner wuerden zwei getrennte Suchen
+// sonst die URL der einen Version mit der Signatur einer anderen paaren. Das
+// faellt erst beim Nutzer auf, weil die jq-Pruefung im Workflow nur sieht, dass
+// beide Felder gefuellt sind.
+const signaturDatei = `${setup}.sig`;
+
+if (!dateien.includes(signaturDatei)) {
+  console.error(
+    `Zum Setup ${setup} fehlt die Signatur ${signaturDatei} in ${NSIS_ORDNER}. `
+      + `Gefunden: ${dateien.join(", ") || "nichts"}`
   );
   process.exit(1);
 }

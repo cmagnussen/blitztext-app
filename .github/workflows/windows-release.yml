@@ -61,11 +61,41 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Mit createUpdaterArtifacts bricht der Bundler ohne privaten Schluessel
+      # ab, und zwar sowohl bei leerer als auch bei fehlender Variable
+      # ("A public key has been found, but no private key"). Solange das Secret
+      # nicht existiert, muss der Build also ohne Update-Artefakte laufen,
+      # sonst ist der Job ab dem Merge dauerhaft rot.
+      - name: Check updater signing key
+        id: signing
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "updater=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Auf einem Versions-Tag muss die Signatur da sein: ein Release ohne
+          # sie ist fuer den Updater wertlos.
+          if [ "${GITHUB_REF#refs/tags/v}" != "$GITHUB_REF" ]; then
+            echo "::error::Secret TAURI_SIGNING_PRIVATE_KEY fehlt. Ohne Signatur ist dieses Release fuer den Updater unbrauchbar."
+            exit 1
+          fi
+          echo "::notice::Secret TAURI_SIGNING_PRIVATE_KEY fehlt, dieser Build entsteht ohne Update-Artefakte. Sie entstehen, sobald der Schluessel hinterlegt ist."
+          echo "updater=false" >> "$GITHUB_OUTPUT"
+
       - name: Build Tauri app (Release)
+        shell: bash
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: npm run tauri build
+        run: |
+          if [ "${{ steps.signing.outputs.updater }}" = "true" ]; then
+            npm run tauri build
+          else
+            npm run tauri build -- --config '{"bundle":{"createUpdaterArtifacts":false}}'
+          fi
 
       # Gather the NSIS + MSI installers into a single folder at the repo root
       # (artifact/release paths are relative to the workspace, not this job's
