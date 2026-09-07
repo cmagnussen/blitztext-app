@@ -77,8 +77,13 @@ final class UpdatePolicyTests: XCTestCase {
         XCTAssertNil(UpdatePolicy.installBlock(isInApplicationsFolder: true, isBusy: false))
     }
 
-    func testJedeSperreHatEinenHinweis() {
-        XCTAssertFalse(UpdatePolicy.InstallBlock.entwicklungsBuild.hinweis.isEmpty)
-        XCTAssertFalse(UpdatePolicy.InstallBlock.beschaeftigt.hinweis.isEmpty)
+    func testHinweisZumEntwicklungsBuildNenntDenAusweg() {
+        let hinweis = UpdatePolicy.InstallBlock.entwicklungsBuild.hinweis
+        XCTAssertTrue(hinweis.contains("git pull"), "Erwartet wurde der Hinweis auf git pull: \(hinweis)")
+    }
+
+    func testHinweisZurBeschaeftigungNenntDenGrund() {
+        let hinweis = UpdatePolicy.InstallBlock.beschaeftigt.hinweis
+        XCTAssertTrue(hinweis.contains("Aufnahme"), "Erwartet wurde der Hinweis auf die Aufnahme: \(hinweis)")
     }
 }
