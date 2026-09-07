@@ -17,6 +17,11 @@ final class AppState {
 
     var activeWorkflow: (any Workflow)?
     var page: PopoverPage = .main
+    /// Tab, auf dem die Einstellungen einmalig oeffnen sollen. Wer gezielt in
+    /// einen Abschnitt fuehrt, setzt den Wert vor dem Wechsel auf `.settings`.
+    /// `SettingsContentView` verbraucht ihn beim Erscheinen und setzt ihn
+    /// zurueck, danach greift wieder die uebliche Vorauswahl.
+    var settingsTabSeed: Int?
     var isPopoverShown = false
     var menuBarStatus: MenuBarStatus = .idle {
         didSet {

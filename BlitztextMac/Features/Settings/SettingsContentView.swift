@@ -3,6 +3,9 @@ import AppKit
 import AVFoundation
 
 struct SettingsContentView: View {
+    /// Der Tab "Zugang", in dem unter anderem der Abschnitt Updates steckt.
+    static let accessTabIndex = 1
+
     @Bindable var appState: AppState
     @State private var selectedTab = 0
 
@@ -31,7 +34,14 @@ struct SettingsContentView: View {
         }
         .onAppear {
             appState.refreshAccessibilityPermission()
-            selectedTab = defaultTabSelection
+            // Eine gezielte Vorgabe gilt genau einmal, danach wieder die
+            // uebliche Vorauswahl.
+            if let vorgabe = appState.settingsTabSeed {
+                appState.settingsTabSeed = nil
+                selectedTab = vorgabe
+            } else {
+                selectedTab = defaultTabSelection
+            }
         }
     }
 

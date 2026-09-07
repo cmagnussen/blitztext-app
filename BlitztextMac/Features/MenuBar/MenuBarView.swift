@@ -637,6 +637,11 @@ struct MenuBarView: View {
         }
         .overlay(alignment: .trailing) {
             Button {
+                // Der Abschnitt Updates liegt im Tab "Zugang". Ohne diese
+                // Vorgabe landet der Klick auf dem Punkt bei "Anpassen".
+                if appState.updateController.hasAvailableUpdate {
+                    appState.settingsTabSeed = SettingsContentView.accessTabIndex
+                }
                 appState.page = .settings
             } label: {
                 HStack(spacing: 4) {
