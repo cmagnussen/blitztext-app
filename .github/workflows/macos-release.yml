@@ -54,6 +54,20 @@ jobs:
           ditto -c -k --sequesterRsrc --keepParent Blitztext.app Blitztext-macos-universal.zip
           ls -lh Blitztext-macos-universal.zip
 
+      - name: Sign update archive
+        if: github.event_name != 'pull_request'
+        env:
+          BLITZTEXT_UPDATE_PRIVATE_KEY: ${{ secrets.BLITZTEXT_UPDATE_PRIVATE_KEY }}
+        run: |
+          if [ -z "$BLITZTEXT_UPDATE_PRIVATE_KEY" ]; then
+            echo "::error::Secret BLITZTEXT_UPDATE_PRIVATE_KEY fehlt, ohne Signatur kein Update-Asset."
+            exit 1
+          fi
+          swift Scripts/sign-update.swift \
+            Blitztext-macos-universal.zip \
+            Blitztext-macos-universal.zip.sig
+          ls -lh Blitztext-macos-universal.zip.sig
+
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
@@ -76,11 +90,12 @@ jobs:
           TAG="main-${GITHUB_SHA:0:7}"
           gh release create "$TAG" \
             Blitztext-macos-universal.zip \
+            Blitztext-macos-universal.zip.sig \
             --title "Blitztext main build (${GITHUB_SHA:0:7})" \
             --prerelease \
             --target "$GITHUB_SHA" \
             --notes "Automatic build from main (commit ${GITHUB_SHA:0:7}). macOS: universal (Apple Silicon + Intel), ad-hoc signed (not notarized) — first launch: right-click → Open, or run: xattr -dr com.apple.quarantine /Applications/Blitztext.app. Windows: unsigned NSIS/MSI — SmartScreen may warn on first launch." \
-          || gh release upload "$TAG" Blitztext-macos-universal.zip --clobber
+          || gh release upload "$TAG" Blitztext-macos-universal.zip Blitztext-macos-universal.zip.sig --clobber
 
       # Manual version tag (e.g. v1.0.0): publish a full, official release.
       - name: Publish release (version tag)
@@ -92,6 +107,7 @@ jobs:
           # back to uploading into the existing release.
           gh release create "$GITHUB_REF_NAME" \
             Blitztext-macos-universal.zip \
+            Blitztext-macos-universal.zip.sig \
             --title "Blitztext $GITHUB_REF_NAME" \
             --notes "Universal macOS build (Apple Silicon + Intel), ad-hoc signed (not notarized). First launch: right-click the app and choose Open, or run: xattr -dr com.apple.quarantine /Applications/Blitztext.app" \
-          || gh release upload "$GITHUB_REF_NAME" Blitztext-macos-universal.zip --clobber
+          || gh release upload "$GITHUB_REF_NAME" Blitztext-macos-universal.zip Blitztext-macos-universal.zip.sig --clobber
