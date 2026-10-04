@@ -525,6 +525,16 @@ struct CustomizeSettingsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
 
+            VStack(alignment: .leading, spacing: 8) {
+                SectionLabel(text: "Transkription")
+                Toggle("Automatische Absätze", isOn: $appState.transcriptionSettings.automaticParagraphsEnabled)
+                    .toggleStyle(.switch)
+                Text("Gliedert Diktate lokal nach 45 Wörtern oder vier längeren Sätzen. Absätze entstehen immer am Satzende.")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             // MARK: Lokaler Modus
             VStack(alignment: .leading, spacing: 10) {
                 SectionLabel(text: "Sicherer Lokaler Modus")

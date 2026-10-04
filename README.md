@@ -125,6 +125,10 @@ docs/           Setup, privacy, roadmap, preflight, landing page notes
 
 ## Local Models
 
+In **Settings > Anpassen**, enable **Automatische Absätze** to split long dictation into readable paragraphs. The option is off by default and works with both local and online transcription. It uses Apple's on-device sentence and word tokenizer: a paragraph ends at a sentence boundary after at least 45 words or four substantial sentences (at least four words each). Short interjections do not count toward the sentence limit. Existing paragraphs are preserved; words and punctuation are unchanged. This is a length-based formatter, not topic detection, and it needs no additional model or network request.
+
+Run the formatter regression checks with `bash scripts/test-transcript-formatting.sh`.
+
 Local transcription is available as an experimental WhisperKit/CoreML path. The app does not bundle a model; choose one in the app, click install, and then switch on **Sicherer Lokaler Modus** from the menu bar or settings.
 
 See [docs/local-models.md](docs/local-models.md).

@@ -167,7 +167,8 @@ final class AppState {
                 customTerms: textImprovementSettings.customTerms,
                 language: transcriptionSettings.language,
                 backend: appSettings.secureLocalModeEnabled ? .local : .remote,
-                localModelName: selectedLocalModelName
+                localModelName: selectedLocalModelName,
+                automaticParagraphsEnabled: transcriptionSettings.automaticParagraphsEnabled
             )
             configureWorkflowHandlers(workflow)
             activeWorkflow = workflow
@@ -179,7 +180,8 @@ final class AppState {
                 customTerms: textImprovementSettings.customTerms,
                 language: transcriptionSettings.language,
                 backend: .local,
-                localModelName: selectedLocalModelName
+                localModelName: selectedLocalModelName,
+                automaticParagraphsEnabled: transcriptionSettings.automaticParagraphsEnabled
             )
             configureWorkflowHandlers(workflow)
             activeWorkflow = workflow

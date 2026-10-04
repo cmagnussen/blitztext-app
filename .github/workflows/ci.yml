@@ -48,5 +48,8 @@ jobs:
             brew install xcodegen
           fi
 
+      - name: Test transcript paragraph formatting
+        run: bash scripts/test-transcript-formatting.sh
+
       - name: Build
         run: ./build.sh --debug

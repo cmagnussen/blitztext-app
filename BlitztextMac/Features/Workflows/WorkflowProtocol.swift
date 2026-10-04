@@ -170,6 +170,23 @@ enum TranscriptionBackend: String, Codable {
 
 struct TranscriptionSettings: Codable {
     var language: String = "de"
+    var automaticParagraphsEnabled: Bool = false
+
+    enum CodingKeys: String, CodingKey {
+        case language
+        case automaticParagraphsEnabled
+    }
+
+    init(language: String = "de", automaticParagraphsEnabled: Bool = false) {
+        self.language = language
+        self.automaticParagraphsEnabled = automaticParagraphsEnabled
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        language = try container.decodeIfPresent(String.self, forKey: .language) ?? "de"
+        automaticParagraphsEnabled = try container.decodeIfPresent(Bool.self, forKey: .automaticParagraphsEnabled) ?? false
+    }
 }
 
 struct DampfAblassenSettings: Codable {
