@@ -73,7 +73,7 @@ Keyboards without `fn`: set your own shortcut per mode in the settings.
 | <img src="docs/screenshots/settings-models.png" width="400" alt="Settings, Modelle: local speech recognition and the AI modes"> | <img src="docs/screenshots/settings-general.png" width="400" alt="Settings, Allgemein: how Blitztext works, shortcuts, sound off while recording"> |
 | Speech recognition and AI modes on your Mac | How Blitztext works, shortcuts, sound off while recording |
 
-The app is in German for now. The screenshots show a personal shortcut for Blitztext+ (`⌃<`) instead of `fn + Control`.
+The app is in German for now.
 
 ## Install
 
