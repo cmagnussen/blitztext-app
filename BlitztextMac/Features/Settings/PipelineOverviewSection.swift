@@ -12,7 +12,7 @@ struct PipelineOverviewSection: View {
                 model: appState.selectedLocalModelDisplayName,
                 detail: appState.selectedLocalModelIsInstalled
                     ? "Immer lokal auf diesem Mac. Die Sprache verl\u{00E4}sst ihn nie."
-                    : "Noch nicht installiert. Unten unter Lokale Transkription laden.",
+                    : "Noch nicht installiert. Unter Modelle, Spracherkennung laden.",
                 ready: appState.selectedLocalModelIsInstalled
             )
             row(
@@ -40,7 +40,10 @@ struct PipelineOverviewSection: View {
             return "Lokal auf diesem Mac, ohne Internet."
         }
         if appState.providerInUse != nil {
-            return "\u{00DC}ber deinen API-Key. Nur der erkannte Text geht an den Anbieter, nie die Sprache."
+            // Must match the setting: with cursor context on, that text goes along too.
+            return appState.appSettings.aiSeesFieldContext
+                ? "\u{00DC}ber deinen API-Key. Der erkannte Text und der Text am Cursor gehen an den Anbieter, nie die Sprache."
+                : "\u{00DC}ber deinen API-Key. Nur der erkannte Text geht an den Anbieter, nie die Sprache."
         }
         return "Apple Intelligence einschalten oder unter Modelle einen Modell-Anbieter mit API-Key hinterlegen. Wortgenaues Diktieren geht auch ohne."
     }

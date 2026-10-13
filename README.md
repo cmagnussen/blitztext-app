@@ -71,13 +71,13 @@ Keyboards without `fn`: set your own shortcut per mode in the settings.
 | | |
 |---|---|
 | <img src="docs/screenshots/settings-models.png" width="400" alt="Settings, Modelle: local speech recognition and the AI modes"> | <img src="docs/screenshots/settings-general.png" width="400" alt="Settings, Allgemein: how Blitztext works, shortcuts, sound off while recording"> |
-| Speech recognition and AI modes on your Mac | Shortcuts, sound off while recording, cursor fit |
+| Speech recognition and AI modes on your Mac | How Blitztext works, shortcuts, sound off while recording |
 
-The app is in German for now.
+The app is in German for now. The screenshots show a personal shortcut for Blitztext+ (`⌃<`) instead of `fn + Control`.
 
 ## Install
 
-1. [Download the ZIP](https://github.com/cmagnussen/blitztext-app/releases/latest), unpack it and move **Blitztext.app** to **Applications**.
+1. Open the [latest release](https://github.com/cmagnussen/blitztext-app/releases/latest), download the ZIP under "Assets", unpack it and move **Blitztext.app** to **Applications**.
 2. Open Blitztext. It lives in the menu bar.
 3. Allow **Microphone** and **Accessibility** (needed to paste into other apps).
 4. In the settings (**Modelle**), load a local speech model once. Parakeet v3 is recommended on Apple silicon, about 500 MB.
@@ -103,6 +103,7 @@ Blitztext has no backend and collects no data. Details in [docs/privacy.md](docs
 - **Paste stops after an update or a rebuild:** open System Settings > Privacy & Security > Accessibility, remove the old Blitztext entry, add the current app and restart it.
 - **First dictation after a macOS update** can take a few minutes while macOS prepares the model for the Neural Engine. Blitztext shows a hint; keep it running.
 - **Whisper on silence** sometimes invents phrases like "Thank you." Blitztext filters the known ones.
+- **Macs managed with Jamf:** in-app updates are off on the whole Mac, also for a copy you installed yourself. There, your device management handles updates.
 
 More in [docs/setup.md](docs/setup.md) and [docs/local-models.md](docs/local-models.md).
 

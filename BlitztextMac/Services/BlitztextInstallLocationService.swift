@@ -75,8 +75,16 @@ enum BlitztextInstallLocationService {
         return .unknown
     }
 
+    /// Jamf installs Blitztext into /Applications on managed Macs. There the app neither
+    /// moves itself nor updates itself; device management does both.
+    static let isManagedByJamf: Bool = {
+        let fileManager = FileManager.default
+        return fileManager.fileExists(atPath: "/usr/local/jamf/bin/jamf")
+            || fileManager.fileExists(atPath: "/Library/Application Support/JAMF")
+    }()
+
     static var shouldOfferMoveToApplications: Bool {
-        !currentInstallLocation.isCanonicalInstall
+        !currentInstallLocation.isCanonicalInstall && !isManagedByJamf
     }
 
     static var systemApplicationsDirectoryURL: URL {
@@ -133,20 +141,33 @@ enum BlitztextInstallLocationService {
 
         try ensureDirectoryExists(at: destinationDirectoryURL)
 
-        if FileManager.default.fileExists(atPath: destinationURL.path) {
-            guard replacingExisting else {
-                throw MoveError.destinationExists(destinationURL)
-            }
-            try FileManager.default.removeItem(at: destinationURL)
-        }
-
-        guard FileManager.default.isWritableFile(atPath: destinationDirectoryURL.path) else {
+        let fileManager = FileManager.default
+        guard fileManager.isWritableFile(atPath: destinationDirectoryURL.path) else {
             throw MoveError.destinationNotWritable(destinationDirectoryURL)
         }
 
+        let destinationExists = fileManager.fileExists(atPath: destinationURL.path)
+        if destinationExists && !replacingExisting {
+            throw MoveError.destinationExists(destinationURL)
+        }
+
+        // Copy next to the destination first and swap in one step, so a failed copy
+        // never costs the installation that works.
+        let stagingURL = destinationDirectoryURL
+            .appendingPathComponent(".\(sourceURL.lastPathComponent).incoming-\(UUID().uuidString)")
         do {
-            try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+            try fileManager.copyItem(at: sourceURL, to: stagingURL)
+            let executable = stagingURL.appendingPathComponent("Contents/MacOS")
+            guard fileManager.fileExists(atPath: executable.path) else {
+                throw CocoaError(.fileReadCorruptFile)
+            }
+            if destinationExists {
+                _ = try fileManager.replaceItemAt(destinationURL, withItemAt: stagingURL)
+            } else {
+                try fileManager.moveItem(at: stagingURL, to: destinationURL)
+            }
         } catch {
+            try? fileManager.removeItem(at: stagingURL)
             throw MoveError.copyFailed(source: sourceURL, destination: destinationURL, underlying: error)
         }
 

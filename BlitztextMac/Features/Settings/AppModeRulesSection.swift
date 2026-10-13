@@ -41,7 +41,7 @@ struct AppModeRulesSection: View {
 
     var body: some View {
         SettingsSection(title: "Modus je App") {
-            Text("Das Blitztext-K\u{00FC}rzel (\(appState.hotkeyLabel(for: .tapTalk))) kann je App oder Website automatisch einen anderen Modus nutzen, zum Beispiel Blitztext+ in Gmail, w\u{00E4}hrend es in Slack wortgenau bleibt. Die \u{00FC}brigen K\u{00FC}rzel bleiben wie sie sind.")
+            Text("Das Blitztext-K\u{00FC}rzel (\(appState.hotkeyLabel(for: .tapTalk))) kann je App oder Website automatisch einen anderen Modus nutzen, zum Beispiel Blitztext+ in Gmail. \u{00DC}berall sonst bleibt es wortgenau, und die \u{00FC}brigen K\u{00FC}rzel bleiben wie sie sind.")
                 .font(.system(size: 10.5))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

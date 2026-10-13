@@ -50,3 +50,14 @@ jobs:
 
       - name: Build
         run: ./build.sh --debug
+
+      - name: Unit tests
+        working-directory: BlitztextMac
+        run: |
+          xcodebuild \
+            -project BlitztextMac.xcodeproj \
+            -scheme BlitztextMac \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            test
