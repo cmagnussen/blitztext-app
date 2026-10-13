@@ -1,36 +1,28 @@
-# Privacy Notes
+# Privacy
 
-Blitztext macOS Preview does not include a hosted backend.
+Blitztext has no backend. It does not collect, send or store any data on servers operated by Blitztext or Blackboat.
 
-When you use the online workflows, your Mac sends data directly to OpenAI:
+## What Stays On Your Mac
 
-- audio recordings for transcription
-- transcribed or typed text for rewriting
-- custom terms and prompt context if you configured them
+- **Audio:** recorded and transcribed on your Mac with a local model (Parakeet v3 or Whisper). Temporary recordings are deleted after each workflow.
+- **Writing modes with Apple Intelligence:** run on your Mac.
+- **Settings, dictionary, prompts:** local app storage.
+- **History (optional):** encrypted on your Mac, kept as long as you choose (off, 24 hours, 7 days).
+- **API keys** for an optional model provider: in the macOS Keychain.
+- **Text around the cursor:** when a dictation starts, Blitztext reads the focused text field through the Accessibility API to fit spaces and capitals. Password fields are never read. The text stays on your Mac, unless you turn on "KI-Modi sehen den Text am Cursor" (see below).
+- **Browser address:** only if you added a website to "Modus je App", Blitztext reads the address of the frontmost browser tab when you press the Blitztext shortcut, to pick the mode. It stays on your Mac.
 
-When **Sicherer Lokaler Modus** is enabled and a WhisperKit/CoreML model is installed, transcription runs on your Mac and does not send audio to OpenAI. Rewriting workflows still require OpenAI and are paused while secure local mode is active.
+## When Data Leaves Your Mac
 
-You are responsible for your OpenAI account, API usage, costs, and data handling.
+- **Model download:** loading a speech model downloads it from Hugging Face (huggingface.co). Hugging Face sees the request, as with any download.
+- **Optional model provider:** if you add your own provider and API key, the *recognized text* of the writing modes goes directly from your Mac to that provider. Audio never does. Your contract and their privacy terms apply.
+- **Text around the cursor for the writing modes (off by default):** with "KI-Modi sehen den Text am Cursor" on, the text around your cursor goes along to the writing mode. With Apple Intelligence it stays on your Mac; with your own model provider it goes to that provider.
+- **Update check:** Blitztext asks the GitHub releases of this repository for a new version (Sparkle). GitHub sees the request, as with any download. Turn it off in Settings > Allgemein > Über Blitztext. On Macs managed by Jamf, Blitztext does not check; updates come from the device management.
 
-## Local Data
+## Clipboard
 
-The app stores:
-
-- your OpenAI API key in the user's macOS Keychain
-- workflow settings in local app support storage
-- optional WhisperKit/CoreML model folders in local app support storage
-- temporary audio files while a transcription is being processed; the app attempts to delete each recording when the workflow ends or is cancelled
-
-Workflow output may also be placed on your clipboard so it can be pasted into another app. Auto-paste marks the clipboard entry as concealed for compatible clipboard managers, but the generated text intentionally remains on the clipboard as a fallback if automatic paste is blocked. Clipboard managers, macOS, or other apps may still observe clipboard contents while they are present.
-
-The app uses the system TLS trust store for OpenAI and Hugging Face requests. It does not currently pin certificates. A user-installed or managed root certificate can therefore affect HTTPS trust decisions on that Mac.
-
-Settings such as custom prompts, custom terms, and context are stored in local app support storage as plain JSON. Do not put secrets into those fields.
-
-## Offline Scope
-
-Only transcription can run locally. Any workflow that rewrites, improves, or transforms text still uses OpenAI.
+To paste, Blitztext puts the text on the clipboard and restores your previous clipboard afterwards. Clipboard managers may still see the text while it is there.
 
 ## Sensitive Content
 
-Do not use this preview with confidential, regulated, or highly sensitive content unless you have reviewed the code, your OpenAI settings, and your legal/privacy requirements.
+Transcription and the Apple Intelligence modes are local. If you configure an external model provider, check whether your content may be sent there.

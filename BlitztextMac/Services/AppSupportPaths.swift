@@ -13,12 +13,27 @@ enum AppSupportPaths {
         appSupportDirectoryURL.appendingPathComponent("settings.json")
     }
 
+    static var credentialsURL: URL {
+        appSupportDirectoryURL.appendingPathComponent(".credentials")
+    }
+
+    static var historyURL: URL {
+        appSupportDirectoryURL.appendingPathComponent(".history")
+    }
+
     static var localModelsDirectoryURL: URL {
         appSupportDirectoryURL.appendingPathComponent("models", isDirectory: true)
     }
 
     static var whisperKitModelsDirectoryURL: URL {
         localModelsDirectoryURL.appendingPathComponent("whisperkit", isDirectory: true)
+    }
+
+    /// Tokenizers for WhisperKit. Without an explicit folder WhisperKit falls back to
+    /// ~/Documents/huggingface, which needs Documents access and breaks when that
+    /// folder is protected or synced.
+    static var whisperKitTokenizersDirectoryURL: URL {
+        localModelsDirectoryURL.appendingPathComponent("tokenizers", isDirectory: true)
     }
 
     static var defaultWhisperKitModelURL: URL {

@@ -14,14 +14,28 @@ final class EmojiTextWorkflow: Workflow {
 
     private let recorder = AudioRecorder()
     private let settings: EmojiTextSettings
-    private let customTerms: [String]
     private let language: String
+    private let localModelName: String
+    private let rewriteEngine: TextRewriter.Engine
+    private let postProcessor: TranscriptPostProcessor
+    /// Text around the cursor for the AI step, nil when not allowed or not readable.
+    private let fieldContext: @MainActor () -> String?
     private var processingTask: Task<Void, Never>?
 
-    init(settings: EmojiTextSettings, customTerms: [String] = [], language: String = "de") {
+    init(
+        settings: EmojiTextSettings,
+        language: String = "de",
+        localModelName: String,
+        rewriteEngine: TextRewriter.Engine,
+        postProcessor: TranscriptPostProcessor = TranscriptPostProcessor(correctCustomTerms: false, removeFillerWords: false),
+        fieldContext: @escaping @MainActor () -> String? = { nil }
+    ) {
         self.settings = settings
-        self.customTerms = customTerms
         self.language = language
+        self.localModelName = localModelName
+        self.rewriteEngine = rewriteEngine
+        self.postProcessor = postProcessor
+        self.fieldContext = fieldContext
     }
 
     // MARK: - Recording State
@@ -44,7 +58,6 @@ final class EmojiTextWorkflow: Workflow {
         if recorder.isRecording {
             recorder.stopRecording()
             guard !TranscriptionQualityService.shouldRejectRecording(duration: recorder.lastRecordingDuration) else {
-                recorder.discardRecording()
                 phase = .error("Keine Aufnahme erkannt.")
                 return
             }
@@ -60,7 +73,6 @@ final class EmojiTextWorkflow: Workflow {
         if recorder.isRecording {
             recorder.stopRecording()
         }
-        recorder.discardRecording()
         phase = .idle
     }
 
@@ -74,22 +86,25 @@ final class EmojiTextWorkflow: Workflow {
 
         phase = .running("Wird transkribiert ...")
         let recordingDuration = recorder.lastRecordingDuration
-        let vocabularyHints = recordingDuration >= 0.9 ? customTerms : []
 
         processingTask = Task {
-            defer {
-                try? FileManager.default.removeItem(at: url)
-            }
-
             do {
-                // Phase 1: Whisper transcription
-                let rawText = try await TranscriptionService.transcribe(
+                // Phase 1: local transcription (Parakeet or WhisperKit)
+                let rawText = try await LocalTranscriptionService.transcribe(
                     audioURL: url,
-                    customTerms: vocabularyHints,
-                    language: language
-                )
+                    language: language,
+                    modelName: localModelName
+                ) { [weak self] in
+                    self?.phase = .running(LocalTranscriptionService.slowPreparationMessage)
+                }
                 let cleanedRawText = TranscriptionQualityService.cleanedTranscript(rawText)
                 guard !TranscriptionQualityService.isLikelyArtifact(cleanedRawText, recordingDuration: recordingDuration) else {
+                    phase = .error("Keine Aufnahme erkannt.")
+                    return
+                }
+
+                let processedRawText = postProcessor.process(cleanedRawText)
+                guard !processedRawText.isEmpty else {
                     phase = .error("Keine Aufnahme erkannt.")
                     return
                 }
@@ -99,12 +114,13 @@ final class EmojiTextWorkflow: Workflow {
                 // Phase 2: Add emojis
                 phase = .running("Emojis werden eingef\u{00FC}gt ...")
 
-                let result = try await LLMService.addEmojis(
-                    text: cleanedRawText,
-                    settings: settings
+                let result = try await TextRewriter.rewrite(
+                    processedRawText,
+                    instruction: ModePrompts.withFieldContext(ModePrompts.emoji(settings), context: fieldContext()),
+                    engine: rewriteEngine
                 )
                 let cleanedResult = TranscriptionQualityService.cleanedTranscript(result)
-                guard cleanedResult != "KEINE_AUFNAHME_ERKANNT" else {
+                guard cleanedResult != ModePrompts.nothingRecognizedMarker else {
                     phase = .error("Keine Aufnahme erkannt.")
                     return
                 }

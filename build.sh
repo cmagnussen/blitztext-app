@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Blitztext macOS App - Build & Run
-# Voraussetzungen: Full Xcode with Command Line Tools, xcodegen
+# Voraussetzungen: Xcode Command Line Tools, xcodegen
 
 RUN_AFTER=false
 INSTALL_APP=false
@@ -63,44 +63,29 @@ verify_universal_app() {
     echo "✅ Universal Binary verifiziert: $archs"
 }
 
-ensure_xcodebuild_available() {
-    if xcodebuild -version >/dev/null 2>&1; then
-        return
-    fi
-
-    local default_xcode="/Applications/Xcode.app/Contents/Developer"
-    if [ -d "$default_xcode" ]; then
-        export DEVELOPER_DIR="$default_xcode"
-        if xcodebuild -version >/dev/null 2>&1; then
-            echo "⚠️  Aktiver Developer-Pfad nutzt kein vollständiges Xcode. Verwende: $DEVELOPER_DIR"
-            return
-        fi
-    fi
-
-    echo "❌ xcodebuild ist nicht verfügbar."
-    echo "   Installiere Xcode und wähle es mit:"
-    echo "   sudo xcode-select -s /Applications/Xcode.app/Contents/Developer"
-    exit 1
-}
-
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$SCRIPT_DIR/BlitztextMac"
 PROJECT_FILE="$PROJECT_DIR/BlitztextMac.xcodeproj"
-DERIVED_DATA_PATH="$SCRIPT_DIR/.derivedData-blitztextmac-build"
+# Keep DerivedData outside iCloud-synced folders (Desktop/Documents): the file
+# provider adds com.apple.FinderInfo xattrs to bundles, which breaks codesign with
+# "resource fork, Finder information, or similar detritus not allowed".
+# (cmagnussen/blitztext-app PR #5)
+DERIVED_DATA_PATH="$HOME/Library/Caches/blitztext-build/derivedData"
 cd "$PROJECT_DIR"
-
-ensure_xcodebuild_available
 
 if command -v xcodegen &> /dev/null; then
     echo "⚙️  Generiere Xcode-Projekt ..."
     xcodegen generate 2>&1
 elif [ -d "$PROJECT_FILE" ]; then
     echo "⚠️  xcodegen nicht gefunden – nutze vorhandenes Xcode-Projekt."
+elif command -v brew &> /dev/null; then
+    echo "📦 Installiere xcodegen ..."
+    brew install xcodegen
+    echo "⚙️  Generiere Xcode-Projekt ..."
+    xcodegen generate 2>&1
 else
-    echo "❌ xcodegen fehlt."
-    echo "   Installiere xcodegen explizit mit:"
-    echo "   brew install xcodegen"
-    echo "   Oder stelle sicher, dass $PROJECT_FILE vorhanden ist."
+    echo "❌ xcodegen fehlt und Homebrew ist nicht installiert."
+    echo "   Installiere xcodegen oder stelle sicher, dass $PROJECT_FILE vorhanden ist."
     exit 1
 fi
 
@@ -134,38 +119,32 @@ cp -f "$PROJECT_DIR/Resources/AppIcon.icns" "$RESOURCES_DIR/" 2>/dev/null || tru
 cp -f "$PROJECT_DIR/Resources/menubar_icon.png" "$RESOURCES_DIR/" 2>/dev/null || true
 cp -f "$PROJECT_DIR/Resources/menubar_icon@2x.png" "$RESOURCES_DIR/" 2>/dev/null || true
 
-# In Projektordner kopieren
-DEST="$SCRIPT_DIR/Blitztext.app"
-rm -rf "$DEST"
-cp -R "$APP_PATH" "$DEST"
-echo "🔏 Signiere lokale Development-App ad-hoc. Dieses Artefakt ist nicht notarisiert."
-codesign --force --sign - "$DEST" 2>&1
-verify_universal_app "$DEST"
-
-RUN_TARGET="$DEST"
-
+# Ziel vorab bestimmen: nur einmal kopieren, signieren und pruefen, ohne zweite Kopie
+# im Projektordner (cmagnussen/blitztext-app PR #16).
 if [ "$INSTALL_APP" = true ]; then
     APPS_DIR="/Applications"
-    INSTALL_DEST="$APPS_DIR/Blitztext.app"
+    DEST="$APPS_DIR/Blitztext.app"
     if [ ! -w "$APPS_DIR" ]; then
         echo "❌ /Applications ist nicht beschreibbar."
         echo "   Fuehre den Befehl mit passenden Rechten erneut aus oder ziehe die App manuell nach /Applications."
         exit 1
     fi
-    rm -rf "$INSTALL_DEST"
-    cp -R "$DEST" "$INSTALL_DEST"
-    echo "🔏 Signiere lokale Development-App ad-hoc. Dieses Artefakt ist nicht notarisiert."
-    codesign --force --sign - "$INSTALL_DEST" 2>&1
-    verify_universal_app "$INSTALL_DEST"
-    RUN_TARGET="$INSTALL_DEST"
+else
+    DEST="$SCRIPT_DIR/Blitztext.app"
 fi
+
+rm -rf "$DEST"
+cp -R "$APP_PATH" "$DEST"
+# iCloud or the file provider may have added xattrs again; codesign refuses them.
+xattr -cr "$DEST" 2>/dev/null || true
+codesign --force --deep --sign - "$DEST" 2>&1
+verify_universal_app "$DEST"
+
+RUN_TARGET="$DEST"
 
 echo ""
 echo "✅ Fertig! App liegt unter:"
 echo "   $DEST"
-if [ "$INSTALL_APP" = true ]; then
-    echo "   $RUN_TARGET"
-fi
 echo ""
 echo "Build-Typ: $BUILD_CONFIGURATION"
 echo "Architekturen: $UNIVERSAL_ARCHS"
@@ -175,8 +154,8 @@ echo "Naechste Schritte:"
 echo "1. App starten"
 echo "2. Mikrofon erlauben"
 echo "3. Fuer direktes Einfuegen zusaetzlich Bedienungshilfen erlauben"
-echo "4. In Blitztext deinen eigenen OpenAI API Key eintragen"
-echo "5. Loslegen und bei Bedarf im Code weiterbauen"
+echo "4. Lokales Sprachmodell laden, optional einen Modell-Anbieter mit API-Key eintragen"
+echo "5. Fertige, signierte Version: https://github.com/cmagnussen/blitztext-app/releases"
 echo ""
 
 # Optional: direkt starten

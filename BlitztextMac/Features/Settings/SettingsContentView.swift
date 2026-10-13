@@ -3,41 +3,53 @@ import AppKit
 
 struct SettingsContentView: View {
     @Bindable var appState: AppState
-    @State private var selectedTab = 0
+    @State private var activePane: SettingsPane = .general
 
     var body: some View {
         VStack(spacing: 0) {
-            // Two-tab segmented picker
-            Picker("", selection: $selectedTab) {
-                Text("Anpassen").tag(0)
-                Text("Zugang").tag(1)
-            }
-            .pickerStyle(.segmented)
+            SegmentedToggle(
+                options: SettingsPane.allCases,
+                selection: $activePane,
+                label: { $0.title }
+            )
             .padding(.horizontal, 16)
-            .padding(.vertical, 10)
+            .padding(.bottom, 10)
 
             ScrollView {
-                if selectedTab == 0 {
-                    CustomizeSettingsView(appState: appState)
-                } else {
-                    AccessSettingsView(appState: appState)
-                }
+                CustomizeSettingsView(appState: appState, pane: activePane)
+                    .id(activePane)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 16)
             }
         }
         .onAppear {
             appState.refreshAccessibilityPermission()
-            selectedTab = defaultTabSelection
+            activePane = defaultPane
         }
     }
 
-    private var defaultTabSelection: Int {
-        if !appState.accessibilityPermissionGranted {
-            return 1
+    /// Without a speech model nothing works, so the models tab comes first then.
+    /// Missing permissions show up at the top of "Allgemein".
+    private var defaultPane: SettingsPane {
+        appState.isConfigured ? .general : .models
+    }
+}
+
+enum SettingsPane: Int, CaseIterable, Identifiable {
+    case general
+    case models
+    case workflows
+    case dictionary
+
+    var id: Int { rawValue }
+
+    var title: String {
+        switch self {
+        case .general: return "Allgemein"
+        case .models: return "Modelle"
+        case .workflows: return "Modi"
+        case .dictionary: return "W\u{00F6}rterbuch"
         }
-        if appState.isConfigured && !BlitztextInstallLocationService.shouldOfferMoveToApplications {
-            return 0
-        }
-        return 1
     }
 }
 
@@ -47,379 +59,115 @@ private struct SectionLabel: View {
     let text: String
 
     var body: some View {
-        Text(text.uppercased())
-            .font(.system(size: 11, weight: .medium))
-            .foregroundStyle(.secondary)
+        Text(text)
+            .font(.system(size: 12.5, weight: .semibold))
     }
 }
 
-// MARK: - Access Settings (Tab 1: Zugang)
+// MARK: - System sections (in "Allgemein")
 
-struct AccessSettingsView: View {
-    private static let openAIAPIKeyPattern = #"^sk-[A-Za-z0-9_-]{20,}$"#
-
+/// Shown at the top of "Allgemein" only while pasting is not allowed yet.
+struct PermissionWarningSection: View {
     @Bindable var appState: AppState
 
-    private enum FieldFocus {
-        case openAIAPIKey
-    }
-
-    @State private var launchAtLoginService = LaunchAtLoginService()
-    @State private var currentInstallLocation = BlitztextInstallLocationService.currentInstallLocation
-    @State private var openAIAPIKey = ""
-    @State private var editingAPIKey = false
-    @State private var saved = false
-    @State private var saveErrorText: String?
-    @State private var installActionErrorText: String?
-    @State private var showCleanupOptions = false
-    @State private var deleteLocalDataOnCleanup = true
-    @State private var cleanupStatusText: String?
-    @State private var cleanupErrorText: String?
-    @FocusState private var focusedField: FieldFocus?
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            VStack(alignment: .leading, spacing: 8) {
-                SectionLabel(text: "Berechtigungen")
+        SettingsSection(title: "Berechtigungen") {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(BlitztextTheme.danger)
+                    .frame(width: 18, height: 18)
 
-                HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: appState.accessibilityPermissionGranted ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(appState.accessibilityPermissionGranted ? .green : .orange)
-                        .frame(width: 18, height: 18)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Direktes Einf\u{00FC}gen ist noch nicht freigegeben.")
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(.primary)
 
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(appState.accessibilityPermissionGranted ? "Direktes Einfügen ist freigegeben." : "Direktes Einfügen ist noch nicht freigegeben.")
-                            .font(.system(size: 11.5, weight: .semibold))
-                            .foregroundStyle(.primary)
-
-                        Text("Öffne Bedienungshilfen und aktiviere Blitztext. Falls Blitztext schon aktiv ist, einmal aus- und wieder einschalten.")
-                            .font(.system(size: 10.5))
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-
-                HStack(spacing: 8) {
-                    Button("Bedienungshilfen öffnen") {
-                        appState.requestAccessibilityPermission()
-                    }
-                    .buttonStyle(SubtleButtonStyle())
-
-                    Button("Erneut prüfen") {
-                        appState.refreshAccessibilityPermission()
-                    }
-                    .buttonStyle(SubtleButtonStyle())
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    SectionLabel(text: "OpenAI API Key")
-                    Spacer()
-                    if appState.hasValue(for: .openAIAPIKey) && !editingAPIKey {
-                        Button("Aendern") { editingAPIKey = true }
-                            .font(.system(size: 10, weight: .medium))
-                            .buttonStyle(.plain)
-                            .foregroundStyle(.blue)
-                    }
-                }
-
-                if appState.hasValue(for: .openAIAPIKey) && !editingAPIKey {
-                    HStack(spacing: 6) {
-                        Image(systemName: "lock.fill")
-                            .font(.system(size: 9))
-                            .foregroundStyle(.green.opacity(0.8))
-                        Text(appState.apiKeyDisplayValue(for: .openAIAPIKey))
-                            .font(.system(size: 11, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(Color(nsColor: .controlBackgroundColor))
-                    )
-                } else {
-                    HStack(spacing: 8) {
-                        SecureField("sk-...", text: $openAIAPIKey)
-                            .textFieldStyle(.roundedBorder)
-                            .font(.system(size: 11.5))
-                            .focused($focusedField, equals: .openAIAPIKey)
-
-                        Button("Einfuegen") {
-                            pasteAPIKeyFromClipboard()
-                        }
-                        .buttonStyle(SubtleButtonStyle())
-                    }
-                }
-
-                Text("Dein Key bleibt lokal in dieser App. Audio und Text werden direkt an die OpenAI API gesendet.")
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
-                SectionLabel(text: "Installation")
-
-                Text(installationHeadline)
-                    .font(.system(size: 11.5, weight: .semibold))
-                    .foregroundStyle(.primary)
-
-                Text(installationDetail)
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Text(BlitztextInstallLocationService.bundleURL.path)
-                    .font(.system(size: 10.5, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-
-                if !BlitztextInstallLocationService.otherInstalledBundleURLs.isEmpty {
-                    Text("Weitere Blitztext-Kopien auf diesem Mac können doppelte Login-Items auslösen.")
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(.orange)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                HStack(spacing: 8) {
-                    if BlitztextInstallLocationService.shouldOfferMoveToApplications {
-                        Button("Nach /Applications bewegen") {
-                            moveToApplications()
-                        }
-                        .buttonStyle(SubtleButtonStyle())
-                    }
-
-                    Button("Im Finder zeigen") {
-                        revealInFinder(urls: [BlitztextInstallLocationService.bundleURL])
-                    }
-                    .buttonStyle(SubtleButtonStyle())
-
-                    if !BlitztextInstallLocationService.otherInstalledBundleURLs.isEmpty {
-                        Button("Weitere Kopien zeigen") {
-                            revealInFinder(urls: BlitztextInstallLocationService.otherInstalledBundleURLs)
-                        }
-                        .buttonStyle(SubtleButtonStyle())
-                    }
-                }
-
-                if let installActionErrorText {
-                    Text(installActionErrorText)
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(.red)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
-                SectionLabel(text: "Updates")
-
-                Text("Diese Preview hat keinen oeffentlichen Update-Feed. Baue neue Versionen selbst aus dem Repo.")
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                if !currentInstallLocation.isCanonicalInstall {
-                    Text("Hotkeys und Login-Start laufen am stabilsten, wenn Blitztext aus /Applications gestartet wird.")
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(.orange)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else {
-                    Text("Updates sind in dieser Preview manuell: pull, build, starten.")
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            // Launch at Login
-            VStack(alignment: .leading, spacing: 8) {
-                SectionLabel(text: "Beim Anmelden")
-
-                Toggle("Blitztext automatisch starten", isOn: Binding(
-                    get: { launchAtLoginService.isEnabled },
-                    set: { launchAtLoginService.setEnabled($0) }
-                ))
-                .toggleStyle(.switch)
-
-                Text(launchAtLoginService.errorText ?? launchAtLoginService.helperText)
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(
-                        launchAtLoginService.errorText == nil
-                            ? AnyShapeStyle(.secondary)
-                            : AnyShapeStyle(.red)
-                    )
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            if let saveErrorText {
-                Text(saveErrorText)
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            VStack(alignment: .leading, spacing: 6) {
-                SectionLabel(text: "Hinweis")
-
-                Text("Fuer direktes Einfuegen: Blitztext einmal nach /Applications legen und danach Mikrofon sowie Bedienungshilfen erlauben.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color.primary.opacity(0.03))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .strokeBorder(Color.primary.opacity(0.05), lineWidth: 0.5)
-                    )
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
-                SectionLabel(text: "Sauber Entfernen")
-
-                Text("Vor dem Löschen Blitztext erst auf diesem Mac bereinigen. So verschwinden Anmeldestart und lokale Daten sauber aus dem Weg.")
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                if showCleanupOptions {
-                    Toggle("Zugangsdaten und Einstellungen dieses Macs löschen", isOn: $deleteLocalDataOnCleanup)
-                        .toggleStyle(.switch)
-
-                    Text("Danach Blitztext beenden und die App aus /Applications löschen. Bereits verwaiste alte Login-Items können in den Systemeinstellungen einmalig manuell entfernt werden.")
+                    Text("\u{00D6}ffne Bedienungshilfen und aktiviere Blitztext. Falls Blitztext schon aktiv ist, einmal aus- und wieder einschalten.")
                         .font(.system(size: 10.5))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
-
-                    HStack(spacing: 8) {
-                        Button("Abbrechen") {
-                            showCleanupOptions = false
-                        }
-                        .buttonStyle(SubtleButtonStyle())
-
-                        Button("Jetzt bereinigen") {
-                            runCleanup()
-                        }
-                        .buttonStyle(SubtleButtonStyle())
-                        .foregroundStyle(.red)
-                    }
-                } else {
-                    Button("Entfernung vorbereiten") {
-                        showCleanupOptions = true
-                    }
-                    .buttonStyle(SubtleButtonStyle())
-                }
-
-                if let cleanupStatusText {
-                    Text(cleanupStatusText)
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(.green)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                if let cleanupErrorText {
-                    Text(cleanupErrorText)
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(.red)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
-            // Save button (right-aligned, text only)
-            HStack {
-                Spacer()
-                Button {
-                    save()
-                } label: {
-                    if saved {
-                        HStack(spacing: 4) {
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 10, weight: .bold))
-                            Text("Gespeichert")
-                        }
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.green)
-                    } else {
-                        Text("Speichern")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(.blue)
-                    }
+            HStack(spacing: 8) {
+                Button("Bedienungshilfen \u{00F6}ffnen") {
+                    appState.requestAccessibilityPermission()
                 }
                 .buttonStyle(SubtleButtonStyle())
-                .animation(.easeInOut(duration: 0.2), value: saved)
-            }
-        }
-        .padding(16)
-        .onAppear {
-            launchAtLoginService.refresh()
-            refreshInstallState()
-            load()
-            if !appState.hasValue(for: .openAIAPIKey) {
-                editingAPIKey = true
-                focusedField = .openAIAPIKey
+
+                Button("Erneut pr\u{00FC}fen") {
+                    appState.refreshAccessibilityPermission()
+                }
+                .buttonStyle(SubtleButtonStyle())
             }
         }
     }
+}
 
-    private func load() {
-        openAIAPIKey = ""
+/// Shown only when Blitztext runs outside /Applications or a second copy exists.
+struct InstallationWarningSection: View {
+    @State private var currentInstallLocation = BlitztextInstallLocationService.currentInstallLocation
+    @State private var installActionErrorText: String?
+
+    static var isNeeded: Bool {
+        !BlitztextInstallLocationService.currentInstallLocation.isCanonicalInstall
+            || !BlitztextInstallLocationService.otherInstalledBundleURLs.isEmpty
     }
 
-    private func save() {
-        saveErrorText = nil
-        cleanupStatusText = nil
-        cleanupErrorText = nil
-        KeychainService.invalidateCache()
-        let trimmedAPIKey = openAIAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+    var body: some View {
+        SettingsSection(title: "Installation") {
 
-        if editingAPIKey || !appState.hasValue(for: .openAIAPIKey) {
-            guard !trimmedAPIKey.isEmpty else {
-                saveErrorText = "Bitte trage deinen OpenAI API Key ein."
-                return
+            Text(installationHeadline)
+                .font(.system(size: 11.5, weight: .semibold))
+                .foregroundStyle(.primary)
+
+            Text(installationDetail)
+                .font(.system(size: 10.5))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text(BlitztextInstallLocationService.bundleURL.path)
+                .font(.system(size: 10.5, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+
+            if !BlitztextInstallLocationService.otherInstalledBundleURLs.isEmpty {
+                Text("Auf diesem Mac liegen weitere Blitztext-Kopien. Behalte nur eine, sonst startet die App womöglich doppelt.")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            do {
-                try KeychainService.save(key: .openAIAPIKey, value: trimmedAPIKey)
-                openAIAPIKey = ""
-                editingAPIKey = false
-            } catch {
-                saveErrorText = "OpenAI API Key konnte nicht gespeichert werden."
-                return
+
+            HStack(spacing: 8) {
+                if BlitztextInstallLocationService.shouldOfferMoveToApplications {
+                    Button("Nach /Applications bewegen") {
+                        moveToApplications()
+                    }
+                    .buttonStyle(SubtleButtonStyle())
+                }
+
+                Button("Im Finder zeigen") {
+                    revealInFinder(urls: [BlitztextInstallLocationService.bundleURL])
+                }
+                .buttonStyle(SubtleButtonStyle())
+
+                if !BlitztextInstallLocationService.otherInstalledBundleURLs.isEmpty {
+                    Button("Weitere Kopien zeigen") {
+                        revealInFinder(urls: BlitztextInstallLocationService.otherInstalledBundleURLs)
+                    }
+                    .buttonStyle(SubtleButtonStyle())
+                }
+            }
+
+            if let installActionErrorText {
+                Text(installActionErrorText)
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(BlitztextTheme.danger)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
-
-        KeychainService.invalidateCache()
-        if !appState.hasValue(for: .openAIAPIKey) {
-            saveErrorText = "OpenAI API Key wurde nicht persistent gespeichert. Bitte App neu starten und erneut versuchen."
-            return
-        }
-
-        withAnimation(.easeInOut(duration: 0.2)) { saved = true }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            withAnimation(.easeInOut(duration: 0.2)) { saved = false }
-        }
-    }
-
-    private func pasteAPIKeyFromClipboard() {
-        guard let rawText = NSPasteboard.general.string(forType: .string) else {
-            saveErrorText = "Zwischenablage enthält keinen Text."
-            return
-        }
-
-        let firstLine = rawText.components(separatedBy: .newlines).first ?? rawText
-        let trimmedKey = firstLine.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmedKey.range(of: Self.openAIAPIKeyPattern, options: .regularExpression) != nil else {
-            saveErrorText = "Zwischenablage enthält keinen plausiblen OpenAI API Key."
-            return
-        }
-
-        openAIAPIKey = trimmedKey
-        NSPasteboard.general.clearContents()
-        saveErrorText = nil
+        .onAppear { refreshInstallState() }
     }
 
     private var installationHeadline: String {
@@ -443,9 +191,9 @@ struct AccessSettingsView: View {
             }
             return "Diese Kopie ist korrekt. Zusätzliche Kopien solltest du später entfernen."
         case .userApplications:
-            return "Fuer stabile Hotkeys und Login-Items sollte Blitztext nur aus /Applications laufen."
+            return "Für Team-Rollouts und saubere Updates sollte Blitztext nur aus /Applications laufen."
         case .outsideApplications:
-            return "Verschiebe Blitztext einmal nach /Applications, damit Anmeldestart und Hotkeys sauber bleiben."
+            return "Verschiebe Blitztext einmal nach /Applications, damit Anmeldestart und spätere Updates sauber bleiben."
         case .unknown:
             return "Öffne Blitztext möglichst direkt aus /Applications."
         }
@@ -466,6 +214,187 @@ struct AccessSettingsView: View {
         }
     }
 
+    private func revealInFinder(urls: [URL]) {
+        guard !urls.isEmpty else { return }
+        NSWorkspace.shared.activateFileViewerSelecting(urls)
+    }
+}
+
+struct LaunchAtLoginSection: View {
+    @State private var launchAtLoginService = LaunchAtLoginService()
+
+    var body: some View {
+        SettingsSection(title: "Beim Anmelden") {
+
+            Toggle("Blitztext automatisch starten", isOn: Binding(
+                get: { launchAtLoginService.isEnabled },
+                set: { launchAtLoginService.setEnabled($0) }
+            ))
+            .toggleStyle(.trailingSwitch)
+
+            Text(launchAtLoginService.errorText ?? launchAtLoginService.helperText)
+                .font(.system(size: 10.5))
+                .foregroundStyle(
+                    launchAtLoginService.errorText == nil
+                        ? AnyShapeStyle(.secondary)
+                        : AnyShapeStyle(.red)
+                )
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .onAppear { launchAtLoginService.refresh() }
+    }
+}
+
+/// Version, GitHub, release notes, licenses, updates and removal.
+struct AboutBlitztextSection: View {
+    @Bindable var appState: AppState
+
+    @State private var showCleanupOptions = false
+    @State private var deleteLocalDataOnCleanup = true
+    @State private var cleanupStatusText: String?
+    @State private var cleanupErrorText: String?
+
+    static let repositoryURL = "https://github.com/cmagnussen/blitztext-app"
+
+    var body: some View {
+        SettingsSection(title: "\u{00DC}ber Blitztext") {
+
+            HStack(spacing: 10) {
+                Text("Version \(appVersion)")
+                    .font(.system(size: 11.5, weight: .semibold))
+                Spacer(minLength: 8)
+                Button {
+                    if let url = URL(string: Self.repositoryURL) {
+                        NSWorkspace.shared.open(url)
+                    }
+                } label: {
+                    Label {
+                        Text("Auf GitHub ansehen")
+                    } icon: {
+                        Image("GitHubMark")
+                            .resizable()
+                            .frame(width: 13, height: 13)
+                    }
+                    .font(.system(size: 11.5, weight: .medium))
+                }
+                .buttonStyle(.glassAction)
+                .help("Blitztext ist Open Source. Ein Stern auf GitHub hilft.")
+            }
+
+            Button("Neuigkeiten in \(WhatsNew.version) anzeigen") {
+                appState.showWhatsNewAgain()
+            }
+            .buttonStyle(SubtleButtonStyle())
+
+            Button("Lizenzen und Hinweise") {
+                if let url = Bundle.main.url(forResource: "Licenses", withExtension: "txt") {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+            .buttonStyle(SubtleButtonStyle())
+
+            if appState.appUpdateService.isManagedByDeviceManagement {
+                Text("Neue Versionen installiert die Ger\u{00E4}teverwaltung dieses Macs automatisch.")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if appState.appUpdateService.updatesInApp {
+                if !BlitztextInstallLocationService.currentInstallLocation.isCanonicalInstall {
+                    Text("Auto-Updates laufen erst sauber, wenn Blitztext aus /Applications gestartet wird.")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    Button("Nach Updates suchen") {
+                        appState.appUpdateService.checkForUpdates()
+                    }
+                    .buttonStyle(SubtleButtonStyle())
+
+                    Toggle("Automatisch nach Updates suchen", isOn: Binding(
+                        get: { appState.appUpdateService.automaticallyChecksForUpdates },
+                        set: { appState.appUpdateService.automaticallyChecksForUpdates = $0 }
+                    ))
+                    .toggleStyle(.trailingSwitch)
+
+                    Toggle("Updates automatisch laden", isOn: Binding(
+                        get: { appState.appUpdateService.automaticallyDownloadsUpdates },
+                        set: { appState.appUpdateService.automaticallyDownloadsUpdates = $0 }
+                    ))
+                    .toggleStyle(.trailingSwitch)
+                }
+
+                Text(appState.appUpdateService.statusText)
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                // No update feed in this build: new versions come from the releases page.
+                Text("Neue Versionen gibt es auf der Releases-Seite.")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Button("Releases-Seite \u{00F6}ffnen") {
+                    if let url = URL(string: Self.repositoryURL + "/releases") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+                .buttonStyle(SubtleButtonStyle())
+            }
+
+            Divider().opacity(0.3)
+
+            if showCleanupOptions {
+                Toggle("Einstellungen, API-Keys und Sprachmodelle l\u{00F6}schen", isOn: $deleteLocalDataOnCleanup)
+                    .toggleStyle(.trailingSwitch)
+
+                Text("Entfernt auch den Anmeldestart. Danach Blitztext beenden und die App aus /Applications l\u{00F6}schen.")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 8) {
+                    Button("Abbrechen") {
+                        showCleanupOptions = false
+                    }
+                    .buttonStyle(SubtleButtonStyle())
+
+                    Button("Jetzt bereinigen") {
+                        runCleanup()
+                    }
+                    .buttonStyle(SubtleButtonStyle())
+                    .foregroundStyle(BlitztextTheme.danger)
+                }
+            } else {
+                Button("Blitztext von diesem Mac entfernen \u{2026}") {
+                    showCleanupOptions = true
+                }
+                .buttonStyle(SubtleButtonStyle())
+            }
+
+            if let cleanupStatusText {
+                Text(cleanupStatusText)
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let cleanupErrorText {
+                Text(cleanupErrorText)
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(BlitztextTheme.danger)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var appVersion: String {
+        let info = Bundle.main.infoDictionary ?? [:]
+        let version = (info["CFBundleShortVersionString"] as? String) ?? "?"
+        let build = (info["CFBundleVersion"] as? String) ?? "?"
+        return "\(version) (\(build))"
+    }
+
     private func runCleanup() {
         cleanupStatusText = nil
         cleanupErrorText = nil
@@ -474,13 +403,10 @@ struct AccessSettingsView: View {
             ? BlitztextCleanupService.cleanupUserData()
             : BlitztextCleanupService.removeLaunchAtLoginRegistration()
 
-        KeychainService.invalidateCache()
-        launchAtLoginService.refresh()
-        refreshInstallState()
-
         if deleteLocalDataOnCleanup {
-            openAIAPIKey = ""
-            editingAPIKey = true
+            AIProvider.allCases.forEach(APIKeyStore.delete)
+            appState.aiProvider = nil
+            appState.aiKeyRevision += 1
         }
 
         if report.failedItems.isEmpty {
@@ -508,11 +434,16 @@ struct AccessSettingsView: View {
     }
 }
 
-// MARK: - Customize Settings (Tab 2: Anpassen)
+// MARK: - Settings panes
 
 struct CustomizeSettingsView: View {
     @Bindable var appState: AppState
+    var pane: SettingsPane = .general
     @State private var newTerm = ""
+    @State private var newSpoken = ""
+    @State private var newWritten = ""
+    @State private var showsImproverPrompt = false
+    @State private var showsDampfPrompt = false
 
     private var installedLocalModels: [LocalTranscriptionModel] {
         LocalTranscriptionService.installedModels()
@@ -522,26 +453,155 @@ struct CustomizeSettingsView: View {
         LocalTranscriptionService.modelOptions()
     }
 
+    private var installedModelsText: String {
+        let count = installedLocalModels.count
+        return count == 1 ? "1 lokales Sprachmodell installiert." : "\(count) lokale Sprachmodelle installiert."
+    }
+
+    private var aiEngineStatusText: String {
+        switch TextRewriter.localAvailability {
+        case .available:
+            return appState.appSettings.rewriteEngine == .automatic
+                ? "Apple Intelligence ist bereit. Umformulieren läuft auf diesem Mac."
+                : "Umformulieren läuft über den Modell-Anbieter unten."
+        case .unavailable(let reason):
+            return appState.isAIProviderReady
+                ? "\(reason) Bis dahin übernimmt der Modell-Anbieter unten."
+                : "\(reason) Für die KI-Modi unten einen Modell-Anbieter mit API-Key hinterlegen."
+        }
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: 18) {
 
-            // MARK: Lokaler Modus
-            VStack(alignment: .leading, spacing: 10) {
-                SectionLabel(text: "Sicherer Lokaler Modus")
+            if pane == .general {
+            if !appState.accessibilityPermissionGranted {
+                PermissionWarningSection(appState: appState)
+            }
+            if InstallationWarningSection.isNeeded {
+                InstallationWarningSection()
+            }
 
-                Toggle("Sicherer Lokaler Modus", isOn: $appState.appSettings.secureLocalModeEnabled)
-                    .toggleStyle(.switch)
-                    .onChange(of: appState.appSettings.secureLocalModeEnabled) { _, newValue in
-                        if newValue && !appState.selectedLocalModelIsInstalled {
-                            appState.installSelectedLocalModel()
+            PipelineOverviewSection(appState: appState)
+
+            // MARK: Tastenkuerzel
+            SettingsSection(title: "Tastenk\u{00FC}rzel") {
+
+                VStack(spacing: 6) {
+                    ForEach(WorkflowType.mainMenuCases) { type in
+                        HStack(spacing: 6) {
+                            let replaced = appState.appSettings.customHotkey(for: type) != nil
+                                && !appState.hotkeyService.failedCustomHotkeys.contains(type)
+                            Text(type.hotkeyLabel)
+                                .font(.system(size: 10.5, design: .monospaced))
+                                .strikethrough(replaced)
+                                .foregroundStyle(replaced ? .tertiary : .secondary)
+                                .frame(width: 92, alignment: .leading)
+                                .help(replaced ? "Ersetzt durch dein eigenes K\u{00FC}rzel" : "Standard-K\u{00FC}rzel, nur auf Apple-Tastaturen")
+                            Text(appState.displayName(for: type))
+                                .font(.system(size: 11.5, weight: .medium))
+                                .lineLimit(1)
+                            Spacer(minLength: 4)
+                            HotkeyRecorderButton(appState: appState, type: type)
                         }
                     }
+                }
+
+                Text("Eigenes K\u{00FC}rzel rechts festlegen, z.\u{202F}B. \u{2303}\u{2325}D oder F13. Es ersetzt das fn-K\u{00FC}rzel dieses Modus. N\u{00F6}tig f\u{00FC}r externe Tastaturen, dort funktioniert fn nicht. \u{2303}Space und \u{2303}\u{2325}Space belegt macOS f\u{00FC}r die Eingabequelle.")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                // Mode picker
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Modus")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+
+                    SegmentedToggle(
+                        options: HotkeyMode.allCases,
+                        selection: $appState.appSettings.hotkeyMode,
+                        label: { $0.displayName }
+                    )
+                }
+            }
+
+            // MARK: Aufnahme & Einfuegen
+            SettingsSection(title: "Aufnahme & Einf\u{00FC}gen") {
+
+                Toggle("Ton aus w\u{00E4}hrend der Aufnahme", isOn: $appState.appSettings.muteOutputWhileRecording)
+                    .toggleStyle(.trailingSwitch)
+                    .font(.system(size: 11.5))
+
+                Text("Podcast, Musik oder Video sind stumm, solange Blitztext aufnimmt, und danach sofort wieder zu h\u{00F6}ren. Pausieren kann Blitztext sie nicht, weil macOS Apps nicht verr\u{00E4}t, was gerade l\u{00E4}uft.")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Toggle("Zwischenablage danach wiederherstellen", isOn: $appState.appSettings.restoreClipboardAfterPaste)
+                    .toggleStyle(.trailingSwitch)
+                    .font(.system(size: 11.5))
+
+                Text("Was du vorher kopiert hattest, ist nach dem Einf\u{00FC}gen wieder da.")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Toggle("Automatische Abs\u{00E4}tze", isOn: $appState.appSettings.automaticParagraphs)
+                    .toggleStyle(.trailingSwitch)
+                    .font(.system(size: 11.5))
+
+                Text("Lange Diktate und Audiodateien bekommen nach etwa vier S\u{00E4}tzen einen Absatz. W\u{00F6}rter und Satzzeichen bleiben, wie sie sind.")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Toggle("An den Text am Cursor anpassen", isOn: $appState.appSettings.fitToSurroundingText)
+                    .toggleStyle(.trailingSwitch)
+                    .font(.system(size: 11.5))
+
+                Text("Setzt Leerzeichen und Gro\u{00DF}- und Kleinschreibung passend zum Text davor und danach. Blitztext liest dazu das Textfeld \u{00FC}ber die Bedienungshilfen, Passwortfelder nie.")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Verlauf aufbewahren")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+
+                    SegmentedToggle(
+                        options: HistoryRetention.allCases,
+                        selection: $appState.appSettings.historyRetention,
+                        label: { $0.displayName }
+                    )
+
+                    Text("Nur auf diesem Mac und verschl\u{00FC}sselt. Aus l\u{00F6}scht den Verlauf sofort.")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            LaunchAtLoginSection()
+
+            AboutBlitztextSection(appState: appState)
+            }
+
+            if pane == .models {
+            // MARK: Spracherkennung
+            SettingsSection(title: "Spracherkennung") {
+
+                Text("Blitztext transkribiert immer auf diesem Mac. Das Audio verlässt das Gerät nicht.")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 HStack(spacing: 6) {
                     Image(systemName: appState.selectedLocalModelIsInstalled ? "checkmark.circle.fill" : "arrow.down.circle.fill")
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(appState.selectedLocalModelIsInstalled ? .green : .blue)
-                    Text(appState.selectedLocalModelIsInstalled ? "\(installedLocalModels.count) lokales WhisperKit-Modell installiert." : "Das ausgewählte Modell wird beim Installieren lokal gespeichert.")
+                        .foregroundStyle(appState.selectedLocalModelIsInstalled ? BlitztextTheme.accent : .secondary)
+                    Text(appState.selectedLocalModelIsInstalled ? installedModelsText : "Das ausgewählte Modell wird beim Installieren lokal gespeichert.")
                         .font(.system(size: 10.5))
                         .foregroundStyle(.secondary)
                     Spacer()
@@ -563,6 +623,10 @@ struct CustomizeSettingsView: View {
                     .labelsHidden()
                     .controlSize(.small)
                     .disabled(appState.isDownloadingLocalModel)
+                }
+
+                if let rating = LocalModelRating.rating(for: appState.selectedLocalModelName) {
+                    ModelRatingPanel(rating: rating, modelName: appState.selectedLocalModelName)
                 }
 
                 if let progress = appState.localModelDownloadProgress {
@@ -588,88 +652,57 @@ struct CustomizeSettingsView: View {
                 if let errorText = appState.localModelDownloadErrorText {
                     Text(errorText)
                         .font(.system(size: 10.5))
-                        .foregroundStyle(.red)
+                        .foregroundStyle(BlitztextTheme.danger)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
-            // MARK: Tastenkuerzel
-            VStack(alignment: .leading, spacing: 10) {
-                SectionLabel(text: "Tastenk\u{00FC}rzel")
+            // MARK: KI-Modi
+            SettingsSection(title: "KI-Modi") {
 
-                VStack(spacing: 6) {
-                    ForEach(WorkflowType.mainMenuCases) { type in
-                        HStack {
-                            Text(type.hotkeyLabel)
-                                .font(.system(size: 11, design: .monospaced))
-                                .foregroundStyle(.secondary)
-                                .frame(width: 124, alignment: .leading)
-                            Text(appState.displayName(for: type))
-                                .font(.system(size: 11.5, weight: .medium))
-                            Spacer()
-                        }
+                Picker("", selection: $appState.appSettings.rewriteEngine) {
+                    ForEach(TextRewriter.Engine.allCases) { engine in
+                        Text(engine.displayName).tag(engine)
                     }
                 }
+                .pickerStyle(.segmented)
+                .labelsHidden()
 
-                // Mode picker
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Modus")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+                Text(aiEngineStatusText)
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                    Picker("", selection: $appState.appSettings.hotkeyMode) {
-                        ForEach(HotkeyMode.allCases) { mode in
-                            Text(mode.displayName).tag(mode)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                }
+                Toggle("KI-Modi sehen den Text am Cursor", isOn: $appState.appSettings.aiSeesFieldContext)
+                    .toggleStyle(.trailingSwitch)
+                    .font(.system(size: 11.5))
+
+                Text("Blitztext+, $%&! und :) bekommen den Text rund um den Cursor als Kontext, etwa die Mail, auf die du antwortest. Mit einem Modell-Anbieter geht dieser Text mit an den Anbieter.")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
-            // MARK: Blitztext+
-            VStack(alignment: .leading, spacing: 10) {
-                SectionLabel(text: "Blitztext+")
+            MacAIProviderSection(appState: appState)
+            }
 
-                // Tone
+            if pane == .workflows {
+            // MARK: Blitztext+
+            SettingsSection(title: appState.displayName(for: .textImprover)) {
+                ModeSummary(appState: appState, type: .textImprover)
+
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Schreibstil")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
 
-                    Picker("", selection: $appState.textImprovementSettings.tone) {
-                        ForEach(TextImprovementSettings.TextTone.allCases) { tone in
-                            Text(tone.displayName).tag(tone)
-                        }
-                    }
-                    .pickerStyle(.segmented)
+                    SegmentedToggle(
+                        options: TextImprovementSettings.TextTone.allCases,
+                        selection: $appState.textImprovementSettings.tone,
+                        label: { $0.displayName }
+                    )
                 }
 
-                // System Prompt
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Eigene Anweisung")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-
-                    TextEditor(text: $appState.textImprovementSettings.systemPrompt)
-                        .font(.system(size: 11))
-                        .frame(height: 64)
-                        .scrollContentBackground(.hidden)
-                        .padding(8)
-                        .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 6))
-                        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5))
-                        .overlay(alignment: .topLeading) {
-                            if appState.textImprovementSettings.systemPrompt.isEmpty {
-                                Text("z.B. \"Schreibe pr\u{00E4}gnant und ohne F\u{00FC}llw\u{00F6}rter.\"")
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(.quaternary)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 12)
-                                    .allowsHitTesting(false)
-                            }
-                        }
-                }
-
-                // Context
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Kontext")
                         .font(.system(size: 11))
@@ -679,58 +712,75 @@ struct CustomizeSettingsView: View {
                         .textFieldStyle(.roundedBorder)
                         .font(.system(size: 11))
                 }
+
+                DisclosureGroup(isExpanded: $showsImproverPrompt) {
+                    PromptEditor(
+                        text: $appState.textImprovementSettings.systemPrompt,
+                        placeholder: "z.B. \"Schreibe pr\u{00E4}gnant und ohne F\u{00FC}llw\u{00F6}rter.\"",
+                        height: 64
+                    )
+                    .padding(.top, 6)
+                } label: {
+                    Text(appState.textImprovementSettings.systemPrompt.isEmpty ? "Eigene Anweisung" : "Eigene Anweisung (aktiv)")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
             }
 
             // MARK: Blitztext $%&!
-            VStack(alignment: .leading, spacing: 10) {
-                SectionLabel(text: "Blitztext $%&!")
+            SettingsSection(title: appState.displayName(for: .dampfAblassen)) {
+                ModeSummary(appState: appState, type: .dampfAblassen)
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Eigene Anweisung")
+                DisclosureGroup(isExpanded: $showsDampfPrompt) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        PromptEditor(
+                            text: $appState.dampfAblassenSettings.systemPrompt,
+                            placeholder: "z.B. \"Formuliere den Text sachlich und freundlich um.\"",
+                            height: 110
+                        )
+                        if dampfPromptIsCustom {
+                            Button("Standard wiederherstellen") {
+                                appState.dampfAblassenSettings.systemPrompt = ModePrompts.dampfAblassenDefault
+                            }
+                            .buttonStyle(SubtleButtonStyle())
+                        }
+                    }
+                    .padding(.top, 6)
+                } label: {
+                    Text(dampfPromptIsCustom ? "Anweisung (angepasst)" : "Anweisung (Standard)")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
-
-                    TextEditor(text: $appState.dampfAblassenSettings.systemPrompt)
-                        .font(.system(size: 11))
-                        .frame(height: 80)
-                        .scrollContentBackground(.hidden)
-                        .padding(8)
-                        .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 6))
-                        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5))
-                        .overlay(alignment: .topLeading) {
-                            if appState.dampfAblassenSettings.systemPrompt.isEmpty {
-                                Text("z.B. \"Formuliere den Text sachlich und freundlich um.\"")
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(.quaternary)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 12)
-                                    .allowsHitTesting(false)
-                            }
-                        }
                 }
             }
 
             // MARK: Blitztext :)
-            VStack(alignment: .leading, spacing: 10) {
-                SectionLabel(text: "Blitztext :)")
+            SettingsSection(title: appState.displayName(for: .emojiText)) {
+                ModeSummary(appState: appState, type: .emojiText)
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Emoji-Dichte")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
 
-                    Picker("", selection: $appState.emojiTextSettings.emojiDensity) {
-                        ForEach(EmojiTextSettings.EmojiDensity.allCases) { density in
-                            Text(density.displayName).tag(density)
-                        }
-                    }
-                    .pickerStyle(.segmented)
+                    SegmentedToggle(
+                        options: EmojiTextSettings.EmojiDensity.allCases,
+                        selection: $appState.emojiTextSettings.emojiDensity,
+                        label: { $0.displayName }
+                    )
                 }
             }
 
+            AppModeRulesSection(appState: appState)
+            }
+
+            if pane == .dictionary {
             // MARK: Eigennamen
-            VStack(alignment: .leading, spacing: 10) {
-                SectionLabel(text: "Eigennamen")
+            SettingsSection(title: "Eigennamen") {
+
+                Text("Namen und Fachbegriffe, die Blitztext genau so schreiben soll. KI-Modi \u{00FC}bernehmen sie unver\u{00E4}ndert.")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 // Term chips
                 if !appState.textImprovementSettings.customTerms.isEmpty {
@@ -773,15 +823,104 @@ struct CustomizeSettingsView: View {
                     Button { addTerm() } label: {
                         Image(systemName: "plus.circle.fill")
                             .font(.system(size: 16))
-                            .foregroundStyle(.blue.opacity(0.7))
+                            .foregroundStyle(BlitztextTheme.accent)
                     }
                     .buttonStyle(SubtleButtonStyle())
                     .disabled(newTerm.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
+
+                Toggle("Eigennamen automatisch korrigieren", isOn: $appState.appSettings.correctCustomTermsEnabled)
+                    .toggleStyle(.trailingSwitch)
+                    .font(.system(size: 11.5))
+
+                Text("Korrigiert \u{00E4}hnlich klingende Schreibweisen auf deine Eigennamen, z.\u{202F}B. \u{201E}Black Boat\u{201C} zu \u{201E}Blackboat\u{201C}. Echte W\u{00F6}rter bleiben unver\u{00E4}ndert.")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            SettingsSection(title: "Ersetzungen") {
+                Text("F\u{00FC}r Begriffe, die anders klingen, als sie geschrieben werden. Zum Beispiel wird aus \u{201E}n acht n\u{201C} immer \u{201E}n8n\u{201C}.")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                ForEach(appState.textImprovementSettings.replacements) { rule in
+                    HStack(spacing: 6) {
+                        Text(rule.spoken)
+                            .foregroundStyle(.secondary)
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: 8, weight: .semibold))
+                            .foregroundStyle(.tertiary)
+                        Text(rule.written)
+                            .fontWeight(.semibold)
+                        Spacer()
+                        Button {
+                            withAnimation(.easeOut(duration: 0.15)) {
+                                appState.textImprovementSettings.replacements.removeAll { $0.id == rule.id }
+                            }
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 7, weight: .bold))
+                                .foregroundStyle(.tertiary)
+                        }
+                        .buttonStyle(SubtleButtonStyle())
+                        .help("Ersetzung entfernen")
+                    }
+                    .font(.system(size: 10.5))
+                }
+
+                HStack(spacing: 6) {
+                    TextField("Gesprochen", text: $newSpoken)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 11))
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.tertiary)
+                    TextField("Geschrieben", text: $newWritten)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 11))
+                        .onSubmit { addReplacement() }
+                    Button { addReplacement() } label: {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 16))
+                            .foregroundStyle(BlitztextTheme.accent)
+                    }
+                    .buttonStyle(SubtleButtonStyle())
+                    .disabled(!canAddReplacement)
+                }
+            }
+
+            SettingsSection(title: "F\u{00FC}llw\u{00F6}rter") {
+                Toggle("\u{201E}\u{00C4}h\u{201C} und \u{201E}\u{00E4}hm\u{201C} entfernen", isOn: $appState.appSettings.removeFillerWordsEnabled)
+                    .toggleStyle(.trailingSwitch)
+                    .font(.system(size: 11.5))
+            }
             }
 
         }
-        .padding(16)
+    }
+
+    private var dampfPromptIsCustom: Bool {
+        appState.dampfAblassenSettings.systemPrompt != ModePrompts.dampfAblassenDefault
+    }
+
+    private var canAddReplacement: Bool {
+        !newSpoken.trimmingCharacters(in: .whitespaces).isEmpty && !newWritten.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    private func addReplacement() {
+        guard canAddReplacement else { return }
+        let rule = TermReplacement(
+            spoken: newSpoken.trimmingCharacters(in: .whitespaces),
+            written: newWritten.trimmingCharacters(in: .whitespaces)
+        )
+        withAnimation(.easeOut(duration: 0.15)) {
+            appState.textImprovementSettings.replacements.removeAll { $0.id == rule.id }
+            appState.textImprovementSettings.replacements.append(rule)
+        }
+        newSpoken = ""
+        newWritten = ""
     }
 
     private func addTerm() {
@@ -791,6 +930,186 @@ struct CustomizeSettingsView: View {
             appState.textImprovementSettings.customTerms.append(trimmed)
         }
         newTerm = ""
+    }
+}
+
+// MARK: - Mode settings helpers
+
+/// What a mode does and which shortcut starts it, at the top of its settings.
+private struct ModeSummary: View {
+    @Bindable var appState: AppState
+    let type: WorkflowType
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(type.subtitle)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 6)
+            Text(appState.hotkeyLabel(for: type))
+                .font(.system(size: 10.5, design: .monospaced))
+                .foregroundStyle(.tertiary)
+        }
+    }
+}
+
+/// Multi-line instruction field with a placeholder.
+private struct PromptEditor: View {
+    @Binding var text: String
+    let placeholder: String
+    let height: CGFloat
+
+    var body: some View {
+        TextEditor(text: $text)
+            .font(.system(size: 11))
+            .frame(height: height)
+            .scrollContentBackground(.hidden)
+            .padding(8)
+            .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5))
+            .overlay(alignment: .topLeading) {
+                if text.isEmpty {
+                    Text(placeholder)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.quaternary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 12)
+                        .allowsHitTesting(false)
+                }
+            }
+    }
+}
+
+// MARK: - Hotkey Recorder
+
+struct HotkeyRecorderButton: View {
+    @Bindable var appState: AppState
+    let type: WorkflowType
+
+    @State private var isRecording = false
+    @State private var monitor: Any?
+    @State private var globalMonitor: Any?
+    @State private var needsModifierHint = false
+    /// fn cannot be part of a global shortcut; macOS does not report it to Carbon hotkeys.
+    @State private var fnHint = false
+
+    private var combo: KeyCombo? {
+        appState.appSettings.customHotkey(for: type)
+    }
+
+    private var registrationFailed: Bool {
+        combo != nil && appState.hotkeyService.failedCustomHotkeys.contains(type)
+    }
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Button {
+                isRecording ? stopRecording() : startRecording()
+            } label: {
+                Text(buttonTitle)
+                    .font(.system(size: 10.5, weight: .medium, design: combo == nil || isRecording ? .default : .rounded))
+                    .foregroundStyle(isRecording ? BlitztextTheme.accent : (combo == nil ? .secondary : .primary))
+                    .lineLimit(1)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(
+                        RoundedRectangle(cornerRadius: 5)
+                            .fill(isRecording ? BlitztextTheme.accent.opacity(0.12) : Color.primary.opacity(0.05))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 5)
+                            .strokeBorder(registrationFailed ? BlitztextTheme.danger : Color.primary.opacity(0.08), lineWidth: 0.8)
+                    )
+            }
+            .buttonStyle(.plain)
+            .help(helpText)
+
+            if combo != nil && !isRecording {
+                Button {
+                    appState.setCustomHotkey(nil, for: type)
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                }
+                .buttonStyle(SubtleButtonStyle())
+                .help("Eigenes K\u{00FC}rzel entfernen")
+            }
+        }
+        .onDisappear { stopRecording() }
+    }
+
+    private var buttonTitle: String {
+        if isRecording {
+            if fnHint { return "fn geht nicht" }
+            return needsModifierHint ? "+ \u{2303}\u{2325}\u{2318}" : "Dr\u{00FC}cken ..."
+        }
+        if let combo {
+            return combo.displayLabel.replacingOccurrences(of: " + ", with: "")
+        }
+        return "Eigenes"
+    }
+
+    private var helpText: String {
+        if registrationFailed {
+            return "Dieses K\u{00FC}rzel ist bereits von macOS oder einer anderen App belegt."
+        }
+        return isRecording
+            ? "Tastenkombination mit \u{2303}, \u{2325} oder \u{2318} dr\u{00FC}cken (fn geht nicht), Escape bricht ab."
+            : "Eigenes Tastenk\u{00FC}rzel festlegen"
+    }
+
+    private func startRecording() {
+        guard monitor == nil else { return }
+        isRecording = true
+        needsModifierHint = false
+        fnHint = false
+        appState.hotkeyService.setCustomHotkeysSuspended(true)
+
+        // A local monitor only sees keys while Blitztext is the active app. The
+        // settings live in a popover of an accessory app, so make sure it is key.
+        NSApp.activate(ignoringOtherApps: true)
+        NSApp.windows.first { $0.isVisible && $0.canBecomeKey && $0.className.contains("Popover") }?.makeKey()
+
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            handleCaptured(event)
+            return nil
+        }
+        // Fallback when another app keeps focus anyway (needs Accessibility,
+        // which Blitztext already has for pasting). The key press still reaches
+        // that app, but the shortcut gets recorded.
+        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { event in
+            DispatchQueue.main.async { handleCaptured(event) }
+        }
+    }
+
+    private func handleCaptured(_ event: NSEvent) {
+        guard isRecording else { return }
+        switch KeyCombo.capture(from: event) {
+        case .combo(let combo):
+            appState.setCustomHotkey(combo, for: type)
+            stopRecording()
+        case .cancelled:
+            stopRecording()
+        case .needsModifier:
+            needsModifierHint = true
+            fnHint = event.modifierFlags.contains(.function)
+        }
+    }
+
+    private func stopRecording() {
+        if let monitor {
+            NSEvent.removeMonitor(monitor)
+        }
+        if let globalMonitor {
+            NSEvent.removeMonitor(globalMonitor)
+        }
+        monitor = nil
+        globalMonitor = nil
+        isRecording = false
+        needsModifierHint = false
+        fnHint = false
+        appState.hotkeyService.setCustomHotkeysSuspended(false)
     }
 }
 

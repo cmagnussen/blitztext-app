@@ -14,6 +14,13 @@ final class MenuBarStatusController {
     private var animationTimer: Timer?
     private var animationFrame = 0
     private var currentStatus: MenuBarStatus = .idle
+    /// Small dot on the idle icon while a release note is unread.
+    var showsNewBadge = false {
+        didSet {
+            guard oldValue != showsNewBadge else { return }
+            renderCurrentStatus()
+        }
+    }
 
     func attach(to button: NSStatusBarButton) {
         self.button = button
@@ -63,7 +70,11 @@ final class MenuBarStatusController {
 
     private func renderCurrentStatus() {
         guard let button else { return }
-        button.image = MenuBarStatusIconRenderer.makeImage(for: currentStatus, frame: animationFrame)
+        var image = MenuBarStatusIconRenderer.makeImage(for: currentStatus, frame: animationFrame)
+        if showsNewBadge, case .idle = currentStatus {
+            image = MenuBarStatusIconRenderer.withNewDot(image)
+        }
+        button.image = image
         button.image?.isTemplate = true
         button.toolTip = tooltip(for: currentStatus)
     }
@@ -95,6 +106,18 @@ final class MenuBarStatusController {
 }
 
 private enum MenuBarStatusIconRenderer {
+    static func withNewDot(_ base: NSImage) -> NSImage {
+        let size = NSSize(width: 18, height: 18)
+        return NSImage(size: size, flipped: false) { bounds in
+            base.draw(in: bounds)
+            let diameter: CGFloat = 5.5
+            let dot = NSRect(x: bounds.maxX - diameter, y: bounds.maxY - diameter, width: diameter, height: diameter)
+            NSColor.black.setFill()
+            NSBezierPath(ovalIn: dot).fill()
+            return true
+        }
+    }
+
     static func makeImage(for status: MenuBarStatus, frame: Int) -> NSImage {
         if case .idle = status, let baseImage = baseTemplateImage() {
             return baseImage
@@ -181,7 +204,7 @@ private enum MenuBarStatusIconRenderer {
         case .recording:
             let values: [CGFloat]
             switch type {
-            case .transcription, .localTranscription:
+            case .tapTalk, .localTapTalk:
                 values = [0.74, 1.0, 0.82, 0.92]
             case .textImprover:
                 values = [0.66, 0.84, 1.0, 0.8]
@@ -195,7 +218,7 @@ private enum MenuBarStatusIconRenderer {
         case .processing:
             let values: [CGFloat]
             switch type {
-            case .transcription, .localTranscription:
+            case .tapTalk, .localTapTalk:
                 values = [0.58, 0.72, 0.9, 0.72]
             case .textImprover:
                 values = [0.48, 0.68, 0.92, 0.84]
@@ -284,7 +307,7 @@ private enum MenuBarStatusIconRenderer {
 
     private static func recordingAlphaValues(for type: WorkflowType, frame: Int) -> [CGFloat] {
         switch type {
-        case .transcription, .localTranscription:
+        case .tapTalk, .localTapTalk:
             let patterns: [[CGFloat]] = [
                 [1.0, 0.42, 0.28, 0.18],
                 [0.82, 1.0, 0.4, 0.24],
@@ -321,7 +344,7 @@ private enum MenuBarStatusIconRenderer {
 
     private static func processingAlphaValues(for type: WorkflowType, frame: Int) -> [CGFloat] {
         switch type {
-        case .transcription, .localTranscription:
+        case .tapTalk, .localTapTalk:
             let patterns: [[CGFloat]] = [
                 [1.0, 0.84, 0.68, 0.52],
                 [0.92, 0.8, 0.64, 0.5],
@@ -358,10 +381,10 @@ private enum MenuBarStatusIconRenderer {
 
     private static func badgeSymbol(for type: WorkflowType) -> String {
         switch type {
-        case .transcription:
+        case .tapTalk:
             return "mic.fill"
-        case .localTranscription:
-            return "lock.shield.fill"
+        case .localTapTalk:
+            return "lock.fill"
         case .textImprover:
             return "text.alignleft"
         case .dampfAblassen:

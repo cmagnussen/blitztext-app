@@ -14,14 +14,28 @@ final class DampfAblassenWorkflow: Workflow {
 
     private let recorder = AudioRecorder()
     private let settings: DampfAblassenSettings
-    private let customTerms: [String]
     private let language: String
+    private let localModelName: String
+    private let rewriteEngine: TextRewriter.Engine
+    private let postProcessor: TranscriptPostProcessor
+    /// Text around the cursor for the AI step, nil when not allowed or not readable.
+    private let fieldContext: @MainActor () -> String?
     private var processingTask: Task<Void, Never>?
 
-    init(settings: DampfAblassenSettings, customTerms: [String] = [], language: String = "de") {
+    init(
+        settings: DampfAblassenSettings,
+        language: String = "de",
+        localModelName: String,
+        rewriteEngine: TextRewriter.Engine,
+        postProcessor: TranscriptPostProcessor = TranscriptPostProcessor(correctCustomTerms: false, removeFillerWords: false),
+        fieldContext: @escaping @MainActor () -> String? = { nil }
+    ) {
         self.settings = settings
-        self.customTerms = customTerms
         self.language = language
+        self.localModelName = localModelName
+        self.rewriteEngine = rewriteEngine
+        self.postProcessor = postProcessor
+        self.fieldContext = fieldContext
     }
 
     // MARK: - Recording State
@@ -44,7 +58,6 @@ final class DampfAblassenWorkflow: Workflow {
         if recorder.isRecording {
             recorder.stopRecording()
             guard !TranscriptionQualityService.shouldRejectRecording(duration: recorder.lastRecordingDuration) else {
-                recorder.discardRecording()
                 phase = .error("Keine Aufnahme erkannt.")
                 return
             }
@@ -60,7 +73,6 @@ final class DampfAblassenWorkflow: Workflow {
         if recorder.isRecording {
             recorder.stopRecording()
         }
-        recorder.discardRecording()
         phase = .idle
     }
 
@@ -74,37 +86,41 @@ final class DampfAblassenWorkflow: Workflow {
 
         phase = .running("Wird transkribiert ...")
         let recordingDuration = recorder.lastRecordingDuration
-        let vocabularyHints = recordingDuration >= 0.9 ? customTerms : []
 
         processingTask = Task {
-            defer {
-                try? FileManager.default.removeItem(at: url)
-            }
-
             do {
-                // Phase 1: Whisper transcription
-                let rawText = try await TranscriptionService.transcribe(
+                // Phase 1: local transcription (Parakeet or WhisperKit)
+                let rawText = try await LocalTranscriptionService.transcribe(
                     audioURL: url,
-                    customTerms: vocabularyHints,
-                    language: language
-                )
+                    language: language,
+                    modelName: localModelName
+                ) { [weak self] in
+                    self?.phase = .running(LocalTranscriptionService.slowPreparationMessage)
+                }
                 let cleanedRawText = TranscriptionQualityService.cleanedTranscript(rawText)
                 guard !TranscriptionQualityService.isLikelyArtifact(cleanedRawText, recordingDuration: recordingDuration) else {
                     phase = .error("Keine Aufnahme erkannt.")
                     return
                 }
 
+                let processedRawText = postProcessor.process(cleanedRawText)
+                guard !processedRawText.isEmpty else {
+                    phase = .error("Keine Aufnahme erkannt.")
+                    return
+                }
+
                 if Task.isCancelled { return }
 
-                // Phase 2: GPT dampf ablassen
+                // Phase 2: AI rewrite (on device or the connected provider)
                 phase = .running("Wird umformuliert ...")
 
-                let answer = try await LLMService.dampfAblassen(
-                    text: cleanedRawText,
-                    systemPrompt: settings.systemPrompt
+                let answer = try await TextRewriter.rewrite(
+                    processedRawText,
+                    instruction: ModePrompts.withFieldContext(ModePrompts.dampfAblassen(settings), context: fieldContext()),
+                    engine: rewriteEngine
                 )
                 let cleanedAnswer = TranscriptionQualityService.cleanedTranscript(answer)
-                guard cleanedAnswer != "KEINE_AUFNAHME_ERKANNT" else {
+                guard cleanedAnswer != ModePrompts.nothingRecognizedMarker else {
                     phase = .error("Keine Aufnahme erkannt.")
                     return
                 }

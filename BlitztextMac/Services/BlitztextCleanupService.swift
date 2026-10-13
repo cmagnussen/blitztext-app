@@ -19,10 +19,9 @@ enum BlitztextCleanupService {
     }
 
     static func cleanupUserData() -> CleanupReport {
-        KeychainService.delete(key: .openAIAPIKey)
-
-        return cleanup(paths: [
+        cleanup(paths: [
             AppSupportPaths.settingsURL,
+            AppSupportPaths.credentialsURL,
             AppSupportPaths.appSupportDirectoryURL,
             AppSupportPaths.cachesDirectoryURL,
             AppSupportPaths.preferencesURL,
@@ -35,11 +34,10 @@ enum BlitztextCleanupService {
     }
 
     static func removeApplicationSupportFiles() -> CleanupReport {
-        KeychainService.delete(key: .openAIAPIKey)
-
-        return cleanup(
+        cleanup(
             paths: [
                 AppSupportPaths.settingsURL,
+                AppSupportPaths.credentialsURL,
                 AppSupportPaths.appSupportDirectoryURL
             ],
             unregisterLaunchAtLogin: false

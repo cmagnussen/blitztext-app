@@ -4,28 +4,25 @@ This is a preview roadmap, not a promise.
 
 ## Current Scope
 
-- macOS menubar app
-- local recording and hotkeys
-- direct OpenAI API calls with a user-provided API key
-- transcription, rewriting, calmer-message, and emoji workflows
-- no hosted backend
-- no other platforms
-- no packaged public release
+- macOS menu bar app, signed and notarized release builds
+- local speech recognition (Parakeet v3, Whisper via WhisperKit)
+- writing modes with Apple Intelligence or an optional own model provider
+- audio files, own shortcuts, mode per app or website, dictionary with replacements, local history
+- text fitted to the cursor, sound muted while recording, optional automatic paragraphs
+- in-app updates from the GitHub releases (Sparkle)
+- no hosted backend, no accounts
 
 ## Next Useful Work
 
-- Make first-run setup clearer.
-- Improve credential setup, validation, and recovery UX.
-- Add a small automated test layer around prompt construction and text quality filters.
-- Add provider boundaries so OpenAI and future local transcription can be swapped more cleanly.
-- Prototype local transcription with WhisperKit or whisper.cpp.
-- Reduce the Accessibility blast radius, ideally by moving synthetic paste into a smaller helper with narrower responsibilities.
-- Add stronger supply-chain checks around downloaded local speech models.
-- Add signed and notarized release builds when the project is ready for non-developer users.
+- DMG download in addition to the ZIP.
+- Choose the microphone, with fallback to the system default (idea from #18).
+- A small recording hint at the cursor position (idea from #8).
+- Make the iOS app (dictation keyboard, Shortcuts action) public.
+- Reduce the Accessibility blast radius, ideally with a smaller paste helper.
+- Stronger supply-chain checks for downloaded speech models.
 
 ## Not In Scope Yet
 
 - Production support.
 - Accounts, sync, teams, or hosted infrastructure.
-- Claims that the app is offline or privacy-complete.
 - App Store distribution.

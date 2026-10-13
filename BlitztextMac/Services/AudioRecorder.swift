@@ -11,20 +11,14 @@ final class AudioRecorder: NSObject, AVAudioRecorderDelegate {
 
     private var audioRecorder: AVAudioRecorder?
     private var levelTimer: Timer?
-    private var currentFileURL: URL?
 
-    private func makeRecordingURL() -> URL {
-        FileManager.default.temporaryDirectory
-            .appendingPathComponent("blitztext-\(UUID().uuidString).m4a")
+    private var fileURL: URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("recording.m4a")
     }
 
     func startRecording() {
         errorMessage = nil
         lastRecordingDuration = 0
-        recordingURL = nil
-        if let currentFileURL {
-            try? FileManager.default.removeItem(at: currentFileURL)
-        }
 
         let settings: [String: Any] = [
             AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
@@ -34,16 +28,14 @@ final class AudioRecorder: NSObject, AVAudioRecorderDelegate {
         ]
 
         do {
-            let fileURL = makeRecordingURL()
-            currentFileURL = fileURL
             audioRecorder = try AVAudioRecorder(url: fileURL, settings: settings)
             audioRecorder?.delegate = self
             audioRecorder?.isMeteringEnabled = true
             audioRecorder?.record()
             isRecording = true
+            recordingURL = nil
             startMetering()
         } catch {
-            currentFileURL = nil
             errorMessage = "Aufnahme konnte nicht gestartet werden: \(error.localizedDescription)"
         }
     }
@@ -53,22 +45,8 @@ final class AudioRecorder: NSObject, AVAudioRecorderDelegate {
         lastRecordingDuration = audioRecorder?.currentTime ?? 0
         audioRecorder?.stop()
         isRecording = false
-        recordingURL = currentFileURL
-        currentFileURL = nil
-        audioRecorder = nil
+        recordingURL = fileURL
         audioLevel = 0
-    }
-
-    func discardRecording() {
-        if let recordingURL {
-            try? FileManager.default.removeItem(at: recordingURL)
-            self.recordingURL = nil
-        }
-
-        if let currentFileURL {
-            try? FileManager.default.removeItem(at: currentFileURL)
-            self.currentFileURL = nil
-        }
     }
 
     private func startMetering() {

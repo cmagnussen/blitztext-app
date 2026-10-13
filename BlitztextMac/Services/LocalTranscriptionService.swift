@@ -16,11 +16,14 @@ struct LocalTranscriptionModel: Identifiable, Hashable {
         Self.displayName(for: id)
     }
 
-    var installStateLabel: String {
-        isInstalled ? "Installiert" : "Nicht installiert"
+    var isParakeet: Bool {
+        id == ParakeetTranscriber.modelName
     }
 
     var shortDisplayName: String {
+        if isParakeet {
+            return "Parakeet v3"
+        }
         if id.contains("small") {
             return "Whisper Small"
         }
@@ -39,7 +42,18 @@ struct LocalTranscriptionModel: Identifiable, Hashable {
         return displayName
     }
 
+    var rating: LocalModelRating? {
+        LocalModelRating.rating(for: id)
+    }
+
+    var installStateLabel: String {
+        isInstalled ? "Installiert" : "Nicht installiert"
+    }
+
     static func displayName(for modelName: String) -> String {
+        if modelName == ParakeetTranscriber.modelName {
+            return "Parakeet v3"
+        }
         if modelName.contains("small") {
             return "Whisper Small"
         }
@@ -59,6 +73,45 @@ struct LocalTranscriptionModel: Identifiable, Hashable {
             .replacingOccurrences(of: "openai_", with: "")
             .replacingOccurrences(of: "_", with: " ")
             .replacingOccurrences(of: "-", with: " ")
+    }
+}
+
+/// Relative speed and accuracy (0...1) to compare local models at a glance.
+/// Values follow Handy's model catalog (github.com/cjpais/handy, `catalog.json`) and are
+/// a rough guide, not a Blitztext benchmark on German audio.
+struct LocalModelRating: Equatable {
+    let speed: Double
+    let accuracy: Double
+    let sizeLabel: String
+    /// Which languages the model handles; all of them detect the language themselves.
+    var languages = "Erkennt die Sprache selbst, rund 100 Sprachen."
+
+    static func rating(for modelName: String) -> LocalModelRating? {
+        if modelName == ParakeetTranscriber.modelName {
+            // FluidAudio benchmark: German FLEURS 5.9 % WER, ~220x real time on Apple Silicon.
+            return LocalModelRating(
+                speed: 0.95,
+                accuracy: 0.9,
+                sizeLabel: "~500 MB",
+                languages: "Erkennt die Sprache selbst: Deutsch, Englisch und 23 weitere europäische Sprachen."
+            )
+        }
+        if modelName.contains("turbo") {
+            return LocalModelRating(speed: 0.35, accuracy: 0.88, sizeLabel: "632 MB")
+        }
+        if modelName.contains("large-v3") {
+            return LocalModelRating(speed: 0.23, accuracy: 0.89, sizeLabel: "626 MB")
+        }
+        if modelName.contains("small") {
+            return LocalModelRating(speed: 0.78, accuracy: 0.80, sizeLabel: "216 MB")
+        }
+        if modelName.contains("base") {
+            return LocalModelRating(speed: 0.99, accuracy: 0.71, sizeLabel: "~140 MB")
+        }
+        if modelName.contains("tiny") {
+            return LocalModelRating(speed: 1.0, accuracy: 0.61, sizeLabel: "~75 MB")
+        }
+        return nil
     }
 }
 
@@ -86,11 +139,13 @@ actor LocalTranscriptionService {
     static let fastModelName = "openai_whisper-large-v3-v20240930_turbo_632MB"
     static let recommendedFastModelName = "openai_whisper-small_216MB"
     static let modelRepo = "argmaxinc/whisperkit-coreml"
-    static let supportedModelNames = [
-        recommendedFastModelName,
-        fastModelName,
-        defaultModelName
-    ]
+    static var supportedModelNames: [String] {
+        (ParakeetTranscriber.isSupported ? [ParakeetTranscriber.modelName] : []) + [
+            recommendedFastModelName,
+            fastModelName,
+            defaultModelName
+        ]
+    }
     static let modelPageURL = URL(
         string: "https://huggingface.co/argmaxinc/whisperkit-coreml/tree/main/openai_whisper-large-v3-v20240930_626MB"
     )!
@@ -103,6 +158,8 @@ actor LocalTranscriptionService {
 
     static func modelPageURL(for modelName: String) -> URL {
         switch normalizedModelName(modelName) {
+        case ParakeetTranscriber.modelName:
+            return ParakeetTranscriber.modelPageURL
         case recommendedFastModelName:
             return recommendedFastModelPageURL
         case fastModelName:
@@ -115,6 +172,8 @@ actor LocalTranscriptionService {
     }
 
     private var whisperKit: WhisperKit?
+    private var pipelineTask: Task<WhisperKit, Error>?
+    private var pipelineTaskModelName: String?
     private var loadedModelName: String?
 
     static var isModelInstalled: Bool {
@@ -122,11 +181,17 @@ actor LocalTranscriptionService {
     }
 
     static func modelURL(named modelName: String) -> URL {
-        AppSupportPaths.whisperKitModelsDirectoryURL.appendingPathComponent(normalizedModelName(modelName), isDirectory: true)
+        if normalizedModelName(modelName) == ParakeetTranscriber.modelName {
+            return ParakeetTranscriber.modelsDirectoryURL
+        }
+        return AppSupportPaths.whisperKitModelsDirectoryURL.appendingPathComponent(normalizedModelName(modelName), isDirectory: true)
     }
 
     static func isModelInstalled(_ modelName: String) -> Bool {
-        isUsableModel(at: modelURL(named: modelName))
+        if normalizedModelName(modelName) == ParakeetTranscriber.modelName {
+            return ParakeetTranscriber.isInstalled
+        }
+        return isUsableModel(at: modelURL(named: modelName))
     }
 
     static func normalizedModelName(_ modelName: String) -> String {
@@ -142,7 +207,11 @@ actor LocalTranscriptionService {
             options: [.skipsHiddenFiles]
         )) ?? []
 
-        return urls
+        let parakeet = ParakeetTranscriber.isInstalled
+            ? [LocalTranscriptionModel(id: ParakeetTranscriber.modelName, url: ParakeetTranscriber.modelsDirectoryURL)]
+            : []
+
+        return parakeet + urls
             .filter { isUsableModel(at: $0) }
             .map { LocalTranscriptionModel(id: $0.lastPathComponent, url: $0) }
             .sorted { lhs, rhs in
@@ -196,6 +265,10 @@ actor LocalTranscriptionService {
     }
 
     func prepare(modelName: String) async throws {
+        if Self.resolvedModelName(modelName) == ParakeetTranscriber.modelName {
+            try await ParakeetTranscriber.shared.prepare()
+            return
+        }
         _ = try await pipeline(modelName: modelName)
     }
 
@@ -204,6 +277,13 @@ actor LocalTranscriptionService {
         progressHandler: @escaping @Sendable (Double) -> Void
     ) async throws -> URL {
         let normalizedName = Self.normalizedModelName(modelName)
+        if normalizedName == ParakeetTranscriber.modelName {
+            try await ParakeetTranscriber.shared.download(progressHandler: progressHandler)
+            guard ParakeetTranscriber.isInstalled else {
+                throw LocalTranscriptionError.downloadedModelInvalid(normalizedName)
+            }
+            return ParakeetTranscriber.modelsDirectoryURL
+        }
         let destinationURL = Self.modelURL(named: normalizedName)
 
         if Self.isUsableModel(at: destinationURL) {
@@ -257,32 +337,61 @@ actor LocalTranscriptionService {
 
     func transcribe(audioURL: URL, language: String, modelName: String) async throws -> String {
         let resolvedLanguage = language.trimmingCharacters(in: .whitespacesAndNewlines)
-        let decodeOptions = DecodingOptions(
-            task: .transcribe,
-            language: resolvedLanguage.isEmpty ? nil : resolvedLanguage
-        )
 
-        let pipeline = try await pipeline(modelName: modelName)
-        let results = try await pipeline.transcribe(
-            audioPath: audioURL.path,
-            decodeOptions: decodeOptions
-        )
-        let text = results
-            .map(\.text)
-            .joined(separator: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let text: String
+        if Self.resolvedModelName(modelName) == ParakeetTranscriber.modelName {
+            let raw = try await ParakeetTranscriber.shared.transcribe(audioURL: audioURL, language: resolvedLanguage)
+            text = HallucinationFilter.removingTrailingCredits(raw)
+        } else {
+            let pipeline = try await pipeline(modelName: modelName)
+            text = try await WhisperDictation.transcribe(pipeline, audioPath: audioURL.path)
+        }
 
         guard !text.isEmpty else {
             throw LocalTranscriptionError.noText
         }
-
         return text
     }
+
+    /// True once the model is loaded and compiled for this Mac, so a transcription
+    /// starts right away.
+    func isReady(modelName: String) async -> Bool {
+        let resolvedModelName = Self.resolvedModelName(modelName)
+        if resolvedModelName == ParakeetTranscriber.modelName {
+            return await ParakeetTranscriber.shared.isReady
+        }
+        return whisperKit != nil && loadedModelName == resolvedModelName
+    }
+
+    /// Transcribes and calls `onSlowPreparation` once if the model is still not ready
+    /// after `delay`. After a macOS update Core ML recompiles every model for the
+    /// Neural Engine, which can take minutes; without a hint the app looks stuck.
+    static func transcribe(
+        audioURL: URL,
+        language: String,
+        modelName: String,
+        slowPreparationAfter delay: Duration = .seconds(8),
+        onSlowPreparation: @escaping @MainActor () -> Void
+    ) async throws -> String {
+        let watcher = Task {
+            try await Task.sleep(for: delay)
+            if await !shared.isReady(modelName: modelName) {
+                await onSlowPreparation()
+            }
+        }
+        defer { watcher.cancel() }
+        return try await shared.transcribe(audioURL: audioURL, language: language, modelName: modelName)
+    }
+
+    static let slowPreparationMessage = "Sprachmodell wird vorbereitet. Nach einem macOS-Update dauert das einmalig einige Minuten, bitte Blitztext nicht beenden."
 
     private func pipeline(modelName: String) async throws -> WhisperKit {
         let resolvedModelName = Self.resolvedModelName(modelName)
         if let whisperKit, loadedModelName == resolvedModelName {
             return whisperKit
+        }
+        if let pipelineTask, pipelineTaskModelName == resolvedModelName {
+            return try await pipelineTask.value
         }
 
         let url = Self.modelURL(named: resolvedModelName)
@@ -290,13 +399,31 @@ actor LocalTranscriptionService {
             throw LocalTranscriptionError.modelMissing(url)
         }
 
-        let loaded = try await WhisperKit(
-            modelFolder: url.path,
-            verbose: false,
-            prewarm: true,
-            load: true,
-            download: false
+        try FileManager.default.createDirectory(
+            at: AppSupportPaths.whisperKitTokenizersDirectoryURL,
+            withIntermediateDirectories: true
         )
+        // Reentrancy guard: a second dictation during a slow load waits for this one
+        // instead of starting another full load and compile.
+        let task = Task<WhisperKit, Error> {
+            try await WhisperKit(
+                modelFolder: url.path,
+                tokenizerFolder: AppSupportPaths.whisperKitTokenizersDirectoryURL,
+                verbose: false,
+                prewarm: true,
+                load: true,
+                download: false
+            )
+        }
+        pipelineTask = task
+        pipelineTaskModelName = resolvedModelName
+        defer {
+            if pipelineTaskModelName == resolvedModelName {
+                pipelineTask = nil
+                pipelineTaskModelName = nil
+            }
+        }
+        let loaded = try await task.value
         whisperKit = loaded
         loadedModelName = resolvedModelName
         return loaded

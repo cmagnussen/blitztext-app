@@ -5,65 +5,55 @@ struct WorkflowRowView: View {
     let enabled: Bool
     var customName: String? = nil
     var subtitle: String? = nil
+    var hotkeyLabel: String? = nil
     let action: () -> Void
 
     @State private var isHovered = false
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 12) {
-                // Icon with monochrome background
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(Color.primary.opacity(isHovered ? 0.1 : 0.06))
-                        .frame(width: 36, height: 36)
+            HStack(alignment: .center, spacing: 13) {
+                Image(systemName: type.icon)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(Color.primary.opacity(enabled ? 0.82 : 0.35))
+                    .frame(width: 26)
 
-                    Image(systemName: type.icon)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                }
-
-                // Name + subtitle
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 3) {
                     Text(customName ?? type.displayName)
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.system(size: 13.5, weight: .semibold))
                         .foregroundStyle(enabled ? .primary : .tertiary)
                         .lineLimit(1)
 
                     Text(subtitle ?? type.subtitle)
-                        .font(.system(size: 11))
+                        .font(.system(size: 11.5))
                         .foregroundStyle(enabled ? .secondary : .quaternary)
                         .lineLimit(1)
+                        .truncationMode(.tail)
                 }
 
-                Spacer()
+                Spacer(minLength: 6)
 
-                // Hotkey badge
-                HotkeyBadge(label: type.hotkeyLabel, enabled: enabled)
+                HotkeyBadge(label: hotkeyLabel ?? type.hotkeyLabel, enabled: enabled)
                     .opacity(enabled ? 1 : 0.4)
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.vertical, 10)
             .background(
-                RoundedRectangle(cornerRadius: 10)
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
                     .fill(isHovered && enabled ? Color.primary.opacity(0.05) : Color.clear)
             )
-            .padding(.horizontal, 6)
+            .padding(.horizontal, 4)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(!enabled)
-        .opacity(enabled ? 1 : 0.5)
         .onHover { hovering in
             withAnimation(.easeOut(duration: 0.12)) {
                 isHovered = hovering
             }
         }
     }
-
 }
-
-// MARK: - Hotkey Badge
 
 struct HotkeyBadge: View {
     let label: String

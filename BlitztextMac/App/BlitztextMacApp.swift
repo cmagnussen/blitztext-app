@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 @main
 struct BlitztextMacApp: App {
@@ -17,6 +18,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var popover: NSPopover!
     private let menuBarStatusController = MenuBarStatusController()
     let appState = AppState()
+    /// Files opened before launch finished (e.g. "Open With" on a closed app).
+    private var pendingAudioFile: URL?
+    private var didFinishLaunching = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -28,10 +32,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
 
         popover = NSPopover()
-        popover.contentSize = NSSize(width: 340, height: 480)
+        popover.contentSize = NSSize(width: MenuBarView.width, height: 480)
         popover.behavior = .transient
         popover.delegate = self
-        popover.contentViewController = NSHostingController(rootView: MenuBarView(appState: appState))
+        popover.contentViewController = GlassPopoverHostingController(
+            rootView: MenuBarView(appState: appState),
+            width: MenuBarView.width
+        )
 
         NSApp.setActivationPolicy(.accessory)
 
@@ -42,7 +49,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         appState.onMenuBarStatusChange = { [weak self] status in
             self?.menuBarStatusController.update(to: status)
         }
+        appState.onWhatsNewChange = { [weak self] unseen in
+            self?.menuBarStatusController.showsNewBadge = unseen
+        }
+        menuBarStatusController.showsNewBadge = appState.hasUnseenWhatsNew
         appState.hotkeyService.start()
+        appState.appUpdateService.startIfConfigured()
 
         // Listen for popover dismiss requests (from auto-paste)
         NotificationCenter.default.addObserver(
@@ -51,10 +63,88 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             name: .dismissPopover,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(showWhatsNew),
+            name: .showWhatsNew,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(showWhatsNew),
+            name: .showPopover,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(chooseAudioFile),
+            name: .chooseAudioFile,
+            object: nil
+        )
 
+        didFinishLaunching = true
         DispatchQueue.main.async { [weak self] in
-            self?.showOnboardingIfNeeded()
+            guard let self else { return }
+            if let url = self.pendingAudioFile {
+                self.pendingAudioFile = nil
+                self.transcribeAudioFile(url)
+            } else {
+                self.showOnboardingIfNeeded()
+            }
         }
+    }
+
+    // MARK: - Audio files
+
+    /// Finder "Open With", dragging onto the app icon, or `open -a Blitztext file.ogg`.
+    func applicationWillTerminate(_ notification: Notification) {
+        appState.restoreAudioOutput()
+    }
+
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard let url = urls.first(where: Self.isAudioFile) else { return }
+        guard didFinishLaunching else {
+            pendingAudioFile = url
+            return
+        }
+        transcribeAudioFile(url)
+    }
+
+    @objc private func chooseAudioFile() {
+        // A transient popover would close under the panel anyway; reopen it with the result.
+        popover.performClose(nil)
+        appState.isPopoverShown = false
+        NSApp.activate(ignoringOtherApps: true)
+
+        let panel = NSOpenPanel()
+        panel.title = "Audiodatei transkribieren"
+        panel.message = "Sprachmemo, WhatsApp-Sprachnachricht oder andere Audiodatei w\u{00E4}hlen"
+        panel.prompt = "Transkribieren"
+        panel.allowedContentTypes = [.audio]
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+        panel.canChooseDirectories = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        transcribeAudioFile(url)
+    }
+
+    private func transcribeAudioFile(_ url: URL) {
+        appState.audioFile.transcribe(url, appState: appState)
+        appState.page = .audioFile
+        showPopover()
+    }
+
+    private static func isAudioFile(_ url: URL) -> Bool {
+        guard let type = try? url.resourceValues(forKeys: [.contentTypeKey]).contentType else {
+            return ["ogg", "opus", "oga", "m4a", "mp3", "wav", "aiff", "caf", "aac"].contains(url.pathExtension.lowercased())
+        }
+        return type.conforms(to: .audio)
+    }
+
+    @objc private func showWhatsNew() {
+        guard !popover.isShown else { return }
+        appState.prepareForPopoverPresentation()
+        showPopover()
     }
 
     @objc private func handleDismissPopover() {
@@ -62,19 +152,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         popover.performClose(nil)
     }
 
+    /// Mode chosen at key down per shortcut, so key up (hold mode) stops the same workflow.
+    private var shortcutModes: [WorkflowType: WorkflowType] = [:]
+
     private func handleHotkeyEvent(_ event: HotkeyEvent) {
         switch event {
-        case .down(let type):
-            handleHotkeyDown(type)
-        case .up(let type):
-            handleHotkeyUp(type)
-        case .cancel:
-            handleHotkeyCancel()
+        case .down(let shortcut):
+            let mode: WorkflowType
+            if let previous = shortcutModes[shortcut],
+               let active = appState.activeWorkflow,
+               active.type == previous,
+               active.phase.isActive {
+                // Second press in "Drücken" mode stops what the first press started,
+                // even though Blitztext itself is frontmost by now.
+                mode = previous
+            } else {
+                mode = appState.modeForShortcut(
+                    shortcut,
+                    frontmostApp: NSWorkspace.shared.frontmostApplication
+                )
+            }
+            shortcutModes[shortcut] = mode
+            handleHotkeyDown(mode)
+        case .up(let shortcut):
+            handleHotkeyUp(shortcutModes[shortcut] ?? shortcut)
         }
     }
 
     private func handleHotkeyDown(_ type: WorkflowType) {
-        guard appState.isConfigured else { return }
+        guard appState.isWorkflowAvailable(type) else {
+            // Missing model or AI setup: say so instead of silently ignoring the shortcut.
+            guard !popover.isShown else { return }
+            appState.prepareForPopoverPresentation()
+            if appState.page != .whatsNew {
+                appState.page = .main
+            }
+            showPopover()
+            return
+        }
 
         let mode = appState.appSettings.hotkeyMode
 
@@ -112,10 +227,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
     }
 
-    private func handleHotkeyCancel() {
-        appState.activeWorkflow?.stop()
-    }
-
     @objc private func togglePopover() {
         if popover.isShown {
             popover.performClose(nil)
@@ -137,6 +248,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         appState.isPopoverShown = true
         NSApp.activate(ignoringOtherApps: true)
+
+        // Transparent window so the HUD material shows through, as in _Space.
+        DispatchQueue.main.async { [weak self] in
+            guard let window = self?.popover.contentViewController?.view.window else { return }
+            window.isOpaque = false
+            window.backgroundColor = .clear
+        }
     }
 
     nonisolated func popoverDidClose(_ notification: Notification) {
@@ -146,6 +264,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             case .done, .error:
                 appState.resetCurrentWorkflow()
             default:
+                // Keep a running file transcription visible for the next opening.
+                if appState.page == .audioFile, appState.audioFile.isWorking { break }
                 appState.page = .main
             }
         }

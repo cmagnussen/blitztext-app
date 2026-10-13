@@ -1,22 +1,16 @@
 # Local Models
 
-Blitztext can run transcription locally with WhisperKit/CoreML. The app does not bundle a speech model, but it can download the selected compatible model from Hugging Face into the local cache.
+All speech recognition in Blitztext runs on your Mac. The app does not bundle a model; it downloads the one you choose from Hugging Face into `~/Library/Application Support/Blitztext/models/`.
 
-## Recommended First Model
+## Recommended Model
 
-Use Whisper Small for the first local test. It is multilingual, supports German, and is much lighter than the large variants.
+**NVIDIA Parakeet TDT 0.6B v3** via [FluidAudio](https://github.com/FluidInference/FluidAudio), on Apple silicon: very fast, 25 European languages, detects the language. Weights under CC BY 4.0 ([model page](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3)).
 
-- [argmaxinc/whisperkit-coreml: openai_whisper-small_216MB](https://huggingface.co/argmaxinc/whisperkit-coreml/tree/main/openai_whisper-small_216MB)
+## Whisper Models
 
-Local cache path:
+WhisperKit Core ML models (about 100 languages, language detection), installed from the app or manually into `~/Library/Application Support/Blitztext/models/whisperkit/`:
 
-```text
-~/Library/Application Support/Blitztext/models/whisperkit/openai_whisper-small_216MB
-```
-
-## Other Compatible Models
-
-You can also install larger WhisperKit CoreML models into the same cache directory:
+- [openai_whisper-small_216MB](https://huggingface.co/argmaxinc/whisperkit-coreml/tree/main/openai_whisper-small_216MB)
 
 - [openai_whisper-large-v3-v20240930_626MB](https://huggingface.co/argmaxinc/whisperkit-coreml/tree/main/openai_whisper-large-v3-v20240930_626MB)
 - [openai_whisper-large-v3-v20240930_turbo_632MB](https://huggingface.co/argmaxinc/whisperkit-coreml/tree/main/openai_whisper-large-v3-v20240930_turbo_632MB)
@@ -25,9 +19,7 @@ The app detects installed model folders that contain `AudioEncoder.mlmodelc`, `M
 
 ## Install From The App
 
-Open Blitztext, go to **Settings > Anpassen**, choose a local model, and click **Installieren**. You can also switch on **Sicherer Lokaler Modus** from the main popover; if the selected model is missing, Blitztext starts the download and installs it into the local cache.
-
-After the model is installed, the Blitztext transcription workflow can run in local mode. The rewriting workflows still use OpenAI, so they are paused while secure local mode is active.
+Open **Settings > Modelle > Spracherkennung**, choose a model and load it. The selected model is used by every mode; the writing modes then rewrite the text with Apple Intelligence or your own model provider.
 
 ## Optional Manual Install
 
@@ -66,7 +58,6 @@ If the folder is nested differently, the app will not detect the model.
 
 ## Notes
 
-- First use can be slower because the model has to load and prewarm.
-- Local transcription avoids sending audio to OpenAI for the Blitztext workflow.
-- The app currently supports local transcription only, not local rewriting.
+- First use can be slower because the model has to load and prewarm. After a macOS update, macOS prepares the model for the Neural Engine again, which can take a few minutes once.
+- Audio never leaves the Mac. The writing modes rewrite locally with Apple Intelligence, or with your own model provider if you add one.
 - Models are downloaded on demand so the repository and app package stay small and auditable.

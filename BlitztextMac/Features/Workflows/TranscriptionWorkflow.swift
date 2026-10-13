@@ -3,7 +3,7 @@ import AppKit
 import Observation
 import OSLog
 
-private let transcriptionLogger = Logger(subsystem: "app.blitztext.mac", category: "Transcription")
+private let tapTalkLogger = Logger(subsystem: "app.blitztext.mac", category: "TapTalk")
 
 private func elapsedMilliseconds(since start: Date, until end: Date = Date()) -> Int {
     Int((end.timeIntervalSince(start) * 1000).rounded())
@@ -20,24 +20,21 @@ final class TranscriptionWorkflow: Workflow {
     var onPhaseChange: WorkflowPhaseChangeHandler?
 
     private let recorder = AudioRecorder()
-    private let customTerms: [String]
     private let language: String
-    private let backend: TranscriptionBackend
     private let localModelName: String
+    private let postProcessor: TranscriptPostProcessor
     private var transcriptionTask: Task<Void, Never>?
 
     init(
-        type: WorkflowType = .transcription,
-        customTerms: [String] = [],
+        type: WorkflowType = .tapTalk,
         language: String = "de",
-        backend: TranscriptionBackend = .remote,
-        localModelName: String = LocalTranscriptionService.recommendedFastModelName
+        localModelName: String = LocalTranscriptionService.recommendedFastModelName,
+        postProcessor: TranscriptPostProcessor = TranscriptPostProcessor(correctCustomTerms: false, removeFillerWords: false)
     ) {
         self.type = type
-        self.customTerms = customTerms
         self.language = language
-        self.backend = backend
         self.localModelName = localModelName
+        self.postProcessor = postProcessor
     }
 
     func start() {
@@ -53,7 +50,6 @@ final class TranscriptionWorkflow: Workflow {
         if recorder.isRecording {
             recorder.stopRecording()
             guard !TranscriptionQualityService.shouldRejectRecording(duration: recorder.lastRecordingDuration) else {
-                recorder.discardRecording()
                 phase = .error("Keine Aufnahme erkannt.")
                 return
             }
@@ -69,7 +65,6 @@ final class TranscriptionWorkflow: Workflow {
         if recorder.isRecording {
             recorder.stopRecording()
         }
-        recorder.discardRecording()
         phase = .idle
     }
 
@@ -82,54 +77,47 @@ final class TranscriptionWorkflow: Workflow {
             return
         }
 
-        phase = .running(backend == .local ? "Wird lokal transkribiert ..." : "Wird transkribiert ...")
+        phase = .running("Wird transkribiert ...")
         let recordingDuration = recorder.lastRecordingDuration
-        let vocabularyHints = recordingDuration >= 0.9 ? customTerms : []
         let requestLanguage = language
         let stopTime = Date()
 
         transcriptionTask = Task(priority: .userInitiated) {
-            defer {
-                try? FileManager.default.removeItem(at: url)
-            }
-
             let requestStart = Date()
             do {
-                let text: String
-                switch backend {
-                case .remote:
-                    text = try await TranscriptionService.transcribe(
-                        audioURL: url,
-                        customTerms: vocabularyHints,
-                        language: requestLanguage
-                    )
-                case .local:
-                    text = try await LocalTranscriptionService.shared.transcribe(
-                        audioURL: url,
-                        language: requestLanguage,
-                        modelName: localModelName
-                    )
+                let text = try await LocalTranscriptionService.transcribe(
+                    audioURL: url,
+                    language: requestLanguage,
+                    modelName: localModelName
+                ) { [weak self] in
+                    self?.phase = .running(LocalTranscriptionService.slowPreparationMessage)
                 }
                 try Task.checkCancellation()
 
                 let responseReceivedAt = Date()
                 let cleaned = TranscriptionQualityService.cleanedTranscript(text)
                 guard !TranscriptionQualityService.isLikelyArtifact(cleaned, recordingDuration: recordingDuration) else {
-                    transcriptionLogger.info(
-                        "Transcription rejected short artifact after \(elapsedMilliseconds(since: stopTime)) ms"
+                    tapTalkLogger.info(
+                        "TapTalk rejected short artifact after \(elapsedMilliseconds(since: stopTime)) ms"
                     )
                     phase = .error("Keine Aufnahme erkannt.")
                     return
                 }
 
-                transcriptionLogger.info(
-                    "Transcription ready in \(elapsedMilliseconds(since: stopTime, until: responseReceivedAt)) ms (request \(elapsedMilliseconds(since: requestStart, until: responseReceivedAt)) ms)"
+                let processed = postProcessor.process(cleaned)
+                guard !processed.isEmpty else {
+                    phase = .error("Keine Aufnahme erkannt.")
+                    return
+                }
+
+                tapTalkLogger.info(
+                    "TapTalk ready in \(elapsedMilliseconds(since: stopTime, until: responseReceivedAt)) ms (request \(elapsedMilliseconds(since: requestStart, until: responseReceivedAt)) ms)"
                 )
-                phase = .done(cleaned)
-                onOutput?(cleaned)
+                phase = .done(processed)
+                onOutput?(processed)
             } catch {
-                transcriptionLogger.error(
-                    "Transcription failed after \(elapsedMilliseconds(since: stopTime)) ms: \(error.localizedDescription, privacy: .private)"
+                tapTalkLogger.error(
+                    "TapTalk failed after \(elapsedMilliseconds(since: stopTime)) ms: \(error.localizedDescription, privacy: .public)"
                 )
                 phase = .error(error.localizedDescription)
             }

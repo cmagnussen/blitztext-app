@@ -1,80 +1,43 @@
 # Setup
 
-This guide is for people who want to build and inspect the preview themselves.
+## 1. Install
 
-## 1. Requirements
-
-- macOS 14 or newer
-- Full Xcode, with Command Line Tools installed
-- XcodeGen
-- Homebrew, if you want to install XcodeGen with `brew install xcodegen`
-- Optional for online workflows: an OpenAI API key
-- Optional for secure local transcription: a local WhisperKit/CoreML model
-
-Install XcodeGen manually if needed:
+Either download the signed app from the [releases page](https://github.com/cmagnussen/blitztext-app/releases/latest), or build it:
 
 ```bash
 brew install xcodegen
-```
-
-## 2. Clone And Build
-
-```bash
 git clone https://github.com/cmagnussen/blitztext-app.git
 cd blitztext-app
-./build.sh --debug
+./build.sh --install --run
 ```
 
-To launch after building:
+The app is installed to `/Applications/Blitztext.app` and appears in the menu bar.
 
-```bash
-./build.sh --run
-```
+## 2. Permissions
 
-## 3. Configure OpenAI For Online Workflows
+- **Microphone:** to record.
+- **Accessibility:** to paste into the app you are using. Without it, results stay on the clipboard.
 
-Open the app settings and paste your own OpenAI API key if you want online transcription or rewriting workflows.
+If paste stops working after an update or rebuild, open **System Settings > Privacy & Security > Accessibility**, remove old Blitztext entries, add the current app and restart Blitztext.
 
-The preview currently uses:
+## 3. Local Speech Model
 
-- `whisper-1` for transcription
-- `gpt-4o-mini` for lightweight rewriting
-- `gpt-4o` for the calmer-message workflow
+Open **Settings > Modelle > Spracherkennung**, pick a model and load it once:
 
-You are responsible for API access, billing, and data handling in your own OpenAI account.
+- **Parakeet v3** (recommended on Apple silicon): fast, 25 European languages, about 500 MB.
+- **Whisper Large v3 Turbo / Large v3 / Small:** about 100 languages, slower.
 
-Never commit your API key into this repository, issues, logs, or screenshots.
+After a macOS update the first dictation can take a few minutes while macOS prepares the model for the Neural Engine. Blitztext shows a hint; keep it running.
 
-You can skip this step if you only want to test local transcription with a local WhisperKit model.
+## 4. Writing Modes
 
-## 4. Optional Local Transcription
+Blitztext+, $%&! and :) need a language model:
 
-To use secure local transcription, choose a compatible WhisperKit CoreML model in the app and click **Installieren**. Blitztext stores models in:
+- **Apple Intelligence** (macOS 26, turned on in System Settings): runs on your Mac. Nothing to configure.
+- **Your own model provider** (optional): **Settings > Modelle > Modell-Anbieter**, choose a provider, paste your API key, test the connection. Local servers such as Ollama or LM Studio work via "Eigene Adresse".
 
-```text
-~/Library/Application Support/Blitztext/models/whisperkit/
-```
+## 5. Shortcuts
 
-Recommended first model: `openai_whisper-small_216MB`.
+`fn` shortcuts only work on Apple keyboards. For other keyboards set your own shortcut per mode in **Settings > Allgemein > Tastenkürzel** (e.g. `⌃⌥D` or `F13`). An own shortcut replaces the `fn` shortcut of that mode. `fn` itself cannot be part of an own shortcut.
 
-See [local-models.md](local-models.md) for the exact command, model links, and expected folder layout.
-
-## 5. macOS Permissions
-
-The app needs Microphone permission to record audio.
-
-For automatic paste into the previous app, grant Accessibility permission in macOS System Settings. Without it, you can still copy and paste manually.
-
-Blitztext does not need Full Disk Access. Auto-paste uses the Accessibility permission because the app simulates Cmd+V after putting the result on the clipboard.
-
-## Troubleshooting
-
-- If `xcodebuild` reports that the active developer directory is only Command Line Tools, run `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`.
-- If the build cannot find XcodeGen, install it explicitly with `brew install xcodegen`.
-- If online transcription fails immediately, check whether the API key is present and valid.
-- If secure local mode is disabled, check whether a WhisperKit model is installed in the expected folder.
-- If transcription works but paste does not, this is not an OpenAI billing issue. Check **Privacy & Security -> Accessibility**, restart Blitztext after changing the permission, and make sure the cursor is focused in a text field before starting the workflow.
-- If macOS shows multiple Blitztext entries under Accessibility, remove or disable stale entries, run the app from the final location (`/Applications` if you used `./build.sh --install`), then grant the permission again.
-- If the target app blocks synthetic paste or the target app was not detected, the result still stays on the clipboard so you can press Cmd+V manually.
-- If audio is missing, check Microphone permission and macOS input settings.
-- If you see OpenAI errors, verify model access and account billing.
+**Halten:** hold to record, release to process. **Drücken:** press to start, press again or `Esc` to stop.

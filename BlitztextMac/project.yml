@@ -3,7 +3,7 @@ options:
   bundleIdPrefix: app.blitztext
   deploymentTarget:
     macOS: "14.0"
-  xcodeVersion: "16.0"
+  xcodeVersion: "15.0"
   generateEmptyDirectories: true
 
 settings:
@@ -11,13 +11,23 @@ settings:
     SWIFT_VERSION: "5.10"
     MACOSX_DEPLOYMENT_TARGET: "14.0"
     ONLY_ACTIVE_ARCH: NO
-    MARKETING_VERSION: "1.5"
-    CURRENT_PROJECT_VERSION: "15"
+    MARKETING_VERSION: "1.11"
+    CURRENT_PROJECT_VERSION: "32"
+    # In-app updates for installs outside Jamf (Sparkle). The feed is the appcast of the
+    # latest public GitHub release; the key is the public half of the signing key.
+    SPARKLE_FEED_URL: "https://github.com/cmagnussen/blitztext-app/releases/latest/download/appcast.xml"
+    SPARKLE_PUBLIC_ED_KEY: "E3+VuN7OgR+preZ8H1a73gmDhNDeqvznjUxxpO8kzMM="
 
 packages:
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    exactVersion: 2.8.1
   ArgmaxOSS:
     url: https://github.com/argmaxinc/argmax-oss-swift.git
     exactVersion: 0.18.0
+  FluidAudio:
+    url: https://github.com/FluidInference/FluidAudio.git
+    exactVersion: 0.17.4
 
 targets:
   BlitztextMac:
@@ -28,6 +38,8 @@ targets:
       - path: Features
       - path: Services
       - path: Views
+      # Shared with the iOS app: AI providers, on-device rewriting, mode prompts.
+      - path: ../BlitztextShared
       - path: Resources
         buildPhase: resources
         excludes:
@@ -45,12 +57,37 @@ targets:
         ENABLE_HARDENED_RUNTIME: true
         COMBINE_HIDPI_IMAGES: true
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        INFOPLIST_KEY_SUFeedURL: $(SPARKLE_FEED_URL)
+        INFOPLIST_KEY_SUPublicEDKey: $(SPARKLE_PUBLIC_ED_KEY)
+        INFOPLIST_KEY_SUEnableAutomaticChecks: YES
     dependencies:
+      - package: Sparkle
       - package: ArgmaxOSS
         product: WhisperKit
+      - package: FluidAudio
+        product: FluidAudio
+    scheme:
+      testTargets:
+        - BlitztextMacTests
     entitlements:
       path: Resources/BlitztextMac.entitlements
       properties:
         com.apple.security.app-sandbox: false
         com.apple.security.device.audio-input: true
         com.apple.security.network.client: true
+
+  BlitztextMacTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests
+      # Pure logic is compiled directly into the test bundle, so tests need no host app.
+      - path: Services/TranscriptPostProcessor.swift
+      - path: Services/InsertionFitter.swift
+      - path: Services/WebsiteHost.swift
+      - path: Services/TranscriptParagraphService.swift
+      - path: ../BlitztextShared/Transcription/HallucinationFilter.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.blitztext.mac.tests
+        GENERATE_INFOPLIST_FILE: YES

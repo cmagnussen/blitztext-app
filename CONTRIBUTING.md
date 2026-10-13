@@ -35,7 +35,7 @@ Keep changes small when possible. Avoid unrelated cleanup in the same PR.
 - Never commit API keys, tokens, private audio, or confidential transcripts.
 - Avoid adding telemetry, hosted services, or external dependencies without a clear issue first.
 - Call out privacy-impacting changes in the pull request description.
-- Keep the preview honest: do not describe remote OpenAI workflows as offline or local.
+- Keep it honest: only describe something as local if it really runs on the device.
 
 ## Project Boundaries
 
