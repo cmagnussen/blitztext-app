@@ -96,7 +96,7 @@ final class AppUpdateService {
     }
 
     private func bindUpdaterState() {
-        canCheckForUpdates = isConfigured
+        canCheckForUpdates = updatesInApp
 
         updaterController.updater.publisher(for: \.canCheckForUpdates)
             .receive(on: DispatchQueue.main)

@@ -445,7 +445,7 @@ struct MenuBarView: View {
             }
             .buttonStyle(.subtle)
         } else if BlitztextInstallLocationService.currentInstallLocation.isCanonicalInstall &&
-            appState.appUpdateService.isConfigured {
+            appState.appUpdateService.updatesInApp {
             Button {
                 appState.appUpdateService.checkForUpdates()
             } label: {

@@ -8,6 +8,11 @@ Hold a shortcut, speak, let go. Blitztext transcribes locally and pastes the tex
 
 > Experimental open-source project by Blackboat, provided as-is under the MIT License, without warranty or support guarantee.
 
+<p align="center">
+  <img src="docs/screenshots/menu-bar.png" width="380" alt="Blitztext in the menu bar: four modes, each with its own shortcut, everything local">
+  <img src="docs/screenshots/settings-modes.png" width="380" alt="Settings, Modi: Blitztext+ and the other modes, plus a mode per app or website such as Gmail">
+</p>
+
 ## What It Does
 
 | Mode | Shortcut | What happens |
