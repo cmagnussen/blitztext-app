@@ -1,11 +1,11 @@
 # Third-Party Notices
 
-## Handy
+## Transcript cleanup and clipboard restore
 
-Parts of the macOS app are adapted from Handy (https://github.com/cjpais/handy):
+Parts of the macOS app are adapted from code under the MIT License:
 
-- `BlitztextMac/Services/TranscriptPostProcessor.swift`: custom term correction and filler word removal, ported from `src-tauri/src/audio_toolkit/text.rs`
-- `BlitztextMac/Services/ClipboardPasteService.swift`: receipt-based clipboard restore, adapted from `src-tauri/src/paste_tx`
+- `BlitztextMac/Services/TranscriptPostProcessor.swift`: custom term correction and filler word removal
+- `BlitztextMac/Services/ClipboardPasteService.swift`: receipt-based clipboard restore
 
 ```text
 MIT License
@@ -31,14 +31,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-## Amical
+## Sound muting and browser address
 
-Parts of both apps follow Amical (https://github.com/amicalhq/amical):
+Parts of the macOS app follow code under the MIT License:
 
-- `BlitztextShared/Transcription/HallucinationFilter.swift`: the idea of a list of phrases Whisper invents (`pipeline/utils/segment-filter.ts`)
-- `BlitztextMac/Services/FocusedFieldReader.swift`: reading the browser address through the Accessibility API with `AXManualAccessibility` (`swift-helper`)
-- `BlitztextMac/Services/SystemAudioMuter.swift`: muting the sound output while recording, with volume 0 as fallback (`swift-helper`)
-- The idea of fitting a dictation to the text around the cursor (`BlitztextMac/Services/InsertionFitter.swift`) and of telling the language model that the transcript is not a request (`BlitztextShared/AI/ModePrompts.swift`)
+- `BlitztextMac/Services/SystemAudioMuter.swift`: muting the sound output while recording, with volume 0 as fallback
+- `BlitztextMac/Services/FocusedFieldReader.swift`: reading the browser address through the Accessibility API with `AXManualAccessibility`
 
 ```text
 MIT License

@@ -5,8 +5,8 @@ private let pasteLogger = Logger(subsystem: "app.blitztext.mac", category: "Past
 
 /// Pastes text via the clipboard and afterwards restores what the user had copied before.
 ///
-/// Approach ported from Handy's "reliable paste" (MIT, https://github.com/cjpais/handy, `paste_tx`):
-/// the transcript is published as a *promise* (`declareTypes(_:owner:)`). AppKit calls
+/// Adapted from MIT-licensed code (see THIRD_PARTY_NOTICES.md): the transcript is
+/// published as a *promise* (`declareTypes(_:owner:)`). AppKit calls
 /// `pasteboard(_:provideDataForType:)` when an app actually reads it, which is our receipt.
 /// The previous clipboard is restored only after that receipt plus a short quiet period,
 /// and only if nobody else changed the clipboard in the meantime. The failure mode is

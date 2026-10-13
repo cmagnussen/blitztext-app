@@ -5,9 +5,8 @@ import CoreAudio
 /// not run on over the dictation, and restores it exactly as it was.
 ///
 /// Pausing would be nicer but is not safe: since macOS 15.4 apps cannot see what is
-/// playing, so "resume" afterwards could start something that was paused. Muting follows
-/// Amical (MIT, https://github.com/amicalhq/amical): the mute switch, or volume 0 when a
-/// device has none.
+/// playing, so "resume" afterwards could start something that was paused. Muting uses
+/// the mute switch, or volume 0 when a device has none (MIT notice in THIRD_PARTY_NOTICES.md).
 @MainActor
 final class SystemAudioMuter {
     private enum Restore {

@@ -3,10 +3,9 @@ import Foundation
 /// Drops text Whisper invents: subtitle credits from its training data ("Untertitel im
 /// Auftrag des ZDF, 2021") and polite closings on silence ("Thank you.", "Vielen Dank.").
 ///
-/// The idea of a phrase list comes from Amical (MIT, https://github.com/amicalhq/amical,
-/// `pipeline/utils/segment-filter.ts`). Amical keys it to Whisper's no-speech
-/// probability, which WhisperKit reports as 0 for these cases, so Blitztext checks how
-/// much of the recording is loud enough to be speech instead.
+/// Whisper's no-speech probability would be the natural gate, but WhisperKit reports it
+/// as 0 for these cases, so Blitztext checks how much of the recording is loud enough to
+/// be speech instead.
 enum HallucinationFilter {
     /// Credits and sign-offs that are never meant as dictation. Normalized, without years.
     static let credits: Set<String> = [

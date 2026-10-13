@@ -2,7 +2,7 @@ import Foundation
 
 /// Local cleanup applied to raw transcripts before they are pasted or sent to the LLM.
 ///
-/// Ported from Handy (MIT, https://github.com/cjpais/handy, `audio_toolkit/text.rs`):
+/// Adapted from MIT-licensed code (see THIRD_PARTY_NOTICES.md):
 /// - fuzzy correction of custom terms (Levenshtein + Soundex + n-grams, e.g. "Charge B" -> "ChargeBee")
 /// - removal of filler words ("äh", "ähm", "uh", ...)
 /// - collapsing of stutters ("ich ich ich ich" -> "ich")

@@ -119,7 +119,7 @@ enum FocusedFieldReader {
 
     private static func enableWebAccessibility(_ app: AXUIElement, bundleID: String?) {
         guard let bundleID, browsersNeedingManualAccessibility.contains(bundleID) else { return }
-        // Not "AXEnhancedUserInterface": Amical found it stalls Chromium on heavy pages.
+        // Not "AXEnhancedUserInterface": it can stall Chromium on heavy pages.
         AXUIElementSetAttributeValue(app, "AXManualAccessibility" as CFString, kCFBooleanTrue)
     }
 

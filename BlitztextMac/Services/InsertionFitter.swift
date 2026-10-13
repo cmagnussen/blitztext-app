@@ -4,8 +4,7 @@ import Foundation
 /// capital letter at a sentence start, a lowercase function word mid-sentence and no
 /// period where the sentence goes on. Only the edges of the dictation change.
 ///
-/// Idea from Amical (MIT, https://github.com/amicalhq/amical), which leaves this to the
-/// language model. Here it is plain rules, so it also works for word-for-word dictation.
+/// Plain rules instead of the language model, so it also works for word-for-word dictation.
 enum InsertionFitter {
     static func fit(_ text: String, before: String, after: String) -> String {
         var result = text.trimmingCharacters(in: .whitespacesAndNewlines)

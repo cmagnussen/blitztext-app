@@ -152,8 +152,6 @@ Independent projects built on the Blitztext idea. They are not maintained or rev
 
 ## Acknowledgments
 
-- **[Handy](https://github.com/cjpais/handy)** for the transcript post-processing and the clipboard restore Blitztext builds on
-- **[Amical](https://github.com/amicalhq/amical)** for ideas on cursor context, website modes and invented Whisper text
 - **[FluidAudio](https://github.com/FluidInference/FluidAudio)** and **NVIDIA** for Parakeet on Core ML
 - **[WhisperKit](https://github.com/argmaxinc/argmax-oss-swift)** by Argmax and **OpenAI** for Whisper
 - **[Sparkle](https://sparkle-project.org)** for updates

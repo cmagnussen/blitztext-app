@@ -77,8 +77,7 @@ struct LocalTranscriptionModel: Identifiable, Hashable {
 }
 
 /// Relative speed and accuracy (0...1) to compare local models at a glance.
-/// Values follow Handy's model catalog (github.com/cjpais/handy, `catalog.json`) and are
-/// a rough guide, not a Blitztext benchmark on German audio.
+/// The values are a rough guide, not a Blitztext benchmark on German audio.
 struct LocalModelRating: Equatable {
     let speed: Double
     let accuracy: Double
