@@ -9,7 +9,7 @@ Use this checklist before making the repository public.
 - Confirm there are no private URLs, hosted backend credentials, internal docs, or old project references.
 - Keep the repository private until another maintainer has reviewed the first public commit.
 - Confirm the root `LICENSE`, `README.md`, `SECURITY.md`, `CONTRIBUTING.md`, and `SUPPORT.md` are present.
-- Make the status explicit: experimental, local first, no hosted backend, no warranty.
+- Make the status explicit: free and open source, local first, no hosted backend, no warranty, no guaranteed support.
 - Enable GitHub private vulnerability reporting, secret scanning, and push protection before switching the repo public.
 - Enable Dependabot alerts.
 - Protect `main` with pull requests, at least one review, and required CI checks.

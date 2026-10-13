@@ -1,6 +1,6 @@
 ---
 name: Feature request
-about: Suggest an idea for the preview
+about: Suggest an idea for Blitztext
 title: ""
 labels: enhancement
 assignees: ""

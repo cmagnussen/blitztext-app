@@ -2,7 +2,7 @@
 
 Be kind, direct, and constructive.
 
-This is a small experimental project. Good discussion is welcome; personal attacks, harassment, or hostile behavior are not.
+This is a small open-source project. Good discussion is welcome; personal attacks, harassment, or hostile behavior are not.
 
 If a conversation gets heated, slow down and move back to the concrete technical question.
 

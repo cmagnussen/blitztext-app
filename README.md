@@ -1,19 +1,49 @@
-# Blitztext
-
-**Speak. Text. Done.** A macOS menu bar app that turns speech into text, fully on your Mac.
-
-Hold a shortcut, speak, let go. Blitztext transcribes locally and pastes the text where your cursor is. The writing modes rewrite it with Apple Intelligence on your Mac. No account, no Blitztext server, no audio leaving the device.
-
-**[Download the latest version](https://github.com/cmagnussen/blitztext-app/releases/latest)** (signed and notarized by Apple) · [Build it yourself](#build-it-yourself) · [blitztext.de](https://blitztext.de)
-
-> Experimental open-source project by Blackboat, provided as-is under the MIT License, without warranty or support guarantee.
-
 <p align="center">
-  <img src="docs/screenshots/menu-bar.png" width="380" alt="Blitztext in the menu bar: four modes, each with its own shortcut, everything local">
-  <img src="docs/screenshots/settings-modes.png" width="380" alt="Settings, Modi: Blitztext+ and the other modes, plus a mode per app or website such as Gmail">
+  <img src="docs/assets/icon.png" width="96" height="96" alt="Blitztext app icon">
 </p>
 
-## What It Does
+<h1 align="center">Blitztext</h1>
+
+<p align="center">
+  <b>Speak. Text. Done.</b><br>
+  Dictation for your Mac that runs entirely on your Mac.
+</p>
+
+<p align="center">
+  <a href="https://github.com/cmagnussen/blitztext-app/releases/latest"><img src="https://img.shields.io/github/v/release/cmagnussen/blitztext-app?label=download&color=4F46E5" alt="Latest release"></a>
+  <img src="https://img.shields.io/badge/macOS-14%2B-111111?logo=apple" alt="macOS 14 or newer">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2563EB" alt="MIT License"></a>
+  <a href="https://github.com/cmagnussen/blitztext-app/actions/workflows/ci.yml"><img src="https://github.com/cmagnussen/blitztext-app/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/cmagnussen/blitztext-app/releases/latest"><b>Download for macOS</b></a> ·
+  <a href="https://blitztext.de">blitztext.de</a> ·
+  <a href="#build-it-yourself">Build it yourself</a>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/menu-bar.png" width="400" alt="Blitztext in the menu bar: four modes, each with its own shortcut, everything local">
+  <img src="docs/screenshots/settings-modes.png" width="400" alt="Settings, Modi: the writing modes and a mode per app or website such as Gmail">
+</p>
+
+Hold a shortcut, speak, let go. Blitztext turns your speech into text and pastes it where your cursor is. Speech recognition runs on your Mac, the writing modes use Apple Intelligence on your Mac. No account, no server, no audio leaving the device.
+
+## Why Blitztext?
+
+- **Private:** your voice never leaves your Mac. No account, no backend, no telemetry.
+- **Native:** a small menu bar app in Swift, made for macOS, fast on Apple silicon.
+- **More than dictation:** four modes turn rough speech into clean text, a calm message or a message with emojis.
+- **Free and open:** MIT licensed. Use it, learn from it, build on it.
+
+## How It Works
+
+1. **Hold** a shortcut, for example `fn + Shift`.
+2. **Speak** in any language your model knows.
+3. **Let go.** Blitztext transcribes on your Mac with Parakeet or Whisper.
+4. **Done.** The text appears at your cursor, fitted to the text around it. Your clipboard is restored afterwards.
+
+## Modes
 
 | Mode | Shortcut | What happens |
 |---|---|---|
@@ -22,27 +52,40 @@ Hold a shortcut, speak, let go. Blitztext transcribes locally and pastes the tex
 | **Blitztext $%&!** | `fn + Option` | Frustrated speech to a calm, effective message |
 | **Blitztext :)** | `fn + Cmd` | Text with fitting emojis |
 
+Keyboards without `fn`: set your own shortcut per mode in the settings.
+
+## Features
+
 - **Local speech recognition:** NVIDIA Parakeet v3 (fast, 25 European languages) or OpenAI Whisper via WhisperKit (about 100 languages). Both detect the spoken language.
-- **Local writing modes:** Blitztext+, $%&! and :) run with Apple Intelligence on your Mac (macOS 26 with Apple Intelligence). Optionally you can bring your own model provider (OpenAI, Anthropic, Google Gemini, Mistral, OpenRouter, Ollama or LM Studio) with your own API key.
+- **Local writing modes:** Blitztext+, $%&! and :) run with Apple Intelligence on your Mac (macOS 26). Optionally bring your own model provider: OpenAI, Anthropic, Google Gemini, Mistral, OpenRouter, or a local server such as Ollama or LM Studio.
 - **Fits where you type:** spaces and capitals follow the text around your cursor, also mid-sentence. Password fields are never read.
-- **Mode per app or website:** e.g. Mail or Gmail always Blitztext+, Slack word for word.
+- **Mode per app or website:** Gmail always Blitztext+, Slack with emojis, everything else word for word.
 - **Sound off while recording:** a podcast or music is muted while you speak and back right after.
 - **Voice memos and WhatsApp voice messages:** drop an audio file on Blitztext and get the text, optionally with paragraphs.
-- **Own shortcuts** for keyboards without `fn`, **dictionary** with names, terms and fixed replacements ("n acht n" becomes "n8n").
-- **History** of recent results, encrypted and stored only on your Mac.
-- **Updates** inside the app: Blitztext offers new versions from this repository's releases.
+- **Dictionary:** names and terms spelled your way, fixed replacements ("n acht n" becomes "n8n").
+- **History:** recent results, encrypted and stored only on your Mac.
+- **Updates in the app:** Blitztext offers new versions from this repository's releases, signed and notarized by Apple.
+
+## Screenshots
+
+| | |
+|---|---|
+| <img src="docs/screenshots/settings-models.png" width="400" alt="Settings, Modelle: local speech recognition and the AI modes"> | <img src="docs/screenshots/settings-general.png" width="400" alt="Settings, Allgemein: how Blitztext works, shortcuts, sound off while recording"> |
+| Speech recognition and AI modes on your Mac | Shortcuts, sound off while recording, cursor fit |
+
+The app is in German for now.
 
 ## Install
 
 1. [Download the ZIP](https://github.com/cmagnussen/blitztext-app/releases/latest), unpack it and move **Blitztext.app** to **Applications**.
 2. Open Blitztext. It lives in the menu bar.
 3. Allow **Microphone** and **Accessibility** (needed to paste into other apps).
-4. In the settings (**Modelle**), load a local speech model once (Parakeet v3 is recommended on Apple silicon, about 500 MB).
+4. In the settings (**Modelle**), load a local speech model once. Parakeet v3 is recommended on Apple silicon, about 500 MB.
 5. Hold `fn + Shift`, speak, let go.
 
-Requirements: macOS 14 or newer. Parakeet needs Apple silicon. The writing modes on device need macOS 26 with Apple Intelligence turned on; without it, add your own model provider or use plain dictation only.
+**Requirements:** macOS 14 or newer. Parakeet needs Apple silicon; Intel Macs use Whisper. The writing modes on the device need macOS 26 with Apple Intelligence turned on; without it, add your own model provider or use plain dictation.
 
-## Data Flow
+## Privacy
 
 ```text
 Speech recognition:  your Mac (Parakeet or Whisper, Core ML / Neural Engine)
@@ -52,7 +95,16 @@ Model download:      Hugging Face, once per model
 Update check:        GitHub releases of this repository (can be turned off)
 ```
 
-Blitztext has no backend and collects no data. See [docs/privacy.md](docs/privacy.md).
+Blitztext has no backend and collects no data. Details in [docs/privacy.md](docs/privacy.md).
+
+## Known Limitations
+
+- **`fn` shortcuts** only work on Apple keyboards. Set your own shortcut for other keyboards.
+- **Paste stops after an update or a rebuild:** open System Settings > Privacy & Security > Accessibility, remove the old Blitztext entry, add the current app and restart it.
+- **First dictation after a macOS update** can take a few minutes while macOS prepares the model for the Neural Engine. Blitztext shows a hint; keep it running.
+- **Whisper on silence** sometimes invents phrases like "Thank you." Blitztext filters the known ones.
+
+More in [docs/setup.md](docs/setup.md) and [docs/local-models.md](docs/local-models.md).
 
 ## Build It Yourself
 
@@ -66,15 +118,11 @@ cd blitztext-app
 
 `build.sh` creates an ad-hoc signed app for your own Mac. If you publish a fork, use your own bundle identifier, name and icon (see [TRADEMARKS.md](TRADEMARKS.md)) and sign it with your own Developer ID.
 
-More in [docs/setup.md](docs/setup.md) and [docs/local-models.md](docs/local-models.md).
-
-## Project Structure
-
 ```text
 BlitztextMac/        macOS menu bar app (SwiftUI, AppKit)
   App/               app state and lifecycle
   Features/          workflows, menu bar, settings, audio files, release notes
-  Services/          recording, hotkeys, local transcription, paste, history
+  Services/          recording, hotkeys, local transcription, paste, history, updates
   Views/             shared UI pieces
   Tests/             unit tests: post-processing, cursor fit, paragraphs, filters
 BlitztextShared/     code shared with the (not yet public) iOS app
@@ -88,7 +136,7 @@ build.sh             local build script
 
 ## Contributing
 
-Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md). Ideas and direction: [ROADMAP.md](ROADMAP.md).
+Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md), and see [ROADMAP.md](ROADMAP.md) for what comes next.
 
 Thanks to everyone whose pull requests shaped this version, among them automatic paragraphs (#21), build fixes (#5, #16) and a cancellation fix (#10).
 
@@ -101,9 +149,22 @@ Independent projects built on the Blitztext idea. They are not maintained or rev
 - Windows (.NET 8): [echobrain-de/blitztext](https://github.com/echobrain-de/blitztext)
 - Fork with history, meetings and a team server: [mschnitzler-creator/blitztext-app-v2](https://github.com/mschnitzler-creator/blitztext-app-v2)
 
+## Acknowledgments
+
+- **[Handy](https://github.com/cjpais/handy)** for the transcript post-processing and the clipboard restore Blitztext builds on
+- **[Amical](https://github.com/amicalhq/amical)** for ideas on cursor context, website modes and invented Whisper text
+- **[FluidAudio](https://github.com/FluidInference/FluidAudio)** and **NVIDIA** for Parakeet on Core ML
+- **[WhisperKit](https://github.com/argmaxinc/argmax-oss-swift)** by Argmax and **OpenAI** for Whisper
+- **[Sparkle](https://sparkle-project.org)** for updates
+- **Community contributors** who send fixes and ideas
+
+Full license texts: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), also inside the app (Settings > Allgemein > Über Blitztext).
+
 ## License
 
-Code: MIT License, see [LICENSE](LICENSE). Third-party code and models: see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md); the full license texts ship inside the app (Settings > Allgemein > Über Blitztext > "Lizenzen und Hinweise"). Names, logos and icons are not licensed for reuse, see [TRADEMARKS.md](TRADEMARKS.md).
+MIT License, see [LICENSE](LICENSE). Free and open source, built and maintained by Blackboat alongside our client work, without warranty and without guaranteed support.
+
+The Blitztext name, logo, icon and brand assets are not open source. Forks and redistributions must use their own branding and must not imply endorsement by Blackboat, see [TRADEMARKS.md](TRADEMARKS.md).
 
 ## Legal / Impressum & Datenschutz
 

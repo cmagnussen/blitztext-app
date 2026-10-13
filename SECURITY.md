@@ -1,8 +1,8 @@
 # Security Policy
 
-Blitztext macOS Preview is experimental software.
+Blitztext is free and open source software.
 
-It is provided as-is, without warranty, support guarantees, or production-readiness claims.
+It is provided as-is under the MIT License, without warranty or support guarantees.
 
 ## Supported Versions
 

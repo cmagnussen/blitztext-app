@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Report something broken in the macOS preview
+about: Report something broken in Blitztext for macOS
 title: ""
 labels: bug
 assignees: ""

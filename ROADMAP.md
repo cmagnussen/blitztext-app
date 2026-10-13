@@ -1,6 +1,6 @@
 # Roadmap
 
-This is a preview roadmap, not a promise.
+Ideas and direction, not a promise.
 
 ## Current Scope
 
