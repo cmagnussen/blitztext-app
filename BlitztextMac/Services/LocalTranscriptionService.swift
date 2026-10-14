@@ -52,7 +52,7 @@ struct LocalTranscriptionModel: Identifiable, Hashable {
 
     static func displayName(for modelName: String) -> String {
         if modelName == ParakeetTranscriber.modelName {
-            return "Parakeet v3"
+            return ParakeetTranscriber.displayName
         }
         if modelName.contains("small") {
             return "Whisper Small"
@@ -63,7 +63,8 @@ struct LocalTranscriptionModel: Identifiable, Hashable {
         if modelName.contains("tiny") {
             return "Whisper Tiny"
         }
-        if modelName.contains("turbo") {
+        // OpenAI's large-v3-turbo, released 2024-09-30; Argmax ships it in two builds.
+        if modelName.contains("large-v3-v20240930") {
             return "Whisper Large v3 Turbo"
         }
         if modelName.contains("large-v3") {
@@ -76,9 +77,24 @@ struct LocalTranscriptionModel: Identifiable, Hashable {
     }
 }
 
-/// Relative speed and accuracy (0...1) to compare local models at a glance.
-/// Rough Blitztext estimates, not a benchmark on German audio: speed follows model size
-/// and decoder depth on Apple silicon, accuracy the order of published German results.
+/// Relative speed and accuracy (0...1) to compare local models at a glance, derived from
+/// published benchmarks (October 2026), not measured by Blitztext.
+///
+/// Accuracy: `1 - WER / 25` with the German FLEURS word error rate, so 25 % WER is an empty
+/// bar. Parakeet Ultra 4.9 % and v3 5.8 % (Blitztext's run of FluidAudio's FLEURS benchmark,
+/// 350 German samples on Apple M5; FluidAudio publishes 5.9 % for v3); Whisper
+/// large-v3-turbo 5.8 % (OpenAI, whisper discussion #2363) plus about 1 point for the
+/// 4-bit compression (Argmax, German Common Voice 17: 12.26 % to 13.21 %); Whisper small
+/// 10.2 % (Whisper paper, table 13; no figure for the compressed file).
+///
+/// Speed: `log10(x) / log10(200)` with x times real time on an M4 Pro, so 1x is an empty
+/// bar and 200x a full one. Parakeet v3 155.6x (FluidAudio, LibriSpeech test-clean), Ultra
+/// about 11 % slower in the same run as above, so about 140x; WhisperKit
+/// 27.3x small, 15.8x turbo_632MB, 10.5x 626MB (Argmax whisperkit-benchmarks). Logarithmic,
+/// because a dictation of a few seconds feels instant at 100x and still quick at 10x.
+///
+/// Both Whisper large entries are OpenAI's large-v3-turbo (v20240930) with the same 4-bit
+/// weights; the `_turbo` file adds Argmax's streaming optimizations and runs about 1.5x faster.
 struct LocalModelRating: Equatable {
     let speed: Double
     let accuracy: Double
@@ -88,28 +104,22 @@ struct LocalModelRating: Equatable {
 
     static func rating(for modelName: String) -> LocalModelRating? {
         if modelName == ParakeetTranscriber.modelName {
-            // FluidAudio benchmark: German FLEURS 5.9 % WER, ~220x real time on Apple Silicon.
+            let legacy = ParakeetTranscriber.usesLegacyModel
             return LocalModelRating(
-                speed: 0.95,
-                accuracy: 0.9,
-                sizeLabel: "~500 MB",
+                speed: legacy ? 0.95 : 0.93,
+                accuracy: legacy ? 0.77 : 0.80,
+                sizeLabel: legacy ? "~460 MB" : "~630 MB",
                 languages: "Erkennt die Sprache selbst: Deutsch, Englisch und 23 weitere europäische Sprachen."
             )
         }
-        if modelName.contains("turbo") {
-            return LocalModelRating(speed: 0.5, accuracy: 0.85, sizeLabel: "632 MB")
+        if modelName.contains("large-v3-v20240930_turbo") {
+            return LocalModelRating(speed: 0.52, accuracy: 0.73, sizeLabel: "632 MB")
         }
-        if modelName.contains("large-v3") {
-            return LocalModelRating(speed: 0.2, accuracy: 0.9, sizeLabel: "626 MB")
+        if modelName.contains("large-v3-v20240930") {
+            return LocalModelRating(speed: 0.44, accuracy: 0.73, sizeLabel: "626 MB")
         }
         if modelName.contains("small") {
-            return LocalModelRating(speed: 0.7, accuracy: 0.7, sizeLabel: "216 MB")
-        }
-        if modelName.contains("base") {
-            return LocalModelRating(speed: 0.9, accuracy: 0.55, sizeLabel: "~140 MB")
-        }
-        if modelName.contains("tiny") {
-            return LocalModelRating(speed: 1.0, accuracy: 0.4, sizeLabel: "~75 MB")
+            return LocalModelRating(speed: 0.62, accuracy: 0.59, sizeLabel: "216 MB")
         }
         return nil
     }
@@ -139,11 +149,40 @@ actor LocalTranscriptionService {
     static let fastModelName = "openai_whisper-large-v3-v20240930_turbo_632MB"
     static let recommendedFastModelName = "openai_whisper-small_216MB"
     static let modelRepo = "argmaxinc/whisperkit-coreml"
-    static var supportedModelNames: [String] {
+    /// Both builds of Whisper large-v3-turbo carry the same 4-bit weights, so the app lists
+    /// them as one model. The streaming build runs about 1.5x faster, but Argmax does not
+    /// support it on M1, so M1 and Intel Macs get the plain build.
+    static let turboModelNames = [fastModelName, defaultModelName]
+
+    static var preferredTurboModelName: String {
+        hasFastTurboSupport ? fastModelName : defaultModelName
+    }
+
+    private static let hasFastTurboSupport: Bool = {
+        var size = 0
+        guard sysctlbyname("machdep.cpu.brand_string", nil, &size, nil, 0) == 0, size > 0 else { return false }
+        var bytes = [CChar](repeating: 0, count: size)
+        guard sysctlbyname("machdep.cpu.brand_string", &bytes, &size, nil, 0) == 0 else { return false }
+        let brand = String(cString: bytes)
+        return brand.hasPrefix("Apple M") && !brand.hasPrefix("Apple M1")
+    }()
+
+    /// The one turbo entry: the build already selected and on disk, else a downloaded one,
+    /// else the build for this Mac.
+    static func turboModelName(selected: String) -> String {
+        if turboModelNames.contains(selected), isModelInstalled(selected) {
+            return selected
+        }
+        if isModelInstalled(preferredTurboModelName) {
+            return preferredTurboModelName
+        }
+        return turboModelNames.first(where: { isModelInstalled($0) }) ?? preferredTurboModelName
+    }
+
+    static func supportedModelNames(selected: String) -> [String] {
         (ParakeetTranscriber.isSupported ? [ParakeetTranscriber.modelName] : []) + [
             recommendedFastModelName,
-            fastModelName,
-            defaultModelName
+            turboModelName(selected: selected)
         ]
     }
     static let modelPageURL = URL(
@@ -225,11 +264,12 @@ actor LocalTranscriptionService {
             }
     }
 
-    static func modelOptions() -> [LocalTranscriptionModel] {
+    static func modelOptions(selected: String) -> [LocalTranscriptionModel] {
         var seen = Set<String>()
         let installed = installedModels()
         let installedByID = Dictionary(uniqueKeysWithValues: installed.map { ($0.id, $0) })
-        let orderedIDs = supportedModelNames + installed.map(\.id)
+        let orderedIDs = supportedModelNames(selected: normalizedModelName(selected))
+            + installed.map(\.id).filter { !turboModelNames.contains($0) }
 
         return orderedIDs.compactMap { modelName in
             let normalizedName = normalizedModelName(modelName)

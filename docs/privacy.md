@@ -4,7 +4,7 @@ Blitztext has no backend. It does not collect, send or store any data on servers
 
 ## What Stays On Your Mac
 
-- **Audio:** recorded and transcribed on your Mac with a local model (Parakeet v3 or Whisper). Temporary recordings are deleted after each workflow.
+- **Audio:** recorded and transcribed on your Mac with a local model (Parakeet or Whisper). Temporary recordings are deleted after each workflow.
 - **Writing modes with Apple Intelligence:** run on your Mac.
 - **Settings, dictionary, prompts:** local app storage.
 - **History (optional):** encrypted on your Mac, kept as long as you choose (off, 24 hours, 7 days).

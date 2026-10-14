@@ -450,7 +450,7 @@ struct CustomizeSettingsView: View {
     }
 
     private var localModelOptions: [LocalTranscriptionModel] {
-        LocalTranscriptionService.modelOptions()
+        LocalTranscriptionService.modelOptions(selected: appState.selectedLocalModelName)
     }
 
     private var installedModelsText: String {

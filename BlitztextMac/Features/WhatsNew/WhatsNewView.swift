@@ -4,7 +4,7 @@ import SwiftUI
 /// or right after the first dictation for people who only use the shortcuts.
 enum WhatsNew {
     /// Bump together with the items when a release deserves a note.
-    static let version = "1.11"
+    static let version = "1.12"
 
     struct Item: Identifiable {
         let icon: String
@@ -15,24 +15,19 @@ enum WhatsNew {
 
     static let items: [Item] = [
         Item(
-            icon: "text.cursor",
-            title: "Passt zum Text am Cursor",
-            detail: "Leerzeichen und Groß- und Kleinschreibung stimmen jetzt auch mitten im Satz. Auf Wunsch sehen die KI-Modi den Text rund um den Cursor: Einstellungen, Modelle."
+            icon: "waveform",
+            title: "Genauer auf Deutsch",
+            detail: "Parakeet Ultra macht auf Deutsch rund ein Sechstel weniger Fehler und ist genauso schnell. Wer Parakeet schon hat, bekommt Ultra von selbst im Hintergrund."
         ),
         Item(
-            icon: "globe",
-            title: "Modus je Website",
-            detail: "Gmail, Outlook im Web oder Notion bekommen wie Apps ihren eigenen Modus: Einstellungen, Modi."
+            icon: "doc.on.clipboard",
+            title: "Zwischenablage zuverlässiger",
+            detail: "Blitztext wartet, bis die App den Text wirklich eingefügt hat, und gibt dir dann deine Zwischenablage zurück. Was du zwischendurch kopierst, bleibt."
         ),
         Item(
-            icon: "speaker.slash",
-            title: "Ton aus beim Diktieren",
-            detail: "Podcast oder Musik sind stumm, solange du diktierst, und danach sofort wieder zu hören. Abschalten unter Einstellungen, Allgemein."
-        ),
-        Item(
-            icon: "checkmark.bubble",
-            title: "Weniger Erfundenes",
-            detail: "Sätze wie „Untertitel im Auftrag des ZDF“ fliegen raus, und Blitztext+ beantwortet diktierte Fragen nicht mehr, sondern schreibt sie auf."
+            icon: "character.book.closed",
+            title: "Wörterbuch genauer",
+            detail: "Namen aus deinem Wörterbuch werden auch erkannt, wenn sie anders klingen. Echte Wörter wie „Cloud“ bleiben stehen, Zeilenumbrüche auch."
         ),
     ]
 }

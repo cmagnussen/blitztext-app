@@ -167,7 +167,7 @@ struct MenuBarView: View {
     }
 
     private var transcriptionModePanel: some View {
-        let modelOptions = LocalTranscriptionService.modelOptions()
+        let modelOptions = LocalTranscriptionService.modelOptions(selected: appState.selectedLocalModelName)
         let selectedModelInstalled = appState.selectedLocalModelIsInstalled
 
         return VStack(alignment: .leading, spacing: 10) {

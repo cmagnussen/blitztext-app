@@ -4,16 +4,16 @@ All speech recognition in Blitztext runs on your Mac. The app does not bundle a 
 
 ## Recommended Model
 
-**NVIDIA Parakeet TDT 0.6B v3** via [FluidAudio](https://github.com/FluidInference/FluidAudio), on Apple silicon: very fast, 25 European languages, detects the language. Weights under CC BY 4.0 ([model page](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3)).
+**Parakeet Ultra** via [FluidAudio](https://github.com/FluidInference/FluidAudio), on Apple silicon: very fast, 25 European languages, detects the language. Moondream's post-training of NVIDIA Parakeet TDT 0.6B v3 with fewer errors (German FLEURS: 4.9 instead of 5.8 % WER in our run of FluidAudio's benchmark). Weights under CC BY 4.0 ([model page](https://huggingface.co/moondream/parakeet-ultra)). Macs with Parakeet v3 from an earlier version switch to Ultra in the background.
 
 ## Whisper Models
 
 WhisperKit Core ML models (about 100 languages, language detection), installed from the app or manually into `~/Library/Application Support/Blitztext/models/whisperkit/`:
 
 - [openai_whisper-small_216MB](https://huggingface.co/argmaxinc/whisperkit-coreml/tree/main/openai_whisper-small_216MB)
-
-- [openai_whisper-large-v3-v20240930_626MB](https://huggingface.co/argmaxinc/whisperkit-coreml/tree/main/openai_whisper-large-v3-v20240930_626MB)
-- [openai_whisper-large-v3-v20240930_turbo_632MB](https://huggingface.co/argmaxinc/whisperkit-coreml/tree/main/openai_whisper-large-v3-v20240930_turbo_632MB)
+- Whisper Large v3 Turbo, in one of two builds with the same weights: the streaming build on M2 and newer, the plain build on M1 and Intel Macs:
+  - [openai_whisper-large-v3-v20240930_626MB](https://huggingface.co/argmaxinc/whisperkit-coreml/tree/main/openai_whisper-large-v3-v20240930_626MB)
+  - [openai_whisper-large-v3-v20240930_turbo_632MB](https://huggingface.co/argmaxinc/whisperkit-coreml/tree/main/openai_whisper-large-v3-v20240930_turbo_632MB)
 
 The app detects installed model folders that contain `AudioEncoder.mlmodelc`, `MelSpectrogram.mlmodelc`, and `TextDecoder.mlmodelc`.
 

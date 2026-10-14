@@ -448,18 +448,15 @@ struct ModelRatingPanel: View {
                 .font(.system(size: 10))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            Text("\(rating.sizeLabel). Richtwerte, nicht auf deutschen Diktaten gemessen.")
+            Text("\(rating.sizeLabel). Richtwerte aus veröffentlichten Benchmarks, nicht auf diesem Mac gemessen.")
                 .font(.system(size: 10))
                 .foregroundStyle(.secondary)
             if modelName == ParakeetTranscriber.modelName {
                 // CC BY 4.0 requires attribution.
-                HStack(spacing: 4) {
-                    Text("Parakeet TDT 0.6B v3 von NVIDIA,")
-                    Link("CC BY 4.0", destination: ParakeetTranscriber.licenseURL)
-                    Text("via FluidAudio.")
-                }
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
+                Text((try? AttributedString(markdown: ParakeetTranscriber.attribution)) ?? AttributedString(ParakeetTranscriber.attribution))
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

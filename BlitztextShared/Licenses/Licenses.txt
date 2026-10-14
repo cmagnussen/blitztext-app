@@ -7,9 +7,13 @@ Blitztext: Lizenzen und Hinweise / Licenses and notices
 
 Local Parakeet transcription uses FluidAudio (https://github.com/FluidInference/FluidAudio), licensed under the Apache License 2.0.
 
+## Parakeet Ultra
+
+The local model "Parakeet Ultra" is moondream/parakeet-ultra (https://huggingface.co/moondream/parakeet-ultra), a post-training of NVIDIA Parakeet TDT 0.6B v3 by Moondream, converted to Core ML by FluidInference (https://huggingface.co/FluidInference/parakeet-ultra-coreml). Both are licensed under Creative Commons Attribution 4.0 International (CC BY 4.0, https://creativecommons.org/licenses/by/4.0/). The weights are downloaded on demand and not modified by Blitztext.
+
 ## NVIDIA Parakeet TDT 0.6B v3
 
-The local model "Parakeet v3" is NVIDIA Parakeet TDT 0.6B v3 (https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), converted to CoreML by FluidInference (https://huggingface.co/FluidInference/parakeet-tdt-0.6b-v3-coreml). Both are licensed under Creative Commons Attribution 4.0 International (CC BY 4.0, https://creativecommons.org/licenses/by/4.0/). The weights are downloaded on demand and not modified by Blitztext.
+Earlier versions downloaded the local model "Parakeet v3", NVIDIA Parakeet TDT 0.6B v3 (https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), converted to CoreML by FluidInference (https://huggingface.co/FluidInference/parakeet-tdt-0.6b-v3-coreml). Both are licensed under Creative Commons Attribution 4.0 International (CC BY 4.0, https://creativecommons.org/licenses/by/4.0/). The weights are downloaded on demand and not modified by Blitztext.
 
 ## Octicons
 

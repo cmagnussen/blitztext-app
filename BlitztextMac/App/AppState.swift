@@ -128,6 +128,7 @@ final class AppState {
         KeychainService.removeLegacyServerCredentials()
         autoSelectFastLocalModelIfNeeded()
         prewarmLocalTranscriptionIfNeeded()
+        upgradeParakeetIfNeeded()
     }
 
     // MARK: - Custom Display Names
@@ -201,7 +202,10 @@ final class AppState {
     }
 
     var selectedLocalModelName: String {
-        LocalTranscriptionService.normalizedModelName(appSettings.selectedLocalTranscriptionModelName)
+        let name = LocalTranscriptionService.normalizedModelName(appSettings.selectedLocalTranscriptionModelName)
+        // Both turbo builds are one entry in the list; resolve to the build this Mac uses.
+        guard LocalTranscriptionService.turboModelNames.contains(name) else { return name }
+        return LocalTranscriptionService.turboModelName(selected: name)
     }
 
     var selectedLocalModelIsInstalled: Bool {
@@ -552,6 +556,18 @@ final class AppState {
 
         appSettings.selectedLocalTranscriptionModelName = LocalTranscriptionService.recommendedFastModelName
         appSettings.hasAutoSelectedFastLocalModel = true
+    }
+
+    /// Macs with Parakeet v3 from an earlier version get Ultra in the background, on a network
+    /// without a data limit; until it is ready, dictation keeps using v3. Tried again at the
+    /// next launch if it does not finish.
+    private func upgradeParakeetIfNeeded() {
+        ParakeetTranscriber.files.removeLegacyIfUpgraded()
+        guard ParakeetTranscriber.needsUpgrade else { return }
+        Task.detached(priority: .utility) {
+            guard await UnmeteredNetwork.isAvailable() else { return }
+            try? await ParakeetTranscriber.shared.upgrade()
+        }
     }
 
     private func prewarmLocalTranscriptionIfNeeded() {

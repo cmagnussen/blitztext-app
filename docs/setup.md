@@ -24,8 +24,8 @@ If paste stops working after an update or rebuild, open **System Settings > Priv
 
 Open **Settings > Modelle > Spracherkennung**, pick a model and load it once:
 
-- **Parakeet v3** (recommended on Apple silicon): fast, 25 European languages, about 500 MB.
-- **Whisper Large v3 Turbo / Large v3 / Small:** about 100 languages, slower.
+- **Parakeet Ultra** (recommended on Apple silicon): fast, 25 European languages, about 630 MB.
+- **Whisper Large v3 Turbo / Small:** about 100 languages, slower.
 
 After a macOS update the first dictation can take a few minutes while macOS prepares the model for the Neural Engine. Blitztext shows a hint; keep it running.
 

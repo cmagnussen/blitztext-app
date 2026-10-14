@@ -56,7 +56,7 @@ Keyboards without `fn`: set your own shortcut per mode in the settings.
 
 ## Features
 
-- **Local speech recognition:** NVIDIA Parakeet v3 (fast, 25 European languages) or OpenAI Whisper via WhisperKit (about 100 languages). Both detect the spoken language.
+- **Local speech recognition:** Parakeet Ultra (fast, 25 European languages) or OpenAI Whisper via WhisperKit (about 100 languages). Both detect the spoken language.
 - **Local writing modes:** Blitztext+, $%&! and :) run with Apple Intelligence on your Mac (macOS 26). Optionally bring your own model provider: OpenAI, Anthropic, Google Gemini, Mistral, OpenRouter, or a local server such as Ollama or LM Studio.
 - **Fits where you type:** spaces and capitals follow the text around your cursor, also mid-sentence. Password fields are never read.
 - **Mode per app or website:** Gmail always Blitztext+, Slack with emojis, everything else word for word.
@@ -80,7 +80,7 @@ The app is in German for now.
 1. Open the [latest release](https://github.com/cmagnussen/blitztext-app/releases/latest), download the ZIP under "Assets", unpack it and move **Blitztext.app** to **Applications**.
 2. Open Blitztext. It lives in the menu bar.
 3. Allow **Microphone** and **Accessibility** (needed to paste into other apps).
-4. In the settings (**Modelle**), load a local speech model once. Parakeet v3 is recommended on Apple silicon, about 500 MB.
+4. In the settings (**Modelle**), load a local speech model once. Parakeet Ultra is recommended on Apple silicon, about 630 MB.
 5. Hold `fn + Shift`, speak, let go.
 
 **Requirements:** macOS 14 or newer. Parakeet needs Apple silicon; Intel Macs use Whisper. The writing modes on the device need macOS 26 with Apple Intelligence turned on; without it, add your own model provider or use plain dictation.
@@ -152,7 +152,7 @@ Independent projects built on the Blitztext idea. They are not maintained or rev
 
 ## Acknowledgments
 
-- **[FluidAudio](https://github.com/FluidInference/FluidAudio)** and **NVIDIA** for Parakeet on Core ML
+- **[FluidAudio](https://github.com/FluidInference/FluidAudio)**, **Moondream** and **NVIDIA** for Parakeet Ultra on Core ML
 - **[WhisperKit](https://github.com/argmaxinc/argmax-oss-swift)** by Argmax and **OpenAI** for Whisper
 - **[Sparkle](https://sparkle-project.org)** for updates
 - **Community contributors** who send fixes and ideas
