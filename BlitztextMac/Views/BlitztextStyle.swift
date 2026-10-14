@@ -451,6 +451,7 @@ struct ModelRatingPanel: View {
             Text("\(rating.sizeLabel). Richtwerte aus veröffentlichten Benchmarks, nicht auf diesem Mac gemessen.")
                 .font(.system(size: 10))
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             if modelName == ParakeetTranscriber.modelName {
                 // CC BY 4.0 requires attribution.
                 Text((try? AttributedString(markdown: ParakeetTranscriber.attribution)) ?? AttributedString(ParakeetTranscriber.attribution))

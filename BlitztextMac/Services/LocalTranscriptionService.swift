@@ -20,34 +20,13 @@ struct LocalTranscriptionModel: Identifiable, Hashable {
         id == ParakeetTranscriber.modelName
     }
 
-    var shortDisplayName: String {
-        if isParakeet {
-            return "Parakeet v3"
-        }
-        if id.contains("small") {
-            return "Whisper Small"
-        }
-        if id.contains("base") {
-            return "Whisper Base"
-        }
-        if id.contains("tiny") {
-            return "Whisper Tiny"
-        }
-        if id.contains("turbo") {
-            return "Whisper Turbo"
-        }
-        if id.contains("large-v3") {
-            return "Whisper Large"
-        }
-        return displayName
-    }
-
     var rating: LocalModelRating? {
         LocalModelRating.rating(for: id)
     }
 
-    var installStateLabel: String {
-        isInstalled ? "Installiert" : "Nicht installiert"
+    /// The same entry in the menu bar and in the settings.
+    var pickerLabel: String {
+        isInstalled ? displayName : "\(displayName) (nicht installiert)"
     }
 
     static func displayName(for modelName: String) -> String {

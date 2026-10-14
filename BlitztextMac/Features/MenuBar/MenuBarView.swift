@@ -203,7 +203,7 @@ struct MenuBarView: View {
                         set: { appState.appSettings.selectedLocalTranscriptionModelName = $0 }
                     )) {
                         ForEach(modelOptions) { model in
-                            Text(model.isInstalled ? model.shortDisplayName : "\(model.shortDisplayName) (nicht installiert)")
+                            Text(model.pickerLabel)
                                 .tag(model.id)
                         }
                     }
@@ -377,7 +377,7 @@ struct MenuBarView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 0) {
-                    onboardingStep(number: "1", title: "Sprachmodell laden", detail: "In den Einstellungen ein lokales Modell installieren, zum Beispiel Parakeet v3.")
+                    onboardingStep(number: "1", title: "Sprachmodell laden", detail: "In den Einstellungen ein lokales Modell installieren, zum Beispiel Parakeet Ultra.")
                     Divider().opacity(0.18)
                     onboardingStep(number: "2", title: "Berechtigungen erlauben", detail: "Mikrofon und Bedienungshilfen f\u{00FC}r das Einf\u{00FC}gen freigeben.")
                     Divider().opacity(0.18)
