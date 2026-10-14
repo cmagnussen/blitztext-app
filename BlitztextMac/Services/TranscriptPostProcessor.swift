@@ -27,7 +27,7 @@ struct TranscriptPostProcessor {
     var correctCustomTerms = true
     var removeFillerWords = true
     var language = "de"
-    /// Maximum similarity score for a fuzzy match (0 = exact only). Handy's default.
+    /// Maximum similarity score for a fuzzy match (0 = exact only).
     var correctionThreshold = 0.18
     /// Returns true when a single word is a correctly spelled dictionary word.
     var isDictionaryWord: (String) -> Bool = { _ in false }
