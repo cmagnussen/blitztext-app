@@ -6,7 +6,7 @@ import CoreAudio
 ///
 /// Pausing would be nicer but is not safe: since macOS 15.4 apps cannot see what is
 /// playing, so "resume" afterwards could start something that was paused. Muting uses
-/// the mute switch, or volume 0 when a device has none (MIT notice in THIRD_PARTY_NOTICES.md).
+/// the mute switch, or volume 0 when a device has none.
 @MainActor
 final class SystemAudioMuter {
     private enum Restore {

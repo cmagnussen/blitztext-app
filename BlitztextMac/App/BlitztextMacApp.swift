@@ -99,6 +99,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     /// Finder "Open With", dragging onto the app icon, or `open -a Blitztext file.ogg`.
     func applicationWillTerminate(_ notification: Notification) {
         appState.restoreAudioOutput()
+        // Quitting right after a dictation still gives the previous clipboard back.
+        ClipboardPasteService.shared.settleNow()
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {

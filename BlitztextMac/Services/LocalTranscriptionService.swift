@@ -77,7 +77,8 @@ struct LocalTranscriptionModel: Identifiable, Hashable {
 }
 
 /// Relative speed and accuracy (0...1) to compare local models at a glance.
-/// The values are a rough guide, not a Blitztext benchmark on German audio.
+/// Rough Blitztext estimates, not a benchmark on German audio: speed follows model size
+/// and decoder depth on Apple silicon, accuracy the order of published German results.
 struct LocalModelRating: Equatable {
     let speed: Double
     let accuracy: Double
@@ -96,19 +97,19 @@ struct LocalModelRating: Equatable {
             )
         }
         if modelName.contains("turbo") {
-            return LocalModelRating(speed: 0.35, accuracy: 0.88, sizeLabel: "632 MB")
+            return LocalModelRating(speed: 0.5, accuracy: 0.85, sizeLabel: "632 MB")
         }
         if modelName.contains("large-v3") {
-            return LocalModelRating(speed: 0.23, accuracy: 0.89, sizeLabel: "626 MB")
+            return LocalModelRating(speed: 0.2, accuracy: 0.9, sizeLabel: "626 MB")
         }
         if modelName.contains("small") {
-            return LocalModelRating(speed: 0.78, accuracy: 0.80, sizeLabel: "216 MB")
+            return LocalModelRating(speed: 0.7, accuracy: 0.7, sizeLabel: "216 MB")
         }
         if modelName.contains("base") {
-            return LocalModelRating(speed: 0.99, accuracy: 0.71, sizeLabel: "~140 MB")
+            return LocalModelRating(speed: 0.9, accuracy: 0.55, sizeLabel: "~140 MB")
         }
         if modelName.contains("tiny") {
-            return LocalModelRating(speed: 1.0, accuracy: 0.61, sizeLabel: "~75 MB")
+            return LocalModelRating(speed: 1.0, accuracy: 0.4, sizeLabel: "~75 MB")
         }
         return nil
     }

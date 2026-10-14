@@ -156,6 +156,7 @@ Independent projects built on the Blitztext idea. They are not maintained or rev
 - **[WhisperKit](https://github.com/argmaxinc/argmax-oss-swift)** by Argmax and **OpenAI** for Whisper
 - **[Sparkle](https://sparkle-project.org)** for updates
 - **Community contributors** who send fixes and ideas
+- **The open-source dictation community**, whose work inspired parts of Blitztext
 
 Full license texts: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), also inside the app (Settings > Allgemein > Über Blitztext).
 

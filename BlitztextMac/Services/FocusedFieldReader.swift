@@ -78,30 +78,33 @@ enum FocusedFieldReader {
         var node = element(app, kAXFocusedUIElementAttribute)
         var steps = 0
         while let current = node, steps < 40, Date() < deadline {
-            if role(current) == "AXWebArea", let host = host(current, kAXURLAttribute) {
+            if let host = pageHost(current) {
                 return host
             }
             node = element(current, kAXParentAttribute)
             steps += 1
         }
 
+        // Nothing focused inside the page: search the window, within the time budget.
         guard let window = element(app, kAXFocusedWindowAttribute) else { return nil }
-        // Safari names the page address as the window's document.
-        if let host = host(window, kAXDocumentAttribute) {
-            return host
-        }
-        // Otherwise look for the page in the window, within the time budget.
         var queue = [window]
         var visited = 0
         while !queue.isEmpty, visited < 400, Date() < deadline {
             let current = queue.removeFirst()
             visited += 1
-            if role(current) == "AXWebArea", let host = host(current, kAXURLAttribute) ?? host(current, kAXDocumentAttribute) {
+            if let host = pageHost(current) {
                 return host
             }
             queue.append(contentsOf: children(current))
         }
-        return nil
+        // Last resort: some browsers only name the address as the window's document.
+        return host(window, kAXDocumentAttribute)
+    }
+
+    /// Host of a web page element, nil for anything else.
+    private static func pageHost(_ element: AXUIElement) -> String? {
+        guard role(element) == "AXWebArea" else { return nil }
+        return host(element, kAXURLAttribute) ?? host(element, kAXDocumentAttribute)
     }
 
     // MARK: - Accessibility helpers
@@ -119,7 +122,7 @@ enum FocusedFieldReader {
 
     private static func enableWebAccessibility(_ app: AXUIElement, bundleID: String?) {
         guard let bundleID, browsersNeedingManualAccessibility.contains(bundleID) else { return }
-        // Not "AXEnhancedUserInterface": it can stall Chromium on heavy pages.
+        // The switch Chromium and Electron provide for assistive apps to build the web tree.
         AXUIElementSetAttributeValue(app, "AXManualAccessibility" as CFString, kCFBooleanTrue)
     }
 
@@ -151,9 +154,9 @@ enum FocusedFieldReader {
         }
     }
 
+    /// Native and web password fields both report the secure text field subrole.
     private static func isSecure(_ element: AXUIElement) -> Bool {
         string(element, kAXSubroleAttribute) == kAXSecureTextFieldSubrole
-            || (role(element)?.contains("Secure") ?? false)
     }
 
     private static func selectedRange(_ element: AXUIElement) -> CFRange? {
