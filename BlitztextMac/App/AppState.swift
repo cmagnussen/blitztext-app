@@ -558,6 +558,13 @@ final class AppState {
         }
     }
 
+    /// Clears a stale grant, then asks again so Blitztext shows up fresh in System Settings.
+    func resetAccessibilityPermission() async -> Bool {
+        guard await AccessibilityPermissionService.resetPermission() else { return false }
+        requestAccessibilityPermission()
+        return true
+    }
+
     private func autoSelectFastLocalModelIfNeeded() {
         guard !appSettings.hasAutoSelectedFastLocalModel,
               LocalTranscriptionService.shouldAutoSelectRecommendedFastModel(

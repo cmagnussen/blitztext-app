@@ -78,6 +78,8 @@ private struct SectionLabel: View {
 /// Shown at the top of "Allgemein" only while pasting is not allowed yet.
 struct PermissionWarningSection: View {
     @Bindable var appState: AppState
+    @State private var isResetting = false
+    @State private var resetErrorText: String?
 
     var body: some View {
         SettingsSection(title: "Berechtigungen") {
@@ -92,25 +94,65 @@ struct PermissionWarningSection: View {
                         .font(.ui(11.5, .semibold))
                         .foregroundStyle(.primary)
 
-                    Text("\u{00D6}ffne Bedienungshilfen und aktiviere Blitztext. Falls Blitztext schon aktiv ist, einmal aus- und wieder einschalten.")
+                    Text("\u{00D6}ffne Bedienungshilfen und aktiviere Blitztext. Steht Blitztext dort schon auf an, hier die Freigabe zur\u{00FC}cksetzen und danach neu erlauben.")
                         .font(.ui(12))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
+
+                    if let resetErrorText {
+                        Text(resetErrorText)
+                            .font(.ui(12))
+                            .foregroundStyle(BlitztextTheme.danger)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
 
-            HStack(spacing: 8) {
-                Button("Bedienungshilfen \u{00F6}ffnen") {
-                    appState.requestAccessibilityPermission()
+            // Three buttons don't fit the popover width, so the reset moves to its own line.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    openButton
+                    recheckButton
+                    resetButton
                 }
-                .buttonStyle(SubtleButtonStyle())
-
-                Button("Erneut pr\u{00FC}fen") {
-                    appState.refreshAccessibilityPermission()
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        openButton
+                        recheckButton
+                    }
+                    resetButton
                 }
-                .buttonStyle(SubtleButtonStyle())
             }
         }
+    }
+
+    private var openButton: some View {
+        Button("Bedienungshilfen \u{00F6}ffnen") {
+            appState.requestAccessibilityPermission()
+        }
+        .buttonStyle(SubtleButtonStyle())
+    }
+
+    private var recheckButton: some View {
+        Button("Erneut pr\u{00FC}fen") {
+            appState.refreshAccessibilityPermission()
+        }
+        .buttonStyle(SubtleButtonStyle())
+    }
+
+    private var resetButton: some View {
+        Button("Freigabe zur\u{00FC}cksetzen") {
+            isResetting = true
+            resetErrorText = nil
+            Task {
+                if !(await appState.resetAccessibilityPermission()) {
+                    resetErrorText = "Zur\u{00FC}cksetzen hat nicht geklappt. In Bedienungshilfen Blitztext mit \u{201E}\u{2212}\u{201C} entfernen und neu hinzuf\u{00FC}gen."
+                }
+                isResetting = false
+            }
+        }
+        .buttonStyle(SubtleButtonStyle())
+        .disabled(isResetting)
     }
 }
 
