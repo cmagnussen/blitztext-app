@@ -199,7 +199,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         // Do this before checking the requested mode: it may not be configured.
         if appState.appSettings.hotkeyMode == .toggle,
            let active = appState.activeWorkflow,
-           active.phase.isActive {
+           case .running = active.phase {
             if active.isRecording {
                 active.stop()
             }
