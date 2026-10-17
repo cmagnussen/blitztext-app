@@ -195,6 +195,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     private func handleHotkeyDown(_ type: WorkflowType) {
+        // In toggle mode, any workflow shortcut finishes the current recording.
+        // Do this before checking the requested mode: it may not be configured.
+        if appState.appSettings.hotkeyMode == .toggle,
+           let active = appState.activeWorkflow,
+           case .running = active.phase {
+            if active.isRecording {
+                active.stop()
+            }
+            // A second stop during transcription would cancel its result.
+            return
+        }
+
         guard appState.isWorkflowAvailable(type) else {
             // Missing model or AI setup: say so instead of silently ignoring the shortcut.
             guard !popover.isShown else { return }
@@ -214,16 +226,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             appState.startWorkflow(type, source: .hotkeyBackground)
 
         case .toggle:
-            // Toggle mode: if already recording same workflow, stop it
-            if let active = appState.activeWorkflow,
-               active.type == type,
-               active.phase.isActive {
-                active.stop()
-            } else {
-                appState.prepareForPopoverPresentation()
-                appState.startWorkflow(type, source: .manual)
-                showPopover()
-            }
+            appState.prepareForPopoverPresentation()
+            appState.startWorkflow(type, source: .manual)
+            showPopover()
         }
     }
 
