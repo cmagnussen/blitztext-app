@@ -11,6 +11,7 @@ final class TextImprovementWorkflow: Workflow {
     }
     var onOutput: WorkflowOutputHandler?
     var onPhaseChange: WorkflowPhaseChangeHandler?
+    private(set) var transcript: String?
 
     private let recorder = AudioRecorder()
     private let settings: TextImprovementSettings
@@ -114,6 +115,7 @@ final class TextImprovementWorkflow: Workflow {
                 }
 
                 if Task.isCancelled { return }
+                transcript = processedRawText
 
                 // Phase 2: AI improvement (on device or the connected provider)
                 phase = .running("Text wird verbessert ...")

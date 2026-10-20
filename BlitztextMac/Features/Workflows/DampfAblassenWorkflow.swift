@@ -11,6 +11,7 @@ final class DampfAblassenWorkflow: Workflow {
     }
     var onOutput: WorkflowOutputHandler?
     var onPhaseChange: WorkflowPhaseChangeHandler?
+    private(set) var transcript: String?
 
     private let recorder = AudioRecorder()
     private let settings: DampfAblassenSettings
@@ -114,6 +115,7 @@ final class DampfAblassenWorkflow: Workflow {
                 }
 
                 if Task.isCancelled { return }
+                transcript = processedRawText
 
                 // Phase 2: AI rewrite (on device or the connected provider)
                 phase = .running("Wird umformuliert ...")

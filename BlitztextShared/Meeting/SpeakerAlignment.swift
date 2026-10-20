@@ -45,18 +45,30 @@ enum SpeakerAlignment {
     /// Without speaker turns, paragraphs break at pauses longer than this.
     static let paragraphPause: TimeInterval = 1.5
 
-    static func paragraphs(words: [TimedWord], turns: [SpeakerTurn]) -> [Paragraph] {
+    /// - Parameter breaks: Where someone on another track starts talking, e.g. the microphone
+    ///   in an online meeting. A paragraph spanning such a moment is split there, so a
+    ///   one-on-one call reads as a conversation and not as one block per person.
+    static func paragraphs(words: [TimedWord], turns: [SpeakerTurn], breaks: [TimeInterval] = []) -> [Paragraph] {
         var paragraphs: [Paragraph] = []
+        var previousStart: TimeInterval = -.infinity
         var previousEnd: TimeInterval = 0
+        let breaks = breaks.sorted()
+        var nextBreak = 0
 
         for word in words {
             let speaker = turns.isEmpty ? 1 : speakerID(at: (word.start + word.end) / 2, in: turns)
             let pauseBreak = turns.isEmpty && word.start - previousEnd > paragraphPause
-            if let last = paragraphs.last, last.speaker == speaker, !pauseBreak {
+            var otherTrackBreak = false
+            while nextBreak < breaks.count, breaks[nextBreak] <= word.start {
+                otherTrackBreak = otherTrackBreak || breaks[nextBreak] > previousStart
+                nextBreak += 1
+            }
+            if let last = paragraphs.last, last.speaker == speaker, !pauseBreak, !otherTrackBreak {
                 paragraphs[paragraphs.count - 1] = Paragraph(speaker: speaker, start: last.start, text: last.text + " " + word.text)
             } else {
                 paragraphs.append(Paragraph(speaker: speaker, start: word.start, text: word.text))
             }
+            previousStart = word.start
             previousEnd = word.end
         }
         return paragraphs

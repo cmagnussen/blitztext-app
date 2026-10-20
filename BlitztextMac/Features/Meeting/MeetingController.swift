@@ -2,9 +2,11 @@ import AVFoundation
 import Foundation
 import Observation
 
-/// Records a meeting in the room through the Mac's microphone and turns it into a
-/// transcript by person, optionally with a summary and to-dos. Transcription and speaker
-/// detection run on this Mac; the summary too, unless the user connected an AI provider.
+/// Records a meeting through the Mac's microphone and turns it into a transcript by person,
+/// optionally with a summary and to-dos. For an online meeting it also records what the Mac
+/// plays: the microphone becomes "Ich", the system sound is split into the other people.
+/// Transcription and speaker detection run on this Mac; the summary too, unless the user
+/// connected an AI provider.
 @Observable
 @MainActor
 final class MeetingController {
@@ -27,6 +29,12 @@ final class MeetingController {
         didSet { onPhaseChange?() }
     }
     private(set) var audioLevel: Float = 0
+    /// The running recording includes the Mac's sound, so it must not be muted.
+    private(set) var isRecordingSystemAudio = false
+    /// When the running recording was paused, e.g. for a break or breakout rooms.
+    private(set) var pausedAt: Date?
+    /// Notes that grow during the recording, nil when switched off or no model is there.
+    private(set) var liveNotes: LiveNotesController?
     /// Something the user should know about the current meeting, e.g. an interrupted recording.
     private(set) var notice: String?
     /// The meeting being recorded. It is stored as pending from the start, so a quit or crash
@@ -35,9 +43,15 @@ final class MeetingController {
     let store: MeetingStore
     /// Lets the menu bar show that a meeting is being recorded.
     @ObservationIgnored var onPhaseChange: (() -> Void)?
+    /// An evaluation ended: the finished meeting, or the reason it failed.
+    @ObservationIgnored var onEvaluationEnd: ((Result<MeetingRecord, MeetingEvaluationFailure>) -> Void)?
 
     @ObservationIgnored private let settingsProvider: () -> Settings
     @ObservationIgnored private var recorder: AVAudioRecorder?
+    /// A `SystemAudioCapture` (macOS 14.2 and later) during an online meeting.
+    @ObservationIgnored private var systemCapture: Any?
+    /// The live notes free their model; the evaluation waits for that.
+    @ObservationIgnored private var liveNotesShutdown: Task<Void, Never>?
     @ObservationIgnored private var recorderObserver: RecorderObserver?
     @ObservationIgnored private var levelTimer: Timer?
     @ObservationIgnored private var recordingActivity: NSObjectProtocol?
@@ -77,15 +91,22 @@ final class MeetingController {
             : "F\u{00FC}r Meetings braucht Blitztext Parakeet. Bitte in den Einstellungen unter Sprachmodell laden."
     }
 
+    /// Recording the Mac's sound needs Core Audio taps.
+    static var canRecordSystemAudio: Bool {
+        if #available(macOS 14.2, *) { return true }
+        return false
+    }
+
     // MARK: - Recording
 
-    func start() {
+    func start(includingSystemAudio: Bool = false, liveNotes wantsLiveNotes: Bool = false) {
         switch phase {
         case .idle, .showing, .failed: break
         case .recording, .processing: return
         }
         guard Self.blocker == nil else { return }
         notice = nil
+        MeetingNotifier.requestPermission()
 
         let startedAt = Date()
         let record = MeetingRecord(
@@ -123,6 +144,21 @@ final class MeetingController {
                 options: [.idleSystemSleepDisabled, .userInitiated],
                 reason: "Blitztext nimmt ein Meeting auf"
             )
+            let withLiveNotes = wantsLiveNotes && LiveNotesController.isAvailable
+            let liveBuffer = withLiveNotes && includingSystemAudio ? LiveAudioBuffer() : nil
+            if includingSystemAudio { startSystemAudio(for: record, liveBuffer: liveBuffer) }
+            if withLiveNotes {
+                let settings = settingsProvider()
+                let live = LiveNotesController(
+                    microphoneURL: record.audioURL,
+                    systemBuffer: isRecordingSystemAudio ? liveBuffer : nil,
+                    language: settings.language,
+                    postProcessor: settings.postProcessor,
+                    ownName: Self.ownName
+                )
+                live.start()
+                liveNotes = live
+            }
             startMetering()
             phase = .recording(startedAt: startedAt)
             // The speaker models download on first use; fetch them while the network is likely there.
@@ -130,6 +166,68 @@ final class MeetingController {
         } catch {
             phase = .failed("Die Aufnahme lie\u{00DF} sich nicht starten: \(error.localizedDescription)", meetingID: nil)
         }
+    }
+
+    private func startSystemAudio(for record: MeetingRecord, liveBuffer: LiveAudioBuffer?) {
+        guard #available(macOS 14.2, *) else { return }
+        let capture = SystemAudioCapture()
+        capture.liveBuffer = liveBuffer
+        capture.onOutputChange = { [weak self] error in
+            MainActor.assumeIsolated { self?.outputChanged(error) }
+        }
+        do {
+            try capture.start(writingTo: record.systemAudioURL)
+            systemCapture = capture
+            isRecordingSystemAudio = true
+        } catch {
+            capture.stop()
+            try? FileManager.default.removeItem(at: record.systemAudioURL)
+            notice = "Der Ton des Macs l\u{00E4}sst sich nicht aufnehmen, es l\u{00E4}uft nur das Mikrofon. (\(error.localizedDescription))"
+        }
+    }
+
+    private static let outputLostNotice = "Das Ausgabeger\u{00E4}t ist weg, der Ton des Macs l\u{00E4}sst sich gerade nicht aufnehmen. Blitztext versucht es weiter, das Mikrofon l\u{00E4}uft."
+
+    /// Headphones unplugged or Bluetooth gone: the capture moves to the current output by itself.
+    private func outputChanged(_ error: Error?) {
+        if error != nil {
+            notice = Self.outputLostNotice
+        } else if notice == Self.outputLostNotice {
+            notice = nil
+        }
+    }
+
+    /// Stops the system sound. Without the permission macOS delivers only silence; then the
+    /// file is dropped and the meeting is evaluated from the microphone alone.
+    private func stopSystemAudio(for record: MeetingRecord) {
+        guard #available(macOS 14.2, *), let capture = systemCapture as? SystemAudioCapture else { return }
+        capture.stop()
+        if capture.peak == 0 {
+            try? FileManager.default.removeItem(at: record.systemAudioURL)
+            notice = "Vom Ton des Macs kam nichts an. Fehlt die Freigabe unter Datenschutz & Sicherheit > Bildschirm- und Systemaudioaufnahme? Ausgewertet wird nur das Mikrofon."
+        }
+    }
+
+    /// Stops recording for a while, e.g. while the call is in breakout rooms. Both tracks
+    /// skip the pause, so they stay in step.
+    func pause() {
+        guard case .recording = phase, pausedAt == nil, let recorder else { return }
+        recorder.pause()
+        if #available(macOS 14.2, *) { (systemCapture as? SystemAudioCapture)?.setPaused(true) }
+        pausedAt = Date()
+        audioLevel = 0
+    }
+
+    func resume() {
+        guard case .recording(let startedAt) = phase, let pausedAt, let recorder else { return }
+        guard recorder.record() else {
+            recordingInterrupted()
+            return
+        }
+        if #available(macOS 14.2, *) { (systemCapture as? SystemAudioCapture)?.setPaused(false) }
+        self.pausedAt = nil
+        // The clock shows recorded time, without the pause.
+        phase = .recording(startedAt: startedAt.addingTimeInterval(Date().timeIntervalSince(pausedAt)))
     }
 
     /// Ends the recording and starts the evaluation.
@@ -143,6 +241,7 @@ final class MeetingController {
         guard case .recording = phase else { return }
         let id = recordingID
         recorder?.stop()
+        if #available(macOS 14.2, *) { (systemCapture as? SystemAudioCapture)?.stop() }
         endRecording()
         if let id { store.delete(id: id) }
         phase = .idle
@@ -167,6 +266,7 @@ final class MeetingController {
         guard let recorder, let id = recordingID else { return nil }
         let duration = recorder.currentTime
         recorder.stop()
+        if let record = store.meeting(id: id) { stopSystemAudio(for: record) }
         endRecording()
         if var record = store.meeting(id: id) {
             record.duration = max(duration, Self.duration(of: record.audioURL) ?? 0)
@@ -177,6 +277,13 @@ final class MeetingController {
 
     private func endRecording() {
         recorder = nil
+        pausedAt = nil
+        if let liveNotes {
+            liveNotesShutdown = Task { await liveNotes.stop() }
+            self.liveNotes = nil
+        }
+        systemCapture = nil
+        isRecordingSystemAudio = false
         recorderObserver = nil
         recordingID = nil
         levelTimer?.invalidate()
@@ -191,7 +298,7 @@ final class MeetingController {
     private func startMetering() {
         levelTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
-                guard let self, let recorder = self.recorder else { return }
+                guard let self, let recorder = self.recorder, self.pausedAt == nil else { return }
                 // A recorder that stopped on its own would otherwise look like silence.
                 guard recorder.isRecording else {
                     self.recordingInterrupted()
@@ -228,7 +335,16 @@ final class MeetingController {
             )
             defer { ProcessInfo.processInfo.endActivity(activity) }
             @MainActor func update(_ newPhase: Phase) {
-                if current == evaluation { phase = newPhase }
+                guard current == evaluation else { return }
+                phase = newPhase
+                switch newPhase {
+                case .showing(let id):
+                    if let record = store.meeting(id: id) { onEvaluationEnd?(.success(record)) }
+                case .failed(let message, _):
+                    onEvaluationEnd?(.failure(MeetingEvaluationFailure(message: message)))
+                default:
+                    break
+                }
             }
 
             // A recording cut off by a crash still says zero bytes in its header.
@@ -243,10 +359,31 @@ final class MeetingController {
                 )
                 try Task.checkCancellation()
 
-                update(.processing("Stimmen werden erkannt ..."))
+                let paragraphs: [SpeakerAlignment.Paragraph]
                 let turns: [SpeakerTurn]
+                // An online meeting: the system sound holds the other people.
+                var system: (words: [TimedWord], wav: URL)?
+                if FileManager.default.fileExists(atPath: record.systemAudioURL.path) {
+                    update(.processing("Ton des Macs wird transkribiert ..."))
+                    do {
+                        system = try await Self.transcribeSystemAudio(record.systemAudioURL, language: settings.language)
+                    } catch is CancellationError {
+                        throw CancellationError()
+                    } catch {
+                        // The microphone alone still gives a transcript, e.g. when a crash left the file unreadable.
+                        notice = "Der Ton des Macs lie\u{00DF} sich nicht auswerten, ausgewertet wird nur das Mikrofon. (\(error.localizedDescription))"
+                    }
+                    try Task.checkCancellation()
+                }
+                defer { if let system { try? FileManager.default.removeItem(at: system.wav) } }
+
+                update(.processing("Stimmen werden erkannt ..."))
                 do {
-                    turns = try await SpeakerDiarizer.shared.turns(in: record.audioURL)
+                    if let system {
+                        turns = try await SpeakerDiarizer.shared.turns(in: system.wav)
+                    } else {
+                        turns = try await SpeakerDiarizer.shared.turns(in: record.audioURL)
+                    }
                 } catch {
                     try Task.checkCancellation()
                     // Keep the audio, so the people can still be told apart once this works.
@@ -259,7 +396,17 @@ final class MeetingController {
                 }
                 try Task.checkCancellation()
 
-                let transcribed = SpeakerAlignment.paragraphs(words: words, turns: turns).compactMap { paragraph -> MeetingTurn? in
+                if let system {
+                    // The microphone is "Ich", without what it heard from the speakers.
+                    let own = SpeakerAlignment.paragraphs(words: EchoFilter.removeEcho(from: words, heard: system.words), turns: [])
+                        .map { SpeakerAlignment.Paragraph(speaker: 0, start: $0.start, text: $0.text) }
+                    let others = SpeakerAlignment.paragraphs(words: system.words, turns: turns, breaks: own.map(\.start))
+                    paragraphs = (others + own).sorted { $0.start < $1.start }
+                } else {
+                    paragraphs = SpeakerAlignment.paragraphs(words: words, turns: turns)
+                }
+
+                let transcribed = paragraphs.compactMap { paragraph -> MeetingTurn? in
                     let text = TranscriptionQualityService.cleanedTranscript(settings.postProcessor.process(paragraph.text))
                     return text.isEmpty ? nil : MeetingTurn(speaker: paragraph.speaker, start: paragraph.start, text: text)
                 }
@@ -271,7 +418,8 @@ final class MeetingController {
                 record.turns = transcribed
 
                 if settings.summarizes {
-                    update(.processing("Wird zusammengefasst ..."))
+                    let model = settings.engine == .provider ? nil : LocalModelStore.shared.preferredInstalled
+                    update(.processing(model.map { "Wird zusammengefasst (\($0.name), lokal) ..." } ?? "Wird zusammengefasst ..."))
                     await summarize(&record, engine: settings.engine)
                     try Task.checkCancellation()
                 }
@@ -280,6 +428,7 @@ final class MeetingController {
                 // The audio goes only once the transcript is safely on disk.
                 if store.upsert(record) {
                     try? FileManager.default.removeItem(at: record.audioURL)
+                    try? FileManager.default.removeItem(at: record.systemAudioURL)
                 } else {
                     notice = "Das Meeting lie\u{00DF} sich nicht sichern, zum Beispiel weil der Speicher voll ist. Die Aufnahme bleibt erhalten."
                 }
@@ -293,6 +442,23 @@ final class MeetingController {
         }
     }
 
+    /// The other people of an online meeting. Nil when the file holds no speech, e.g. one cut
+    /// short by a crash; the microphone then is the whole meeting.
+    private static func transcribeSystemAudio(_ url: URL, language: String) async throws -> (words: [TimedWord], wav: URL)? {
+        let wav = try AudioFileConverter.convertToWAV(url).url
+        do {
+            let words = try await ParakeetTranscriber.shared.transcribeWords(audioURL: wav, language: language)
+            guard !words.isEmpty else {
+                try? FileManager.default.removeItem(at: wav)
+                return nil
+            }
+            return (words, wav)
+        } catch {
+            try? FileManager.default.removeItem(at: wav)
+            throw error
+        }
+    }
+
     /// Creates the summary (again), e.g. after renaming people.
     func resummarize(_ meetingID: UUID) async {
         guard var record = store.meeting(id: meetingID) else { return }
@@ -301,18 +467,62 @@ final class MeetingController {
     }
 
     private func summarize(_ record: inout MeetingRecord, engine: TextRewriter.Engine) async {
+        // The live notes may still hold the local model; only one copy fits comfortably.
+        await liveNotesShutdown?.value
+        liveNotesShutdown = nil
+        let transcript = record.transcriptText(ownName: Self.ownName)
+        // Why the local model did not summarize, when it was tried.
+        var localFailure: String?
+        #if arch(arm64)
+        // A downloaded local model summarizes more exactly than Apple Intelligence; only an
+        // explicit "Immer Modell-Anbieter" goes past it. When it fails, the engine setting
+        // decides as without it.
+        if engine != .provider, let variant = LocalModelStore.shared.preferredInstalled {
+            let model = LocalLanguageModel(folder: LocalModelStore.folder(for: variant))
+            do {
+                try await model.load()
+                let backend = MeetingSummarizer.Backend(characterLimit: Self.localModelCharacterLimit) { instruction, text in
+                    try await model.complete(instruction: instruction, text: text, maxTokens: 1_500)
+                }
+                record.summary = try await MeetingSummarizer.summarize(transcript, engine: engine, backend: backend)
+                record.summaryNote = nil
+                await model.unload()
+                return
+            } catch {
+                localFailure = "\(variant.name) konnte nicht zusammenfassen (\(error.localizedDescription))."
+            }
+            await model.unload()
+        }
+        #endif
         guard TextRewriter.canRewrite(engine: engine) else {
-            record.summary = nil
-            record.summaryNote = "F\u{00FC}r die Zusammenfassung braucht Blitztext Apple Intelligence oder einen API-Key in den Einstellungen."
+            if let localFailure {
+                // An earlier summary stays.
+                record.summaryNote = localFailure
+            } else {
+                record.summary = nil
+                record.summaryNote = "F\u{00FC}r die Zusammenfassung braucht Blitztext Apple Intelligence oder einen API-Key in den Einstellungen."
+            }
             return
         }
         do {
-            record.summary = try await MeetingSummarizer.summarize(record.transcriptText, engine: engine)
-            record.summaryNote = nil
+            let fallback = TextRewriter.runsLocally(engine: engine) ? "Apple Intelligence" : "dem Modell-Anbieter"
+            record.summary = try await MeetingSummarizer.summarize(transcript, engine: engine)
+            record.summaryNote = localFailure.map { "\($0) Stattdessen mit \(fallback) zusammengefasst." }
         } catch {
-            record.summaryNote = "Zusammenfassung fehlgeschlagen: \(error.localizedDescription)"
+            record.summaryNote = [localFailure, "Zusammenfassung fehlgeschlagen: \(error.localizedDescription)"]
+                .compactMap { $0 }.joined(separator: " ")
         }
     }
+
+    /// The first name of the macOS account, e.g. "Paul", so a summary can assign the tasks
+    /// the person at this Mac took on. Nil without a name.
+    static var ownName: String? {
+        NSFullUserName().split(separator: " ").first.map(String.init).flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    /// Characters per request for a local model: about 11,000 tokens of German, which keeps
+    /// the memory for the context small while a two-hour meeting needs only a few parts.
+    static let localModelCharacterLimit = 40_000
 
     // MARK: - Results
 
@@ -351,6 +561,10 @@ final class MeetingController {
             break
         }
     }
+}
+
+struct MeetingEvaluationFailure: Error {
+    let message: String
 }
 
 /// AVAudioRecorder reports a stop it did not ask for through its delegate.

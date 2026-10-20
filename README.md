@@ -63,11 +63,14 @@ Keyboards without `fn`: set your own shortcut per mode in the settings.
 - **See that it listens:** a small lilac pill at the bottom of the screen moves with your voice while Blitztext records. Click it to stop. It never takes the focus, so the text still lands where you type. You can turn it off in the settings.
 - **Last text at hand:** the menu bar window shows your last text as a message. One click copies it.
 - **Sound off while recording:** a podcast or music is muted while you speak and back right after.
-- **Meetings in the room:** record a conversation through the microphone, get the transcript by person (Person 1, Person 2, rename them) and, if you like, a summary with decisions and to-dos. Speaker detection and the summary run on your Mac; the recording is deleted afterwards. Apple Silicon only.
+- **Meetings in the room and online:** record a conversation through the microphone, get the transcript by person (Person 1, Person 2, rename them) and, if you like, a summary with decisions and to-dos. For calls, "Online-Meeting" (beta) also records what your Mac plays, for example from Teams, Zoom or Meet: you are "Ich", the others are told apart by voice, and what your microphone picks up from the speakers is filtered out of your part. Live notes (beta) show topics, decisions and to-dos while the meeting runs. Everything runs on your Mac and the recordings are deleted afterwards. Apple Silicon only. Please ask everyone before you record.
+- **Local language model for meetings (beta):** download Gemma 4 in the settings (E4B from 16 GB of memory, 12B from 24 GB). It summarizes long meetings more exactly than Apple Intelligence, on your Mac.
+- **Text lands in the right place:** if you click into another field while a writing mode still works, the text goes to the clipboard instead of the wrong field. After a writing mode, "Wortgenau statt ..." in the menu swaps in what you actually said.
 - **Voice memos and WhatsApp voice messages:** drop an audio file on Blitztext and get the text, optionally with paragraphs.
 - **Dictionary:** names and terms spelled your way, fixed replacements ("n acht n" becomes "n8n").
 - **History:** recent results, encrypted and stored only on your Mac.
 - **Updates in the app:** Blitztext offers new versions from this repository's releases, signed and notarized by Apple.
+- **Feedback:** "Feedback senden" in the settings prepares a mail to the team with version and setup. You see everything before it goes out.
 
 ## Screenshots
 
@@ -94,6 +97,9 @@ The app is in German for now.
 Speech recognition:  your Mac (Parakeet or Whisper, Core ML / Neural Engine)
 Writing modes:       your Mac (Apple Intelligence)
                      or, if you add one, your own model provider with your own API key
+Meetings:            your Mac (transcript, speakers, live notes, summary with
+                     Apple Intelligence or the optional local model); the summary
+                     goes to your own provider only as described in docs/privacy.md
 Model download:      Hugging Face, once per model
 Update check:        GitHub releases of this repository (can be turned off)
 ```
@@ -107,6 +113,8 @@ Blitztext has no backend and collects no data. Details in [docs/privacy.md](docs
 - **First dictation after a macOS update** can take a few minutes while macOS prepares the model for the Neural Engine. Blitztext shows a hint; keep it running.
 - **Whisper on silence** sometimes invents phrases like "Thank you." Blitztext filters the known ones.
 - **Macs managed with Jamf:** in-app updates are off on the whole Mac, also for a copy you installed yourself. There, your device management handles updates.
+- **Online meetings (beta):** without headphones the microphone also hears the speakers. Blitztext filters that echo out of your part; a short scrap can remain. Headphones give the cleanest result. macOS asks for "System Audio Recording" the first time.
+- **Local language model (beta):** needs Apple Silicon and at least 16 GB of memory, the 12B model 24 GB. It uses about 5 to 7 GB while it summarizes and frees them afterwards.
 
 More in [docs/setup.md](docs/setup.md) and [docs/local-models.md](docs/local-models.md).
 
@@ -158,6 +166,7 @@ Independent projects built on the Blitztext idea. They are not maintained or rev
 - **[FluidAudio](https://github.com/FluidInference/FluidAudio)**, **Moondream** and **NVIDIA** for Parakeet Ultra on Core ML
 - **[WhisperKit](https://github.com/argmaxinc/argmax-oss-swift)** by Argmax and **OpenAI** for Whisper
 - **[Sparkle](https://sparkle-project.org)** for updates
+- **Google** for Gemma 4 and **[MLX](https://github.com/ml-explore/mlx-swift)** for running it on the Mac
 - **Community contributors** who send fixes and ideas
 - **The open-source dictation community**, whose work inspired parts of Blitztext
 

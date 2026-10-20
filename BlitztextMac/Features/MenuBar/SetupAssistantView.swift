@@ -9,6 +9,8 @@ struct SetupAssistantView: View {
     @Bindable var appState: AppState
 
     @State private var microphone = AVCaptureDevice.authorizationStatus(for: .audio)
+    /// No input device or a very quiet one, refreshed with the permissions.
+    @State private var microphoneIssue = MicrophoneCheck.issue
     @State private var isResettingAccessibility = false
     @State private var resetFailed = false
 
@@ -91,6 +93,7 @@ struct SetupAssistantView: View {
         .task {
             while !Task.isCancelled {
                 microphone = AVCaptureDevice.authorizationStatus(for: .audio)
+                microphoneIssue = MicrophoneCheck.issue
                 appState.refreshAccessibilityPermission()
                 try? await Task.sleep(for: .seconds(1))
             }
@@ -148,7 +151,16 @@ struct SetupAssistantView: View {
     }
 
     private var microphoneDetail: String {
-        if microphoneReady { return "Blitztext darf das Mikrofon nutzen." }
+        if microphoneReady {
+            switch microphoneIssue {
+            case .noInput:
+                return "Erlaubt. Gerade ist aber kein Mikrofon da, bei zugeklapptem MacBook ein Headset anschlie\u{00DF}en."
+            case .quiet(let percent):
+                return "Erlaubt. Das Mikrofon ist aber sehr leise eingestellt (\(percent) %), in den Systemeinstellungen unter Ton, Eingang lauter stellen."
+            case nil:
+                return "Blitztext darf das Mikrofon nutzen."
+            }
+        }
         switch microphone {
         case .denied, .restricted:
             return "In den Systemeinstellungen ist das Mikrofon f\u{00FC}r Blitztext aus. Dort unter Datenschutz & Sicherheit > Mikrofon einschalten."

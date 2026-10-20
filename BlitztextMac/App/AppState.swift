@@ -1,6 +1,7 @@
 import SwiftUI
 import Observation
 import AppKit
+import ApplicationServices
 
 enum PopoverPage: Equatable {
     case main
@@ -33,6 +34,8 @@ final class AppState {
     }
     var accessibilityPermissionGranted = false
     var microphoneDenied = false
+    /// No microphone or a very quiet one, checked when the menu opens.
+    var microphoneIssue: MicrophoneCheck.Issue?
     var localModelDownloadProgress: Double?
     var localModelDownloadStatusText: String?
     var localModelDownloadErrorText: String?
@@ -42,6 +45,13 @@ final class AppState {
     private var whatsNewTask: Task<Void, Never>?
     private var activeLaunchSource: WorkflowLaunchSource = .manual
     private var activePasteTarget: PasteTarget?
+    /// The field in focus when the recording ended; text goes there or, if the focus moved on
+    /// while the dictation was processed, to the clipboard.
+    private var targetField: Task<FocusedFieldReader.FocusSpot?, Never>?
+    /// The last text an AI mode inserted, with what was said, for "Wortgenau statt KI-Text".
+    private(set) var lastInsertion: LastInsertion?
+    /// Shown on the main page after "Wortgenau statt KI-Text" could not replace in place.
+    var lastInsertionNotice: String?
     private var lastPopoverPasteTarget: PasteTarget?
     /// The field the active dictation goes into, read when it started.
     private var activeField: FocusedField?
@@ -171,6 +181,14 @@ final class AppState {
         self.history = TranscriptHistoryStore(retention: loadedAppSettings.historyRetention)
         if Self.isToolRun { return }
         meeting.onPhaseChange = { [unowned self] in self.publishMenuBarStatus() }
+        meeting.onEvaluationEnd = { [unowned self] result in
+            // With the menu open the result is on screen already.
+            guard !self.isPopoverShown else { return }
+            switch result {
+            case .success(let record): MeetingNotifier.finished(record)
+            case .failure(let failure): MeetingNotifier.failed(failure.message)
+            }
+        }
         hotkeyService.updateCustomHotkeys(appSettings.resolvedCustomHotkeys)
         refreshAccessibilityPermission()
         migrateToSetupAssistant()
@@ -288,6 +306,9 @@ final class AppState {
         workflowCleanupTask?.cancel()
         activeLaunchSource = source
         activePasteTarget = capturePasteTarget(for: source)
+        targetField = nil
+        // A new dictation makes the offer for the previous one stale.
+        lastInsertion = nil
         readActiveField()
 
         switch type {
@@ -352,7 +373,8 @@ final class AppState {
             workflow.start()
         }
 
-        if appSettings.muteOutputWhileRecording, activeWorkflow?.isRecording == true {
+        // An online meeting records the Mac's sound; muting it would cut the call out.
+        if appSettings.muteOutputWhileRecording, activeWorkflow?.isRecording == true, !meeting.isRecordingSystemAudio {
             audioMuter.mute()
         }
         page = source.presentsWorkflowPage ? .workflow : .main
@@ -390,8 +412,26 @@ final class AppState {
         }
     }
 
+    /// Every way of ending a recording comes here (shortcut, Escape, pill, menu).
     func stopCurrentWorkflow() {
-        activeWorkflow?.stop()
+        guard let workflow = activeWorkflow else { return }
+        if workflow.isRecording { noteTargetField() }
+        workflow.stop()
+    }
+
+    /// The text goes into the field that has the focus when the recording ends, so clicking
+    /// into the right field while still talking is fine; only a move during the processing
+    /// sends the text to the clipboard.
+    private func noteTargetField() {
+        guard let target = activePasteTarget else {
+            targetField = nil
+            return
+        }
+        let pid = target.processIdentifier
+        let bundleID = target.bundleIdentifier
+        targetField = Task.detached(priority: .userInitiated) {
+            FocusedFieldReader.focusSpot(pid: pid, bundleID: bundleID, textFieldOnly: true)
+        }
     }
 
     /// Gives the Mac its sound back, e.g. when Blitztext quits during a recording.
@@ -485,6 +525,7 @@ final class AppState {
     func prepareForPopoverPresentation() {
         lastPopoverPasteTarget = captureCurrentFrontmostApp()
         microphoneDenied = MicrophonePermission.isDenied
+        microphoneIssue = MicrophoneCheck.issue
         noteSetupProgress()
         history.prune()
         // A running file transcription or meeting comes before the assistant.
@@ -702,15 +743,81 @@ final class AppState {
             history.add(text, workflow: type)
         }
         var output = text
+        var transcript = activeWorkflow?.transcript
         if appSettings.fitToSurroundingText, let field = activeField {
             output = InsertionFitter.fit(text, before: field.textBefore, after: field.textAfter)
+            transcript = transcript.map { InsertionFitter.fit($0, before: field.textBefore, after: field.textAfter) }
         }
-        pasteAtCursor(output, target: activePasteTarget)
-        scheduleWhatsNewAfterDictation()
+        let target = activePasteTarget
+        let field = targetField
+        let finishing = activeWorkflow
+        let type = finishing?.type
         if activeLaunchSource == .hotkeyBackground {
             page = .main
         }
-        scheduleWorkflowCleanup(after: 1.05)
+        Task { [weak self] in
+            // An AI mode takes a few seconds; meanwhile the user may have clicked into
+            // another field. Then the text goes to the clipboard, not into the wrong place.
+            if let start = await field?.value, let pid = target?.processIdentifier {
+                let bundleID = target?.bundleIdentifier
+                let now = await Task.detached(priority: .userInitiated) {
+                    FocusedFieldReader.focusSpot(pid: pid, bundleID: bundleID, textFieldOnly: false)
+                }.value
+                if let now, !now.isSameField(as: start) {
+                    guard let self else { return }
+                    self.copyToClipboard(output)
+                    self.lastInsertion = nil
+                    // A dictation started meanwhile keeps its own status and is not reset.
+                    if self.activeWorkflow === finishing {
+                        self.menuBarStatus = .copied(type)
+                        self.scheduleWorkflowCleanup(for: finishing, after: 2.8)
+                    }
+                    return
+                }
+            }
+            guard let self else { return }
+            self.pasteAtCursor(output, target: target)
+            if let transcript, let type, transcript != output, target != nil {
+                self.lastInsertion = LastInsertion(inserted: output, transcript: transcript, mode: type, target: target, at: Date())
+                self.lastInsertionNotice = nil
+            } else {
+                self.lastInsertion = nil
+            }
+            self.scheduleWhatsNewAfterDictation()
+            self.scheduleWorkflowCleanup(for: finishing, after: 1.05)
+        }
+    }
+
+    /// "Wortgenau statt KI-Text": replaces the text an AI mode just inserted with what was
+    /// said. Selects it in the field through Accessibility and pastes over it; where the app
+    /// does not allow that, the word-for-word text goes to the clipboard.
+    func insertTranscriptInstead() {
+        guard let last = lastInsertion else { return }
+        lastInsertion = nil
+        guard let pid = last.target?.processIdentifier else {
+            copyToClipboard(last.transcript)
+            lastInsertionNotice = "Ersetzen ging hier nicht. Der wortgenaue Text liegt in der Zwischenablage."
+            return
+        }
+        Task { [weak self] in
+            let selected = await Task.detached(priority: .userInitiated) {
+                FocusedFieldReader.selectBeforeCursor(last.inserted, pid: pid)
+            }.value
+            guard let self else { return }
+            if selected {
+                self.pasteAtCursor(last.transcript, target: last.target)
+                self.lastInsertionNotice = nil
+            } else {
+                self.copyToClipboard(last.transcript)
+                self.lastInsertionNotice = "Ersetzen ging in dieser App nicht. Der wortgenaue Text liegt in der Zwischenablage."
+            }
+        }
+    }
+
+    /// "Wortgenau statt KI-Text" is offered for a few minutes after an AI mode inserted text.
+    var offersTranscriptInstead: Bool {
+        guard let lastInsertion else { return false }
+        return Date().timeIntervalSince(lastInsertion.at) < 10 * 60
     }
 
     private func configureWorkflowHandlers<T: Workflow>(_ workflow: T) {
@@ -762,8 +869,9 @@ final class AppState {
         }
     }
 
-    private func scheduleWorkflowCleanup(after delay: TimeInterval) {
-        guard let workflow = activeWorkflow else { return }
+    /// Resets `workflow` after `delay`, unless another dictation has replaced it by then.
+    private func scheduleWorkflowCleanup(for workflow: (any Workflow)?, after delay: TimeInterval) {
+        guard let workflow, workflow === activeWorkflow else { return }
 
         workflowCleanupTask?.cancel()
         let workflowID = ObjectIdentifier(workflow)
@@ -926,6 +1034,14 @@ extension Notification.Name {
     static let chooseAudioFile = Notification.Name("chooseAudioFile")
     static let showWhatsNew = Notification.Name("showWhatsNew")
     static let showPopover = Notification.Name("showPopover")
+}
+
+struct LastInsertion {
+    let inserted: String
+    let transcript: String
+    let mode: WorkflowType
+    fileprivate let target: PasteTarget?
+    let at: Date
 }
 
 private struct PasteTarget {

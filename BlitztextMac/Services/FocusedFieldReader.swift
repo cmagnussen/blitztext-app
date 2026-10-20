@@ -67,6 +67,50 @@ enum FocusedFieldReader {
         )
     }
 
+    /// Where the focus is: the element, its role and its position on screen.
+    struct FocusSpot {
+        let element: AXUIElement
+        let role: String?
+        let position: CGPoint?
+
+        /// The same field, also when the app rebuilt its accessibility object meanwhile;
+        /// another field differs in role or place.
+        func isSameField(as other: FocusSpot) -> Bool {
+            CFEqual(element, other.element) || (role == other.role && position == other.position)
+        }
+    }
+
+    /// The focused element of `pid`, to check before pasting that the focus is still in the
+    /// field the dictation goes into. With `textFieldOnly`, nil unless the element reports a
+    /// text cursor: without a real field to compare, nothing is checked. Browsers build their
+    /// web tree first, so this read and a later one see the same tree.
+    static func focusSpot(pid: pid_t, bundleID: String?, textFieldOnly: Bool) -> FocusSpot? {
+        guard prepare() else { return nil }
+        let app = AXUIElementCreateApplication(pid)
+        enableWebAccessibility(app, bundleID: bundleID)
+        guard let focused = element(app, kAXFocusedUIElementAttribute),
+              !textFieldOnly || selectedRange(focused) != nil else { return nil }
+        return FocusSpot(element: focused, role: role(focused), position: position(focused))
+    }
+
+    /// Selects `text` right before the cursor of the focused field, so the next paste
+    /// replaces it. False when the field does not report its text and cursor, something is
+    /// selected, or the text before the cursor is a different one.
+    static func selectBeforeCursor(_ text: String, pid: pid_t) -> Bool {
+        guard prepare(),
+              let focused = element(AXUIElementCreateApplication(pid), kAXFocusedUIElementAttribute),
+              !isSecure(focused),
+              let value = string(focused, kAXValueAttribute),
+              let range = selectedRange(focused), range.length == 0 else { return false }
+        let field = value as NSString
+        let length = (text as NSString).length
+        guard length > 0, range.location >= length, range.location <= field.length,
+              field.substring(with: NSRange(location: range.location - length, length: length)) == text else { return false }
+        var selection = CFRange(location: range.location - length, length: length)
+        guard let wanted = AXValueCreate(.cfRange, &selection) else { return false }
+        return AXUIElementSetAttributeValue(focused, kAXSelectedTextRangeAttribute as CFString, wanted) == .success
+    }
+
     /// Host of the tab in front, e.g. "mail.google.com".
     static func webHost(pid: pid_t, bundleID: String?) -> String? {
         guard prepare() else { return nil }
@@ -152,6 +196,16 @@ enum FocusedFieldReader {
         return (value as! [AnyObject]).compactMap { child in
             CFGetTypeID(child) == AXUIElementGetTypeID() ? (child as! AXUIElement) : nil
         }
+    }
+
+    private static func position(_ element: AXUIElement) -> CGPoint? {
+        guard let value = attribute(element, kAXPositionAttribute),
+              CFGetTypeID(value) == AXValueGetTypeID() else {
+            return nil
+        }
+        var point = CGPoint.zero
+        guard AXValueGetValue(value as! AXValue, .cgPoint, &point) else { return nil }
+        return point
     }
 
     /// Native and web password fields both report the secure text field subrole.

@@ -85,6 +85,47 @@ struct MenuBarView: View {
                     )
                 }
 
+                if appState.offersTranscriptInstead, let last = appState.lastInsertion {
+                    NoticeRow(
+                        icon: "arrow.uturn.backward",
+                        title: "Wortgenau statt \(last.mode.displayName)",
+                        detail: "Ersetzt den eben eingef\u{00FC}gten Text durch dein w\u{00F6}rtliches Diktat.",
+                        actionTitle: "Ersetzen",
+                        action: { appState.insertTranscriptInstead() }
+                    )
+                }
+
+                if let notice = appState.lastInsertionNotice {
+                    NoticeRow(
+                        icon: "doc.on.clipboard",
+                        title: notice,
+                        actionTitle: "OK",
+                        action: { appState.lastInsertionNotice = nil }
+                    )
+                }
+
+                switch appState.microphoneIssue {
+                case .noInput:
+                    NoticeRow(
+                        icon: "mic.slash",
+                        title: "Kein Mikrofon gefunden",
+                        detail: "Bei zugeklapptem MacBook ein Headset oder externes Mikrofon anschlie\u{00DF}en.",
+                        tint: BlitztextTheme.danger,
+                        actionTitle: "Ton",
+                        action: { MicrophoneCheck.openSoundSettings() }
+                    )
+                case .quiet(let percent):
+                    NoticeRow(
+                        icon: "speaker.wave.1",
+                        title: "Mikrofon sehr leise eingestellt (\(percent) %)",
+                        detail: "Dann gehen W\u{00F6}rter verloren. In den Systemeinstellungen unter Ton, Eingang lauter stellen.",
+                        actionTitle: "Ton",
+                        action: { MicrophoneCheck.openSoundSettings() }
+                    )
+                case nil:
+                    EmptyView()
+                }
+
                 if appState.meeting.isRecording || appState.meeting.isProcessing {
                     NoticeRow(
                         icon: "person.2.wave.2.fill",
@@ -488,7 +529,7 @@ struct MenuBarView: View {
 
                 Divider().opacity(0.16)
 
-                WorkflowActiveView(workflow: workflow)
+                WorkflowActiveView(workflow: workflow, onStop: { appState.stopCurrentWorkflow() })
             }
         }
     }
@@ -499,6 +540,8 @@ struct MenuBarView: View {
 /// Recording, processing, result and error of the running mode; the same for all modes.
 struct WorkflowActiveView: View {
     let workflow: any Workflow
+    /// Ends the recording through the app state, which notes the field the text goes into.
+    let onStop: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -546,7 +589,7 @@ struct WorkflowActiveView: View {
                 .padding(.top, 20)
 
             Button {
-                workflow.stop()
+                onStop()
             } label: {
                 Image(systemName: "stop.fill")
                     .font(.ui(17, .semibold))

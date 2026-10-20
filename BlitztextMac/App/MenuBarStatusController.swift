@@ -6,6 +6,8 @@ enum MenuBarStatus: Equatable {
     case processing(WorkflowType)
     case success(WorkflowType?)
     case error(WorkflowType?)
+    /// Not pasted on purpose, e.g. because another field has the focus; the text is on the clipboard.
+    case copied(WorkflowType?)
     /// A meeting is being recorded; shown while no dictation is active.
     case meeting
 }
@@ -94,6 +96,8 @@ final class MenuBarStatusController {
                 return "\(type.displayName): Fertig"
             }
             return "Blitztext: Fertig"
+        case .copied:
+            return "Blitztext: Text liegt in der Zwischenablage"
         case .error(let type):
             if let type {
                 return "\(type.displayName): Fehler"
@@ -150,6 +154,8 @@ private enum MenuBarStatusIconRenderer {
                 )
             case .success:
                 drawBadge(systemName: "checkmark", in: bounds, fillOpacity: 1.0)
+            case .copied:
+                drawBadge(systemName: "doc.on.clipboard", in: bounds, fillOpacity: 1.0)
             case .error:
                 drawBadge(systemName: "exclamationmark", in: bounds, fillOpacity: 1.0)
             case .meeting:
@@ -304,7 +310,7 @@ private enum MenuBarStatusIconRenderer {
             return recordingAlphaValues(for: type, frame: frame)
         case .processing(let type):
             return processingAlphaValues(for: type, frame: frame)
-        case .success:
+        case .success, .copied:
             return [1.0, 0.9, 0.78, 0.62]
         case .error:
             return [1.0, 0.7, 0.52, 0.36]

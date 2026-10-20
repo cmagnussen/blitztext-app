@@ -4,7 +4,7 @@ import SwiftUI
 /// or right after the first dictation for people who only use the shortcuts.
 enum WhatsNew {
     /// Bump together with the items when a release deserves a note.
-    static let version = "1.14"
+    static let version = "1.15"
 
     struct Item: Identifiable {
         let icon: String
@@ -15,19 +15,19 @@ enum WhatsNew {
 
     static let items: [Item] = [
         Item(
-            icon: "person.2.wave.2.fill",
-            title: "Meetings aufnehmen",
-            detail: "Oben im Men\u{00FC} auf \u{201E}Meeting\u{201C}: Blitztext nimmt ein Gespr\u{00E4}ch im Raum auf, erkennt, wer spricht, und schreibt auf Wunsch eine Zusammenfassung mit To-dos. Alles l\u{00E4}uft auf diesem Mac, die Aufnahme wird danach gel\u{00F6}scht."
+            icon: "video.fill",
+            title: "Online-Meetings (Beta)",
+            detail: "Mit dem Schalter \u{201E}Online-Meeting\u{201C} nimmt Blitztext auch den Ton des Macs auf, etwa aus Teams, Zoom oder Meet, und trennt die anderen nach Stimme. Live-Notizen zeigen schon w\u{00E4}hrend des Meetings Themen, Entscheidungen und To-dos. Bitte vorher alle fragen."
         ),
         Item(
-            icon: "keyboard",
-            title: "K\u{00FC}rzel zuverl\u{00E4}ssiger",
-            detail: "Die fn-K\u{00FC}rzel gehen jetzt auch mit Feststelltaste. Im Modus \u{201E}Dr\u{00FC}cken\u{201C} bleibt das Men\u{00FC} zu, die lila Anzeige zeigt die Aufnahme, und Escape oder ein anderes K\u{00FC}rzel beendet sie, ohne dass etwas verloren geht."
+            icon: "cpu",
+            title: "Lokales Sprachmodell (Beta)",
+            detail: "Unter Einstellungen > Modelle l\u{00E4}sst sich Gemma 4 laden. Es fasst lange Meetings genauer zusammen als Apple Intelligence, ganz auf diesem Mac. Blitztext zeigt, welche Gr\u{00F6}\u{00DF}e zu deinem Mac passt."
         ),
         Item(
-            icon: "checklist",
-            title: "Einrichtung Schritt f\u{00FC}r Schritt",
-            detail: "Neue Macs f\u{00FC}hrt ein Assistent durch Mikrofon, Einf\u{00FC}gen und Sprachmodell, mit Parakeet Ultra als Standard. Fehlt die Mikrofon-Freigabe, sagt Blitztext das jetzt klar."
+            icon: "text.cursor",
+            title: "Text landet am richtigen Ort",
+            detail: "Klickst du in ein anderes Feld, w\u{00E4}hrend ein KI-Modus noch arbeitet, kommt der Text in die Zwischenablage statt ins falsche Feld. Nach einem KI-Modus bietet das Men\u{00FC} \u{201E}Wortgenau statt \u{2026}\u{201C} an. Das erste Wort bleibt erhalten, und Blitztext sagt, wenn das Mikrofon fehlt oder sehr leise ist."
         ),
     ]
 }

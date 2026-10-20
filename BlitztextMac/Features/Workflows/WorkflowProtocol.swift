@@ -110,10 +110,16 @@ protocol Workflow: AnyObject, Observable {
     var audioLevel: Float { get }
     var onOutput: WorkflowOutputHandler? { get set }
     var onPhaseChange: WorkflowPhaseChangeHandler? { get set }
+    /// What was said, word for word, before an AI mode rewrote it; nil for plain dictation.
+    var transcript: String? { get }
 
     func start()
     func stop()
     func reset()
+}
+
+extension Workflow {
+    var transcript: String? { nil }
 }
 
 // MARK: - App Settings

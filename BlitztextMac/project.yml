@@ -11,8 +11,8 @@ settings:
     SWIFT_VERSION: "5.10"
     MACOSX_DEPLOYMENT_TARGET: "14.0"
     ONLY_ACTIVE_ARCH: NO
-    MARKETING_VERSION: "1.14"
-    CURRENT_PROJECT_VERSION: "40"
+    MARKETING_VERSION: "1.15"
+    CURRENT_PROJECT_VERSION: "41"
     # In-app updates for installs outside Jamf (Sparkle). The feed is the appcast of the
     # latest public GitHub release; the key is the public half of the signing key.
     SPARKLE_FEED_URL: "https://github.com/cmagnussen/blitztext-app/releases/latest/download/appcast.xml"
@@ -30,6 +30,18 @@ packages:
   FluidAudio:
     url: https://github.com/FluidInference/FluidAudio.git
     exactVersion: 0.17.4
+  # Local language models (MLX, Apple Silicon only). mlx-swift and swift-transformers
+  # are pinned to the versions mlx-swift-lm and WhisperKit already resolve, so they add
+  # no second copy; they are listed to import MLX (memory limits) and Tokenizers.
+  MLXSwiftLM:
+    url: https://github.com/ml-explore/mlx-swift-lm
+    exactVersion: 3.32.3
+  MLXSwift:
+    url: https://github.com/ml-explore/mlx-swift
+    exactVersion: 0.32.3
+  SwiftTransformers:
+    url: https://github.com/huggingface/swift-transformers.git
+    exactVersion: 1.1.9
 
 targets:
   BlitztextMac:
@@ -68,6 +80,14 @@ targets:
         product: WhisperKit
       - package: FluidAudio
         product: FluidAudio
+      - package: MLXSwiftLM
+        product: MLXLLM
+      - package: MLXSwiftLM
+        product: MLXLMCommon
+      - package: MLXSwift
+        product: MLX
+      - package: SwiftTransformers
+        product: Tokenizers
     scheme:
       testTargets:
         - BlitztextMacTests
@@ -90,10 +110,19 @@ targets:
       - path: Services/TranscriptParagraphService.swift
       - path: Services/ClipboardPasteService.swift
       - path: ../BlitztextShared/Transcription/HallucinationFilter.swift
+      - path: ../BlitztextShared/Transcription/SpokenEmailAddress.swift
       - path: Services/ShortcutModifiers.swift
       - path: ../BlitztextShared/AI/InventedDeadlineFilter.swift
       - path: ../BlitztextShared/Meeting/SpeakerAlignment.swift
+      - path: ../BlitztextShared/Meeting/EchoFilter.swift
+      - path: Services/LocalLanguageModel/LocalModelCatalog.swift
+      - path: Services/AudioPadding.swift
+      - path: ../BlitztextShared/Meeting/SpeakerAlignment.swift
       - path: Features/Meeting/WAVRecovery.swift
+      - path: Services/LocalLanguageModel/GemmaChatFormat.swift
+      - path: Features/Meeting/TextParts.swift
+      - path: Services/FocusedFieldReader.swift
+      - path: ../BlitztextShared/Meeting/ListDisplay.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.blitztext.mac.tests

@@ -104,6 +104,13 @@ enum TextRewriter {
         return try await AIClient.complete(instruction: instruction, text: text, config: config)
     }
 
+    /// Apple Intelligence on the device and nothing else, for features that promise the text
+    /// stays on the device whatever the engine setting. Throws when it is not available.
+    static func rewriteOnDevice(_ text: String, instruction: String, deterministic: Bool = false) async throws -> String {
+        if case .unavailable(let reason) = localAvailability { throw RewriteError.onDevice(reason) }
+        return try await rewriteLocally(text, instruction: instruction, deterministic: deterministic)
+    }
+
     private static func rewriteLocally(_ text: String, instruction: String, deterministic: Bool) async throws -> String {
         #if canImport(FoundationModels)
         if #available(iOS 26.0, macOS 26.0, *) {

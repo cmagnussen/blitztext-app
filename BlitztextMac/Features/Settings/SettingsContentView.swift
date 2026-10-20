@@ -333,6 +333,10 @@ struct AboutBlitztextSection: View {
                 .help("Blitztext ist Open Source. Ein Stern auf GitHub hilft.")
             }
 
+            Button("Feedback senden") { sendFeedback() }
+                .buttonStyle(SubtleButtonStyle())
+                .help("\u{00D6}ffnet eine vorbereitete Mail an \(FeedbackMail.address). Du siehst alles, bevor sie rausgeht.")
+
             Button("Neuigkeiten in \(WhatsNew.version) anzeigen") {
                 appState.showWhatsNewAgain()
             }
@@ -437,6 +441,20 @@ struct AboutBlitztextSection: View {
                     .foregroundStyle(BlitztextTheme.danger)
                     .fixedSize(horizontal: false, vertical: true)
             }
+        }
+    }
+
+    /// A prepared mail in the mail app; without one the address lands on the clipboard.
+    private func sendFeedback() {
+        let details = [
+            "Sprachmodell: \(LocalTranscriptionModel.displayName(for: appState.selectedLocalModelName))",
+            "K\u{00FC}rzel: \(appState.appSettings.hotkeyMode == .hold ? "Halten" : "Dr\u{00FC}cken")",
+            "KI-Modi: \(appState.appSettings.rewriteEngine.displayName)",
+            "Updates: \(appState.appUpdateService.isManagedByDeviceManagement ? "Ger\u{00E4}teverwaltung" : "in der App")",
+        ]
+        guard let url = FeedbackMail.url(details: details), NSWorkspace.shared.open(url) else {
+            appState.copyToClipboard(FeedbackMail.address)
+            return
         }
     }
 
@@ -742,6 +760,8 @@ struct CustomizeSettingsView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+
+            LocalLanguageModelSection()
 
             MacAIProviderSection(appState: appState)
             }

@@ -361,6 +361,9 @@ actor LocalTranscriptionService {
 
     func transcribe(audioURL: URL, language: String, modelName: String) async throws -> String {
         let resolvedLanguage = language.trimmingCharacters(in: .whitespacesAndNewlines)
+        let padded = AudioPadding.paddedCopy(of: audioURL)
+        defer { if let padded { try? FileManager.default.removeItem(at: padded) } }
+        let audioURL = padded ?? audioURL
 
         let text: String
         if Self.resolvedModelName(modelName) == ParakeetTranscriber.modelName {

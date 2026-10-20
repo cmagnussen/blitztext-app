@@ -37,6 +37,11 @@ final class RecordingIndicatorController {
             guard panel?.isVisible == true, !isHiding else { return }
             model.status = status
             hide(after: .milliseconds(900))
+        case .copied:
+            // Longer than "Fertig": it says the text did not go where it was meant to.
+            model.status = status
+            show(placing: panel?.isVisible != true)
+            hide(after: .milliseconds(2_600))
         case .idle, .error, .meeting:
             hide()
         }
@@ -121,7 +126,7 @@ final class RecordingIndicatorController {
         panel.becomesKeyOnlyIfNeeded = true
         let appState = appState
         let hosting = FirstClickHostingView(rootView: RecordingPill(model: model, appState: appState) {
-            appState.activeWorkflow?.stop()
+            appState.stopCurrentWorkflow()
         })
         // The pill has a fixed size; the panel never resizes with its content.
         hosting.sizingOptions = []
@@ -216,6 +221,13 @@ struct RecordingPill: View {
             Text("Fertig")
                 .font(.ui(12, .semibold))
                 .foregroundStyle(.white.opacity(0.85))
+        case .copied:
+            Image(systemName: "doc.on.clipboard")
+                .font(.ui(11, .bold))
+                .foregroundStyle(Self.lilac)
+            Text("Zwischenablage")
+                .font(.ui(12, .semibold))
+                .foregroundStyle(.white.opacity(0.85))
         case .idle, .error, .meeting:
             EmptyView()
         }
@@ -226,6 +238,7 @@ struct RecordingPill: View {
         case .recording: return "Aufnahme l\u{00E4}uft. Klicken stoppt sie."
         case .processing: return "Blitztext schreibt"
         case .success: return "Fertig"
+        case .copied: return "Nicht eingef\u{00FC}gt, der Text liegt in der Zwischenablage"
         case .idle, .error, .meeting: return ""
         }
     }

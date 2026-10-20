@@ -3,9 +3,9 @@ import Foundation
 /// Local cleanup of a raw transcript before it is pasted or handed to a language model.
 ///
 /// Order matters: hesitation sounds go first so they can never be read as part of a term,
-/// then the user's fixed replacements, then words that clearly mean one of the user's
-/// custom terms get the user's spelling, and finally stutters and stray punctuation are
-/// tidied. Everything runs on the device in plain string code and only touches the words
+/// then the user's fixed replacements, then dictated e-mail addresses are written as
+/// addresses, then words that clearly mean one of the user's custom terms get the user's
+/// spelling, and finally stutters and stray punctuation are tidied. Everything runs on the device in plain string code and only touches the words
 /// it changes; spacing and line breaks elsewhere stay exactly as dictated.
 
 /// A fixed rule: whenever `spoken` appears as whole words, write `written` instead.
@@ -38,6 +38,9 @@ struct TranscriptPostProcessor {
         }
         // Fixed rules first, so the fuzzy matcher sees the intended spelling.
         result = Self.applyReplacements(replacements, to: result)
+        // Addresses before the fuzzy matcher, which then leaves them alone: an address is
+        // exact, a similar-sounding term would send the mail somewhere else.
+        result = SpokenEmailAddress.format(result)
         if correctCustomTerms {
             result = Self.applyCustomTerms(
                 to: result,
@@ -101,7 +104,8 @@ struct TranscriptPostProcessor {
         let matcher = TermMatcher(terms: customTerms)
         guard !matcher.isEmpty else { return text }
         let tokens = tokenize(text)
-        let keys = tokens.map { matchKey(text[$0.core]) }
+        // E-mail addresses get no key, so no term ever replaces one.
+        let keys = tokens.map { text[$0.core].contains("@") ? [] : matchKey(text[$0.core]) }
 
         var candidates: [TermCandidate] = []
         for first in tokens.indices where !keys[first].isEmpty {
@@ -592,8 +596,10 @@ struct TranscriptPostProcessor {
         result = result.replacingOccurrences(of: "[ \\t]{2,}", with: " ", options: .regularExpression)
         result = result.trimmingCharacters(in: .whitespacesAndNewlines)
 
+        // An e-mail address at the start stays lowercase.
+        let firstWord = result.prefix(while: { !$0.isWhitespace })
         let originalFirstLetter = original.first(where: \.isLetter)
-        if let originalFirstLetter, originalFirstLetter.isUppercase,
+        if let originalFirstLetter, originalFirstLetter.isUppercase, !firstWord.contains("@"),
            let first = result.first, first.isLowercase {
             result = first.uppercased() + result.dropFirst()
         }

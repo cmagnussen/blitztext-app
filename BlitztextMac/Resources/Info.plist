@@ -20,6 +20,8 @@
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Blitztext benötigt Mikrofon-Zugriff für die Sprach-Transkription.</string>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>Blitztext nimmt den Ton eines Online-Meetings auf, damit es auf deinem Mac mitgeschrieben werden kann. Der Ton verlässt den Mac nicht.</string>
 	<key>LSUIElement</key>
 	<true/>
 	<key>CFBundleIconFile</key>

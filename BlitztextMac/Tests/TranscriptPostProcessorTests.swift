@@ -111,6 +111,17 @@ final class TranscriptPostProcessorTests: XCTestCase {
         XCTAssertEqual(processor().process("Frag (iphone) und \"Clawd\"!"), "Frag (iPhone) und \"Claude\"!")
     }
 
+    func testEmailAddresses() {
+        // A dictation that is only an address stays lowercase.
+        XCTAssertEqual(TranscriptPostProcessor().process("Test at outlook.com"), "test@outlook.com")
+        // A similar custom term never changes a part of an address.
+        let processor = TranscriptPostProcessor(customTerms: ["Meyer", "Firmo"])
+        XCTAssertEqual(
+            processor.process("Schreib an meier at firma punkt de, danke Meier."),
+            "Schreib an meier@firma.de, danke Meyer."
+        )
+    }
+
     func testHandlesUmlautsAndSharpS() {
         let processor = TranscriptPostProcessor(
             customTerms: ["Müller", "Strauß"],

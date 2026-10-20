@@ -124,24 +124,43 @@ extension View {
 /// Section title above a card: neutral, so the accent stays with actions.
 struct SectionHeader: View {
     let title: String
+    var isBeta = false
 
     var body: some View {
-        Text(title)
-            .font(.ui(12, .semibold))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 2)
-            .accessibilityAddTraits(.isHeader)
+        HStack(spacing: 6) {
+            Text(title)
+                .font(.ui(12, .semibold))
+                .foregroundStyle(.secondary)
+                .accessibilityAddTraits(.isHeader)
+            if isBeta { BetaBadge() }
+        }
+        .padding(.horizontal, 2)
+    }
+}
+
+/// Marks a feature that is new and still being tried out.
+struct BetaBadge: View {
+    var body: some View {
+        Text("Beta")
+            .font(.ui(10, .semibold))
+            .foregroundStyle(BlitztextTheme.accent)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 1.5)
+            .background(Capsule().fill(BlitztextTheme.accent.opacity(0.12)))
+            .help("Neu und noch in Erprobung. R\u{00FC}ckmeldungen gern \u{00FC}ber \u{201E}Feedback senden\u{201C}.")
+            .accessibilityLabel("Beta, noch in Erprobung")
     }
 }
 
 /// Section title with its content inside a settings card.
 struct SettingsSection<Content: View>: View {
     let title: String
+    var isBeta = false
     @ViewBuilder let content: Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SectionHeader(title: title)
+            SectionHeader(title: title, isBeta: isBeta)
             VStack(alignment: .leading, spacing: 12) {
                 content
             }

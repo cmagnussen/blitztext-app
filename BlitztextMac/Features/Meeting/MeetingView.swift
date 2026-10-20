@@ -12,6 +12,9 @@ struct MeetingView: View {
     @State private var isResummarizing = false
     @State private var copied: CopyTarget?
     @State private var confirmDelete = false
+    @AppStorage("BlitztextMeetingSystemAudio") private var includesSystemAudio = false
+    @AppStorage("BlitztextMeetingLiveNotes") private var wantsLiveNotes = true
+    @State private var copiedChatNote = false
 
     private enum CopyTarget { case summary, transcript, everything }
 
@@ -97,6 +100,30 @@ struct MeetingView: View {
                 tint: BlitztextTheme.danger
             )
 
+            if MeetingController.canRecordSystemAudio {
+                onlineMeeting
+            }
+
+            Toggle(isOn: $wantsLiveNotes) {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text("Live-Notizen")
+                            .font(.ui(12.5, .medium))
+                        BetaBadge()
+                    }
+                    Text(LiveNotesController.isAvailable
+                         ? "Alle zweieinhalb Minuten schreibt Blitztext mit, was besprochen und entschieden wurde. Bleibt auf diesem Mac."
+                         : "Brauchen Apple Intelligence oder ein lokales Sprachmodell (Einstellungen, Modelle).")
+                        .font(.ui(11))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .toggleStyle(.trailingSwitch)
+            .disabled(!LiveNotesController.isAvailable)
+            .padding(14)
+            .glassPanel()
+
             Toggle(isOn: $appState.appSettings.summarizesMeetings) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Danach zusammenfassen")
@@ -122,7 +149,7 @@ struct MeetingView: View {
             }
 
             Button {
-                meeting.start()
+                meeting.start(includingSystemAudio: recordsSystemAudio, liveNotes: wantsLiveNotes)
             } label: {
                 Text("Alle sind einverstanden, starten")
                     .frame(maxWidth: .infinity)
@@ -130,14 +157,61 @@ struct MeetingView: View {
             .buttonStyle(.filledAction)
             .disabled(MeetingController.blocker != nil)
 
-            Text("Nimmt nur das Mikrofon auf, gedacht f\u{00FC}r Meetings im Raum.")
+            Text(recordsSystemAudio
+                 ? "Nimmt dein Mikrofon (Ich) und den Ton des Macs (die anderen) auf. Mit Kopfh\u{00F6}rern wird das Transkript am saubersten."
+                 : "Nimmt nur das Mikrofon auf, gedacht f\u{00FC}r Meetings im Raum.")
                 .font(.ui(11))
                 .foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
 
             if !storedMeetings.isEmpty {
                 earlierMeetings
             }
         }
+    }
+
+    private var recordingTitle: String {
+        if meeting.pausedAt != nil { return "Pausiert, nichts wird aufgenommen" }
+        return meeting.isRecordingSystemAudio ? "Aufnahme l\u{00E4}uft, mit Ton des Macs" : "Aufnahme l\u{00E4}uft"
+    }
+
+    private var recordsSystemAudio: Bool {
+        includesSystemAudio && MeetingController.canRecordSystemAudio
+    }
+
+    /// Asked in the call's chat before starting, so everyone can agree in writing.
+    static let chatNote = "Ich schreibe dieses Meeting lokal mit Blitztext mit. Der Ton verl\u{00E4}sst meinen Mac nicht und wird nach der Auswertung gel\u{00F6}scht. Ist das f\u{00FC}r alle in Ordnung?"
+
+    private var onlineMeeting: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Toggle(isOn: $includesSystemAudio) {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text("Online-Meeting")
+                            .font(.ui(12.5, .medium))
+                        BetaBadge()
+                    }
+                    Text("Nimmt auch den Ton des Macs auf, zum Beispiel aus Teams, Zoom oder Meet. Beim ersten Mal fragt macOS nach der Freigabe f\u{00FC}r Systemaudio.")
+                        .font(.ui(11))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .toggleStyle(.trailingSwitch)
+
+            if includesSystemAudio {
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(Self.chatNote, forType: .string)
+                    copiedChatNote = true
+                } label: {
+                    Label(copiedChatNote ? "Kopiert, im Chat einf\u{00FC}gen" : "Frage f\u{00FC}r den Chat kopieren", systemImage: copiedChatNote ? "checkmark" : "doc.on.doc")
+                }
+                .buttonStyle(.subtle)
+            }
+        }
+        .padding(14)
+        .glassPanel()
     }
 
     private var storedMeetings: [MeetingRecord] {
@@ -196,15 +270,21 @@ struct MeetingView: View {
             VStack(spacing: 14) {
                 HStack(spacing: 8) {
                     Circle()
-                        .fill(BlitztextTheme.danger)
+                        .fill(meeting.pausedAt == nil ? BlitztextTheme.danger : Color.secondary)
                         .frame(width: 9, height: 9)
-                    Text("Aufnahme l\u{00E4}uft")
+                    Text(recordingTitle)
                         .font(.ui(13, .semibold))
                     Spacer()
-                    TimelineView(.periodic(from: startedAt, by: 1)) { context in
-                        Text(Self.clock(context.date.timeIntervalSince(startedAt)))
+                    if let pausedAt = meeting.pausedAt {
+                        Text(Self.clock(pausedAt.timeIntervalSince(startedAt)))
                             .font(.ui(13, .semibold).monospacedDigit())
                             .foregroundStyle(.secondary)
+                    } else {
+                        TimelineView(.periodic(from: startedAt, by: 1)) { context in
+                            Text(Self.clock(context.date.timeIntervalSince(startedAt)))
+                                .font(.ui(13, .semibold).monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
 
@@ -214,6 +294,10 @@ struct MeetingView: View {
             }
             .padding(14)
             .glassPanel()
+
+            if let live = meeting.liveNotes {
+                LiveNotesCard(live: live)
+            }
 
             Text("Du kannst das Men\u{00FC} schlie\u{00DF}en, die Aufnahme l\u{00E4}uft weiter. Das Symbol in der Men\u{00FC}leiste zeigt sie an. Bitte den Mac nicht zuklappen.")
                 .font(.ui(12))
@@ -227,6 +311,14 @@ struct MeetingView: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.filledAction)
+
+            Button {
+                if meeting.pausedAt == nil { meeting.pause() } else { meeting.resume() }
+            } label: {
+                Label(meeting.pausedAt == nil ? "Pausieren" : "Fortsetzen", systemImage: meeting.pausedAt == nil ? "pause.fill" : "record.circle")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.subtle)
 
             Button("Verwerfen", role: .destructive) {
                 meeting.discard()
@@ -297,6 +389,16 @@ struct MeetingView: View {
                     .foregroundStyle(.secondary)
             }
 
+            // At the top: a long meeting would put them far below the transcript.
+            HStack(spacing: 8) {
+                // The bare transcript by person, e.g. to continue in another AI app.
+                copyButton("Transkript kopieren", target: .transcript, text: record.transcriptShareText)
+                if record.summary != nil {
+                    copyButton("Alles kopieren", target: .everything, text: record.shareText)
+                }
+                Spacer()
+            }
+
             summaryCard(record)
 
             VStack(alignment: .leading, spacing: 8) {
@@ -350,11 +452,6 @@ struct MeetingView: View {
             }
 
             HStack(spacing: 8) {
-                // The bare transcript by person, e.g. to continue in another AI app.
-                copyButton("Transkript kopieren", target: .transcript, text: record.transcriptShareText)
-                if record.summary != nil {
-                    copyButton("Alles kopieren", target: .everything, text: record.shareText)
-                }
                 Spacer()
                 Button(role: .destructive) {
                     confirmDelete = true
@@ -384,11 +481,18 @@ struct MeetingView: View {
             }
 
             if let summary = record.summary {
-                Text(summary)
+                Text(ListDisplay.bullets(summary))
                     .font(.ui(12.5))
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
+
+                if let note = record.summaryNote {
+                    Text(note)
+                        .font(.ui(11))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
 
                 Text("Automatisch erstellt. Bitte vor allem die Zust\u{00E4}ndigkeiten bei den To-dos kurz pr\u{00FC}fen.")
                     .font(.ui(11))

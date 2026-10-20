@@ -32,9 +32,11 @@ struct MeetingRecord: Codable, Equatable, Identifiable {
         "Meeting am " + date.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened, locale: Locale(identifier: "de_DE")))
     }
 
+    /// Speaker 0 is the microphone in an online meeting, the person at this Mac.
     func name(for speaker: Int) -> String {
         let custom = speakerNames[speaker]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return custom.isEmpty ? "Person \(speaker)" : custom
+        guard custom.isEmpty else { return custom }
+        return speaker == 0 ? "Ich" : "Person \(speaker)"
     }
 
     var speakers: [Int] {
@@ -43,7 +45,17 @@ struct MeetingRecord: Codable, Equatable, Identifiable {
 
     /// "Name: text" per turn, the form used for the summary and for copying.
     var transcriptText: String {
-        turns.map { "\(name(for: $0.speaker)): \($0.text)" }.joined(separator: "\n\n")
+        transcriptText(ownName: nil)
+    }
+
+    /// For a language model: the person at this Mac ("Ich") appears as `ownName` unless
+    /// renamed, so the tasks they take on are assigned to them and not to a stranger.
+    func transcriptText(ownName: String?) -> String {
+        turns.map { turn in
+            let renamed = !(speakerNames[turn.speaker]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "").isEmpty
+            let name = turn.speaker == 0 && !renamed ? (ownName ?? name(for: 0)) : name(for: turn.speaker)
+            return "\(name): \(turn.text)"
+        }.joined(separator: "\n\n")
     }
 
     /// Title and transcript by person, e.g. to continue in another AI app.
@@ -60,6 +72,11 @@ struct MeetingRecord: Codable, Equatable, Identifiable {
 
     var audioURL: URL {
         MeetingStore.directoryURL.appendingPathComponent("\(id.uuidString).wav")
+    }
+
+    /// What the Mac played during an online meeting, i.e. the other side.
+    var systemAudioURL: URL {
+        MeetingStore.directoryURL.appendingPathComponent("\(id.uuidString)-system.caf")
     }
 }
 
@@ -100,6 +117,14 @@ final class MeetingStore {
         }
         migrateSpeakerLabels()
     }
+
+    #if DEBUG
+    /// The stored meetings for debug checks: reads only, never moves an unreadable file aside.
+    static func readWithoutRepair() -> [MeetingRecord]? {
+        guard let data = readStoredData() else { return nil }
+        return try? JSONDecoder().decode([MeetingRecord].self, from: data)
+    }
+    #endif
 
     private static func moveUnreadableFileAside() {
         let stamp = Int(Date().timeIntervalSince1970)
@@ -149,6 +174,7 @@ final class MeetingStore {
     func delete(id: UUID) {
         if let record = meeting(id: id) {
             try? FileManager.default.removeItem(at: record.audioURL)
+            try? FileManager.default.removeItem(at: record.systemAudioURL)
         }
         meetings.removeAll { $0.id == id }
         save()

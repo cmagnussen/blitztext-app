@@ -11,6 +11,7 @@ final class EmojiTextWorkflow: Workflow {
     }
     var onOutput: WorkflowOutputHandler?
     var onPhaseChange: WorkflowPhaseChangeHandler?
+    private(set) var transcript: String?
 
     private let recorder = AudioRecorder()
     private let settings: EmojiTextSettings
@@ -114,6 +115,7 @@ final class EmojiTextWorkflow: Workflow {
                 }
 
                 if Task.isCancelled { return }
+                transcript = processedRawText
 
                 // Phase 2: Add emojis
                 phase = .running("Emojis werden eingef\u{00FC}gt ...")

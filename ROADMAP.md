@@ -9,6 +9,7 @@ Ideas and direction, not a promise.
 - writing modes with Apple Intelligence or an optional own model provider
 - audio files, own shortcuts, mode per app or website, dictionary with replacements, local history
 - text fitted to the cursor, sound muted while recording, optional automatic paragraphs
+- meetings in the room and online (beta) with live notes, optional local language model (Gemma 4) for summaries
 - in-app updates from the GitHub releases (Sparkle)
 - no hosted backend, no accounts
 
