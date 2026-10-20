@@ -23,7 +23,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/menu-bar.png" width="400" alt="Blitztext in the menu bar: the speech bubble to dictate, four modes with their shortcuts and the last text as a message">
+  <img src="docs/screenshots/menu-bar.png" width="400" alt="Blitztext in the menu bar: the speech bubble to dictate, the meeting button, four modes with their shortcuts and the last text as a message">
   <img src="docs/screenshots/settings-modes.png" width="400" alt="Settings, Modi: writing style, instructions, emoji density and a mode per app or website">
 </p>
 
@@ -76,8 +76,10 @@ Keyboards without `fn`: set your own shortcut per mode in the settings.
 
 | | |
 |---|---|
-| <img src="docs/screenshots/settings-models.png" width="400" alt="Settings, Modelle: local speech recognition with Parakeet Ultra and the AI modes with Apple Intelligence"> | <img src="docs/screenshots/settings-general.png" width="400" alt="Settings, Allgemein: how Blitztext works, shortcuts, hold or press, and the recording pill"> |
-| Speech recognition and AI modes on your Mac | How Blitztext works, shortcuts and the lilac pill while you speak |
+| <img src="docs/screenshots/meeting-start.png" width="400" alt="Meeting: consent reminder, switches for online meeting and live notes (beta) and for the summary"> | <img src="docs/screenshots/meeting-result.png" width="400" alt="Meeting result with sample data: summary with decisions and to-dos, people to rename and the transcript"> |
+| Meetings in the room or online, with live notes | Summary with decisions and to-dos, transcript by person |
+| <img src="docs/screenshots/settings-models.png" width="400" alt="Settings, Modelle: the AI modes with Apple Intelligence and the local language model for meetings with Gemma 4 E4B and 12B"> | <img src="docs/screenshots/settings-general.png" width="400" alt="Settings, Allgemein: how Blitztext works, shortcuts, hold or press, and the recording pill"> |
+| AI modes and the optional local language model on your Mac | How Blitztext works, shortcuts and the lilac pill while you speak |
 
 The app is in German for now.
 
