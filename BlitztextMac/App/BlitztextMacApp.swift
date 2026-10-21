@@ -400,8 +400,7 @@ enum MacMeetingCheck {
                     customTerms: [], replacements: [], correctCustomTerms: false, removeFillerWords: true,
                     language: "de", isDictionaryWord: DictionaryWordChecker.isKnownWord
                 ),
-                summarizes: summarizes,
-                engine: .automatic
+                summarizes: summarizes
             )
         }
         var audioURL: URL?
@@ -1035,6 +1034,16 @@ enum MacSnapshots {
                     .background(BlitztextTheme.page)
                 capture(pill, appearance: appearance, to: folder.appendingPathComponent("\(mode)-pill-\(label).png"))
             }
+            // A meeting running for 12:34 minutes.
+            appState.meeting.preview(.recording(startedAt: Date().addingTimeInterval(-754)))
+            let meetingModel = RecordingIndicatorModel()
+            meetingModel.status = .meeting
+            let meetingPill = RecordingPill(model: meetingModel, appState: appState) {}
+                .frame(width: RecordingPill.panelSize.width, height: RecordingPill.panelSize.height)
+                .padding(20)
+                .background(BlitztextTheme.page)
+            capture(meetingPill, appearance: appearance, to: folder.appendingPathComponent("\(mode)-pill-meeting.png"))
+            appState.meeting.preview(.idle)
         }
         appState.page = .main
     }

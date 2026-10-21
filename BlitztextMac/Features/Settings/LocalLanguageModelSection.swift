@@ -31,7 +31,7 @@ struct LocalLanguageModelSection: View {
         let mac = LocalModelVariant.isAppleSilicon
             ? "Dieser Mac hat \(memoryGB) GB Arbeitsspeicher."
             : "Dieser Mac hat keinen Apple-Chip."
-        return mac + " Ist ein Modell geladen, nutzen Meetings es automatisch, au\u{00DF}er unter KI-Modi steht \u{201E}Immer Modell-Anbieter\u{201C}. Gemma 4 von Google, Lizenz Apache 2.0."
+        return mac + " Ist ein Modell geladen, nutzen Meetings es automatisch. Gemma 4 von Google, Lizenz Apache 2.0."
     }
 
     private func row(_ variant: LocalModelVariant) -> some View {

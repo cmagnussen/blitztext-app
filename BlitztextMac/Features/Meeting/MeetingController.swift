@@ -5,8 +5,8 @@ import Observation
 /// Records a meeting through the Mac's microphone and turns it into a transcript by person,
 /// optionally with a summary and to-dos. For an online meeting it also records what the Mac
 /// plays: the microphone becomes "Ich", the system sound is split into the other people.
-/// Transcription and speaker detection run on this Mac; the summary too, unless the user
-/// connected an AI provider.
+/// Transcription, speaker detection and the summary run on this Mac; meetings never go to
+/// a model provider, whatever the setting for the writing modes.
 @Observable
 @MainActor
 final class MeetingController {
@@ -22,7 +22,6 @@ final class MeetingController {
         let language: String
         let postProcessor: TranscriptPostProcessor
         let summarizes: Bool
-        let engine: TextRewriter.Engine
     }
 
     private(set) var phase: Phase = .idle {
@@ -418,9 +417,9 @@ final class MeetingController {
                 record.turns = transcribed
 
                 if settings.summarizes {
-                    let model = settings.engine == .provider ? nil : LocalModelStore.shared.preferredInstalled
+                    let model = LocalModelStore.shared.preferredInstalled
                     update(.processing(model.map { "Wird zusammengefasst (\($0.name), lokal) ..." } ?? "Wird zusammengefasst ..."))
-                    await summarize(&record, engine: settings.engine)
+                    await summarize(&record)
                     try Task.checkCancellation()
                 }
 
@@ -462,11 +461,14 @@ final class MeetingController {
     /// Creates the summary (again), e.g. after renaming people.
     func resummarize(_ meetingID: UUID) async {
         guard var record = store.meeting(id: meetingID) else { return }
-        await summarize(&record, engine: settingsProvider().engine)
+        await summarize(&record)
         store.setSummary(record.summary, note: record.summaryNote, for: meetingID)
     }
 
-    private func summarize(_ record: inout MeetingRecord, engine: TextRewriter.Engine) async {
+    /// On this Mac only: the downloaded local model, which summarizes more exactly, otherwise
+    /// Apple Intelligence. The start page and the question for the chat promise that, so
+    /// there is no fallback to a model provider.
+    private func summarize(_ record: inout MeetingRecord) async {
         // The live notes may still hold the local model; only one copy fits comfortably.
         await liveNotesShutdown?.value
         liveNotesShutdown = nil
@@ -474,17 +476,14 @@ final class MeetingController {
         // Why the local model did not summarize, when it was tried.
         var localFailure: String?
         #if arch(arm64)
-        // A downloaded local model summarizes more exactly than Apple Intelligence; only an
-        // explicit "Immer Modell-Anbieter" goes past it. When it fails, the engine setting
-        // decides as without it.
-        if engine != .provider, let variant = LocalModelStore.shared.preferredInstalled {
+        if let variant = LocalModelStore.shared.preferredInstalled {
             let model = LocalLanguageModel(folder: LocalModelStore.folder(for: variant))
             do {
                 try await model.load()
                 let backend = MeetingSummarizer.Backend(characterLimit: Self.localModelCharacterLimit) { instruction, text in
                     try await model.complete(instruction: instruction, text: text, maxTokens: 1_500)
                 }
-                record.summary = try await MeetingSummarizer.summarize(transcript, engine: engine, backend: backend)
+                record.summary = try await MeetingSummarizer.summarize(transcript, engine: .automatic, backend: backend)
                 record.summaryNote = nil
                 await model.unload()
                 return
@@ -494,20 +493,22 @@ final class MeetingController {
             await model.unload()
         }
         #endif
-        guard TextRewriter.canRewrite(engine: engine) else {
+        guard TextRewriter.isLocalAvailable else {
             if let localFailure {
                 // An earlier summary stays.
                 record.summaryNote = localFailure
             } else {
                 record.summary = nil
-                record.summaryNote = "F\u{00FC}r die Zusammenfassung braucht Blitztext Apple Intelligence oder einen API-Key in den Einstellungen."
+                record.summaryNote = "F\u{00FC}r die Zusammenfassung braucht Blitztext Apple Intelligence oder ein lokales Sprachmodell (Einstellungen, Modelle). Meetings gehen nie an einen Modell-Anbieter."
             }
             return
         }
         do {
-            let fallback = TextRewriter.runsLocally(engine: engine) ? "Apple Intelligence" : "dem Modell-Anbieter"
-            record.summary = try await MeetingSummarizer.summarize(transcript, engine: engine)
-            record.summaryNote = localFailure.map { "\($0) Stattdessen mit \(fallback) zusammengefasst." }
+            let onDevice = MeetingSummarizer.Backend(characterLimit: MeetingSummarizer.localCharacterLimit) { instruction, text in
+                try await TextRewriter.rewriteOnDevice(text, instruction: instruction, deterministic: true)
+            }
+            record.summary = try await MeetingSummarizer.summarize(transcript, engine: .automatic, backend: onDevice)
+            record.summaryNote = localFailure.map { "\($0) Stattdessen mit Apple Intelligence zusammengefasst." }
         } catch {
             record.summaryNote = [localFailure, "Zusammenfassung fehlgeschlagen: \(error.localizedDescription)"]
                 .compactMap { $0 }.joined(separator: " ")

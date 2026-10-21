@@ -3,8 +3,9 @@ import SwiftUI
 
 /// A small pill at the bottom of the screen while Blitztext records or writes, so the
 /// recording is visible wherever you type, not only in the menu bar. Lilac bars follow
-/// the voice; while recording, a click stops it. The panel never takes the focus, so the
-/// text still lands in the app you are typing in.
+/// the voice; while recording, a click stops it. During a meeting it shows the running
+/// time, and a click opens the meeting page. The panel never takes the focus, so the text
+/// still lands in the app you are typing in.
 @MainActor
 final class RecordingIndicatorController {
     private let appState: AppState
@@ -42,7 +43,11 @@ final class RecordingIndicatorController {
             model.status = status
             show(placing: panel?.isVisible != true)
             hide(after: .milliseconds(2_600))
-        case .idle, .error, .meeting:
+        case .meeting:
+            // Back after a dictation in between, or a meeting just started.
+            model.status = status
+            show(placing: panel?.isVisible != true || isHiding)
+        case .idle, .error:
             hide()
         }
     }
@@ -60,7 +65,7 @@ final class RecordingIndicatorController {
         let panel = panel ?? makePanel()
         self.panel = panel
         if placing { place(panel) }
-        panel.ignoresMouseEvents = model.status.isRecording == false
+        panel.ignoresMouseEvents = !model.status.isRecording && model.status != .meeting
         if !panel.isVisible {
             panel.alphaValue = 0
             panel.orderFrontRegardless()
@@ -125,9 +130,12 @@ final class RecordingIndicatorController {
         panel.hidesOnDeactivate = false
         panel.becomesKeyOnlyIfNeeded = true
         let appState = appState
-        let hosting = FirstClickHostingView(rootView: RecordingPill(model: model, appState: appState) {
-            appState.stopCurrentWorkflow()
-        })
+        let hosting = FirstClickHostingView(rootView: RecordingPill(
+            model: model,
+            appState: appState,
+            onStop: { appState.stopCurrentWorkflow() },
+            onOpenMeeting: { appState.openMeeting() }
+        ))
         // The pill has a fixed size; the panel never resizes with its content.
         hosting.sizingOptions = []
         hosting.frame = NSRect(origin: .zero, size: RecordingPill.panelSize)
@@ -160,6 +168,7 @@ struct RecordingPill: View {
     let model: RecordingIndicatorModel
     let appState: AppState
     let onStop: () -> Void
+    var onOpenMeeting: () -> Void = {}
 
     private static let lilac = BlackboatColor.hex(0xBB84DF)
     private static let night = BlackboatColor.hex(0x050722)
@@ -168,13 +177,21 @@ struct RecordingPill: View {
 
     var body: some View {
         Group {
-            if case .recording = model.status {
+            switch model.status {
+            case .recording:
                 Button(action: onStop) {
                     capsule
                 }
                 .buttonStyle(.plain)
                 .help("Klicken stoppt die Aufnahme")
-            } else {
+            case .meeting:
+                // Opens the meeting page instead of stopping: ending a meeting by a stray click would hurt.
+                Button(action: onOpenMeeting) {
+                    capsule
+                }
+                .buttonStyle(.plain)
+                .help("Meeting l\u{00E4}uft. Klicken \u{00F6}ffnet die Meeting-Seite.")
+            default:
                 capsule
             }
         }
@@ -228,7 +245,9 @@ struct RecordingPill: View {
             Text("Zwischenablage")
                 .font(.ui(12, .semibold))
                 .foregroundStyle(.white.opacity(0.85))
-        case .idle, .error, .meeting:
+        case .meeting:
+            MeetingPillContent(meeting: appState.meeting, lilac: Self.lilac)
+        case .idle, .error:
             EmptyView()
         }
     }
@@ -239,7 +258,49 @@ struct RecordingPill: View {
         case .processing: return "Blitztext schreibt"
         case .success: return "Fertig"
         case .copied: return "Nicht eingef\u{00FC}gt, der Text liegt in der Zwischenablage"
-        case .idle, .error, .meeting: return ""
+        case .meeting: return "Meeting wird aufgenommen. Klicken \u{00F6}ffnet die Meeting-Seite."
+        case .idle, .error: return ""
+        }
+    }
+}
+
+/// A running meeting: a pulsing red dot and the recorded time, or "Pausiert".
+private struct MeetingPillContent: View {
+    let meeting: MeetingController
+    let lilac: Color
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        if case .recording(let startedAt) = meeting.phase {
+            if meeting.pausedAt != nil {
+                Image(systemName: "pause.fill")
+                    .font(.ui(10, .bold))
+                    .foregroundStyle(lilac)
+                Text("Pausiert")
+                    .font(.ui(12, .semibold))
+                    .foregroundStyle(.white.opacity(0.85))
+            } else {
+                TimelineView(.periodic(from: startedAt, by: 1)) { context in
+                    let pulse = reduceMotion ? 1 : 0.55 + 0.45 * abs(cos(context.date.timeIntervalSince(startedAt) * .pi / 2))
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(Color(nsColor: .systemRed))
+                            .frame(width: 8, height: 8)
+                            .opacity(pulse)
+                            .animation(.easeInOut(duration: 0.9), value: pulse)
+                        Text("Meeting")
+                            .font(.ui(12, .semibold))
+                            .foregroundStyle(.white.opacity(0.85))
+                        Text(MeetingView.clock(context.date.timeIntervalSince(startedAt)))
+                            .font(.ui(12, .semibold).monospacedDigit())
+                            .foregroundStyle(.white.opacity(0.6))
+                    }
+                    // "1:02:34" after an hour still fits the capsule.
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                }
+            }
         }
     }
 }

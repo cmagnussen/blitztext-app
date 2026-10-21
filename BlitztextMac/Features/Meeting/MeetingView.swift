@@ -180,7 +180,7 @@ struct MeetingView: View {
     }
 
     /// Asked in the call's chat before starting, so everyone can agree in writing.
-    static let chatNote = "Ich schreibe dieses Meeting lokal mit Blitztext mit. Der Ton verl\u{00E4}sst meinen Mac nicht und wird nach der Auswertung gel\u{00F6}scht. Ist das f\u{00FC}r alle in Ordnung?"
+    static let chatNote = "Ich w\u{00FC}rde dieses Meeting gern mit Blitztext aufnehmen und auf meinem Mac transkribieren und zusammenfassen lassen. Ton und Text bleiben auf meinem Mac, die Aufnahme wird nach der Auswertung gel\u{00F6}scht. Ist das f\u{00FC}r alle in Ordnung?"
 
     private var onlineMeeting: some View {
         VStack(alignment: .leading, spacing: 10) {

@@ -25,15 +25,17 @@ final class AudioRecorder: NSObject, AVAudioRecorderDelegate {
         recordingURL = nil
     }
 
-    /// Recordings a crash or quit left behind, with their padded copies (`AudioPadding`) and
-    /// the stretches of live notes; nothing records while the app starts.
+    /// Recordings a crash or quit left behind, with their padded copies (`AudioPadding`), the
+    /// stretches of live notes and the converted and streamed copies of meeting and audio file
+    /// sound; nothing records or transcribes while the app starts.
     static func removeLeftoverRecordings() {
         let temp = FileManager.default.temporaryDirectory
         let files = (try? FileManager.default.contentsOfDirectory(at: temp, includingPropertiesForKeys: nil)) ?? []
         for file in files {
             let name = file.lastPathComponent
             let leftover = (name.hasPrefix("recording") && file.pathExtension == "m4a")
-                || ((name.hasPrefix("blitztext-padded-") || name.hasPrefix("blitztext-live-")) && file.pathExtension == "wav")
+                || (["blitztext-padded-", "blitztext-live-", "blitztext-import-"].contains { name.hasPrefix($0) } && file.pathExtension == "wav")
+                || (name.hasPrefix("fluidaudio-streaming-") && file.pathExtension == "raw")
             if leftover { try? FileManager.default.removeItem(at: file) }
         }
     }

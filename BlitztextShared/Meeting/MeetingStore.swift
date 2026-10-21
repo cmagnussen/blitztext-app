@@ -81,7 +81,7 @@ struct MeetingRecord: Codable, Equatable, Identifiable {
 }
 
 /// Meetings stay on the device: on the iPhone protected by iOS Data Protection, on the Mac
-/// encrypted like the history (key in the keychain).
+/// encrypted like the history, with a key derived from this Mac (`KeychainService`).
 @Observable
 @MainActor
 final class MeetingStore {

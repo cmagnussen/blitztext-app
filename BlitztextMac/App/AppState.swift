@@ -100,8 +100,7 @@ final class AppState {
         MeetingController.Settings(
             language: self.transcriptionSettings.language,
             postProcessor: self.postProcessor,
-            summarizes: self.appSettings.summarizesMeetings,
-            engine: self.appSettings.rewriteEngine
+            summarizes: self.appSettings.summarizesMeetings
         )
     }
 
@@ -540,6 +539,14 @@ final class AppState {
             page = .main
         } else if page == .onboarding {
             page = .main
+        }
+    }
+
+    /// The meeting pill was clicked: the menu opens on the running meeting.
+    func openMeeting() {
+        NotificationCenter.default.post(name: .showPopover, object: nil)
+        if activeWorkflow?.phase.isActive != true {
+            page = .meeting
         }
     }
 

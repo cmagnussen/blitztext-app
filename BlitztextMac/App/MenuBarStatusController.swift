@@ -80,6 +80,9 @@ final class MenuBarStatusController {
         }
         button.image = image
         button.image?.isTemplate = true
+        // A running meeting turns the symbol red, so it stands out next to the microphone
+        // indicator that other apps keep on as well.
+        button.contentTintColor = currentStatus == .meeting ? .systemRed : nil
         button.toolTip = tooltip(for: currentStatus)
     }
 
