@@ -109,6 +109,7 @@ targets:
       - path: Services/WebsiteHost.swift
       - path: Services/TranscriptParagraphService.swift
       - path: Services/ClipboardPasteService.swift
+      - path: Services/MeetingSummaryClipboard.swift
       - path: ../BlitztextShared/Transcription/HallucinationFilter.swift
       - path: ../BlitztextShared/Transcription/SpokenEmailAddress.swift
       - path: Services/ShortcutModifiers.swift
