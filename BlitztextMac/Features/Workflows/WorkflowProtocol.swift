@@ -68,20 +68,6 @@ enum WorkflowType: String, CaseIterable, Identifiable, Codable {
 
 // MARK: - Workflow State
 
-enum WorkflowPhase: Equatable {
-    case idle
-    case running(String)
-    case done(String)
-    case error(String)
-
-    var isActive: Bool {
-        switch self {
-        case .idle: return false
-        default: return true
-        }
-    }
-}
-
 enum WorkflowLaunchSource: Equatable {
     case manual
     case hotkeyBackground

@@ -300,7 +300,8 @@ final class AppState {
             return
         }
 
-        activeWorkflow?.stop()
+        // A replaced dictation ends without a result; its late phases are ignored.
+        activeWorkflow?.reset()
         menuBarStatusResetTask?.cancel()
         workflowCleanupTask?.cancel()
         activeLaunchSource = source
@@ -411,10 +412,12 @@ final class AppState {
         }
     }
 
-    /// Every way of ending a recording comes here (shortcut, Escape, pill, menu).
+    /// Every way of ending a recording comes here (shortcut, Escape, pill, menu). A click
+    /// that arrives just after the recording ended changes nothing; Escape cancels a
+    /// running transcription through `resetCurrentWorkflow()`.
     func stopCurrentWorkflow() {
-        guard let workflow = activeWorkflow else { return }
-        if workflow.isRecording { noteTargetField() }
+        guard let workflow = activeWorkflow, workflow.isRecording else { return }
+        noteTargetField()
         workflow.stop()
     }
 
@@ -828,8 +831,10 @@ final class AppState {
     }
 
     private func configureWorkflowHandlers<T: Workflow>(_ workflow: T) {
-        workflow.onOutput = { [weak self] text in
-            self?.handleWorkflowOutput(text)
+        workflow.onOutput = { [weak self, weak workflow] text in
+            // Only the current dictation pastes; one replaced meanwhile must not use its target.
+            guard let self, let workflow, workflow === self.activeWorkflow else { return }
+            self.handleWorkflowOutput(text)
         }
         workflow.onPhaseChange = { [weak self, weak workflow] phase in
             guard let self, let workflow else { return }
@@ -838,18 +843,18 @@ final class AppState {
     }
 
     private func handleWorkflowPhaseChange(_ phase: WorkflowPhase, workflow: any Workflow) {
+        // A late phase of a replaced workflow must not end, unmute or relabel the next one.
+        guard workflow === activeWorkflow else { return }
         menuBarStatusResetTask?.cancel()
         // Sound comes back as soon as the recording ends, not after the transcription.
-        // A late phase of a replaced workflow must not unmute the next recording.
-        if !workflow.isRecording, workflow === activeWorkflow {
+        if !workflow.isRecording {
             audioMuter.restoreIfNeeded()
         }
 
         switch phase {
         case .idle:
-            if activeWorkflow == nil {
-                menuBarStatus = .idle
-            }
+            // Ended without a result; whoever ended it (reset, a new dictation) sets the status.
+            break
 
         case .running(let message):
             menuBarStatus = workflow.isRecording

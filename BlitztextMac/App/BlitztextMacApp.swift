@@ -265,23 +265,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             handleHotkeyUp(shortcutModes[shortcut] ?? shortcut)
         case .escape:
             // In both modes: a recording stops and is transcribed, a transcription or
-            // rewrite still running is cancelled before it pastes.
-            if let active = appState.activeWorkflow, case .running = active.phase {
+            // rewrite still running is cancelled quietly before it pastes.
+            let active = appState.activeWorkflow
+            switch DictationControl.escape(phase: active?.phase, isRecording: active?.isRecording ?? false) {
+            case .stop:
                 appState.stopCurrentWorkflow()
+            case .cancel:
+                appState.resetCurrentWorkflow()
+            case .start, .ignore:
+                break
             }
         }
     }
 
     private func handleHotkeyDown(_ type: WorkflowType) {
-        // In toggle mode, any workflow shortcut finishes the current recording.
-        // Do this before checking the requested mode: it may not be configured.
-        if appState.appSettings.hotkeyMode == .toggle,
-           let active = appState.activeWorkflow,
-           case .running = active.phase {
-            if active.isRecording {
-                appState.stopCurrentWorkflow()
-            }
-            // A second stop during transcription would cancel its result.
+        // While a dictation runs, a shortcut never starts another one: in toggle mode it
+        // finishes the recording, in hold mode the running dictation finishes first. Do this
+        // before checking the requested mode: it may not be configured.
+        let active = appState.activeWorkflow
+        switch DictationControl.shortcutDown(
+            holdToRecord: appState.appSettings.hotkeyMode == .hold,
+            phase: active?.phase,
+            isRecording: active?.isRecording ?? false
+        ) {
+        case .start:
+            break
+        case .stop:
+            appState.stopCurrentWorkflow()
+            return
+        case .cancel, .ignore:
             return
         }
 
@@ -317,17 +329,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     private func handleHotkeyUp(_ type: WorkflowType) {
-        let mode = appState.appSettings.hotkeyMode
-
-        guard mode == .hold else { return }
-
-        // Hold mode: stop recording on key release
-        if let active = appState.activeWorkflow,
-           active.type == type {
-            // Only stop if currently recording (running phase)
-            if case .running = active.phase {
-                appState.stopCurrentWorkflow()
-            }
+        // Hold mode: letting go ends the recording. A dictation still being transcribed
+        // (the key was pressed again meanwhile) is left to finish.
+        guard let active = appState.activeWorkflow, active.type == type else { return }
+        if DictationControl.shortcutUp(
+            holdToRecord: appState.appSettings.hotkeyMode == .hold,
+            isRecording: active.isRecording
+        ) == .stop {
+            appState.stopCurrentWorkflow()
         }
     }
 

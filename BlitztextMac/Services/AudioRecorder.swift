@@ -2,7 +2,7 @@ import AVFoundation
 import Observation
 
 @Observable
-final class AudioRecorder: NSObject, AVAudioRecorderDelegate {
+final class AudioRecorder: NSObject, AVAudioRecorderDelegate, DictationRecorder {
     var isRecording = false
     var recordingURL: URL?
     var errorMessage: String?

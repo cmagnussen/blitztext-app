@@ -123,6 +123,9 @@ targets:
       - path: Features/Meeting/TextParts.swift
       - path: Services/FocusedFieldReader.swift
       - path: ../BlitztextShared/Meeting/ListDisplay.swift
+      - path: Features/Workflows/WorkflowPhase.swift
+      - path: Features/Workflows/DictationRun.swift
+      - path: Services/TranscriptionQualityService.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.blitztext.mac.tests
