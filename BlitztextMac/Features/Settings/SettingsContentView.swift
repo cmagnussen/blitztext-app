@@ -599,10 +599,10 @@ struct CustomizeSettingsView: View {
             // MARK: Aufnahme & Einfuegen
             SettingsSection(title: "Aufnahme & Einf\u{00FC}gen") {
 
-                Toggle("Aufnahme unten am Bildschirm zeigen", isOn: $appState.appSettings.showsRecordingIndicator)
+                Toggle("Aufnahmeanzeige zeigen", isOn: $appState.appSettings.showsRecordingIndicator)
                     .toggleStyle(.trailingSwitch)
 
-                Text("Eine kleine lila Anzeige bewegt sich mit deiner Stimme, solange Blitztext aufnimmt und schreibt. Ein Klick darauf stoppt die Aufnahme.")
+                Text("Ziehen verschiebt die Anzeige. Ein Rechtsklick blendet sie für die laufende Aufnahme aus. Ein Klick stoppt das Diktat oder öffnet die Meeting-Seite.")
                     .font(.ui(12))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

@@ -117,6 +117,7 @@ targets:
       - path: ../BlitztextShared/Meeting/EchoFilter.swift
       - path: Services/LocalLanguageModel/LocalModelCatalog.swift
       - path: Services/AudioPadding.swift
+      - path: Features/RecordingIndicator/RecordingIndicatorInteraction.swift
       - path: ../BlitztextShared/Meeting/SpeakerAlignment.swift
       - path: Features/Meeting/WAVRecovery.swift
       - path: Services/LocalLanguageModel/GemmaChatFormat.swift
