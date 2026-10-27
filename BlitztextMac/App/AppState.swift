@@ -1272,6 +1272,8 @@ extension Notification.Name {
     static let chooseAudioFile = Notification.Name("chooseAudioFile")
     static let showWhatsNew = Notification.Name("showWhatsNew")
     static let showPopover = Notification.Name("showPopover")
+    /// userInfo: "markdown", "fileName" and "meetingID" of the meeting result.
+    static let saveMeetingMarkdown = Notification.Name("saveMeetingMarkdown")
 }
 
 struct LastInsertion {

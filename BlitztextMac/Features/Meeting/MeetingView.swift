@@ -241,7 +241,7 @@ struct MeetingView: View {
                                     .font(.ui(12.5, .medium))
                                     .foregroundStyle(.primary)
                                     .lineLimit(1)
-                                Text(record.status == .done ? summaryLine(record) : "Noch nicht ausgewertet, klicken zum Auswerten")
+                                Text(record.status == .done ? record.overview : "Noch nicht ausgewertet, klicken zum Auswerten")
                                     .font(.ui(11))
                                     .foregroundStyle(.secondary)
                             }
@@ -407,7 +407,7 @@ struct MeetingView: View {
                 } message: {
                     Text("Leer lassen, um wieder Datum und Uhrzeit zu zeigen.")
                 }
-                Text(summaryLine(record))
+                Text(record.overview)
                     .font(.ui(11.5))
                     .foregroundStyle(.secondary)
             }
@@ -419,6 +419,25 @@ struct MeetingView: View {
                 if record.summary != nil {
                     copyButton("Alles kopieren", target: .everything, text: record.shareText)
                 }
+                // A symbol only: a third labelled button does not fit the popover's width.
+                Button {
+                    NotificationCenter.default.post(name: .saveMeetingMarkdown, object: nil, userInfo: [
+                        "markdown": record.markdown,
+                        "fileName": MeetingMarkdown.fileName(for: record.title),
+                        "meetingID": record.id,
+                    ])
+                } label: {
+                    // The copy buttons take their height from the "doc.on.doc" symbol; holding
+                    // its space keeps all three capsules equally tall.
+                    ZStack {
+                        Image(systemName: "doc.on.doc").hidden()
+                        Image(systemName: meeting.savedMarkdownID == record.id ? "checkmark" : "square.and.arrow.down")
+                    }
+                }
+                .buttonStyle(.glassAction)
+                .help("Als Markdown-Datei sichern")
+                .accessibilityLabel("Als Markdown-Datei sichern")
+                .accessibilityValue(meeting.savedMarkdownID == record.id ? "Gesichert" : "")
                 Spacer()
             }
 
@@ -595,25 +614,12 @@ struct MeetingView: View {
         }
     }
 
-    private func summaryLine(_ record: MeetingRecord) -> String {
-        let minutes = Int((record.duration / 60).rounded())
-        let duration = minutes < 1 ? "unter 1 Min." : "\(minutes) Min."
-        let people = record.speakers.count == 1 ? "1 Person" : "\(record.speakers.count) Personen"
-        return "\(duration), \(people)"
-    }
-
     private func color(for speaker: Int) -> Color {
         Self.personColors[(max(speaker, 1) - 1) % Self.personColors.count]
     }
 
-    /// "4:05" or "1:02:05".
+    /// "4:05" or "1:02:05", the same as in the Markdown file.
     static func clock(_ seconds: TimeInterval) -> String {
-        let total = max(0, Int(seconds))
-        let hours = total / 3600
-        let minutes = (total % 3600) / 60
-        let rest = total % 60
-        return hours > 0
-            ? String(format: "%d:%02d:%02d", hours, minutes, rest)
-            : String(format: "%d:%02d", minutes, rest)
+        MeetingMarkdown.clock(seconds)
     }
 }
