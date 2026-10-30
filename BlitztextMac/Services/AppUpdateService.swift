@@ -55,9 +55,9 @@ final class AppUpdateService {
         Self.isConfigured(feedURLString: feedURLString, publicKey: publicKey)
     }
 
-    /// Jamf installs Blitztext on managed Macs. Sparkle stays off there, so nobody gets a
-    /// second update channel or an admin password prompt. This applies to the whole Mac,
-    /// also to a copy installed by hand.
+    /// Blackboat's Jamf installs and updates Blitztext on its Macs. Sparkle stays off there, so
+    /// nobody gets a second update channel or an admin password prompt; this also applies to a
+    /// copy installed by hand on such a Mac. Other managed Macs keep Sparkle.
     let isManagedByDeviceManagement = BlitztextInstallLocationService.isManagedByJamf
 
     /// Sparkle runs: the build has a feed and key, and no device management does the job.

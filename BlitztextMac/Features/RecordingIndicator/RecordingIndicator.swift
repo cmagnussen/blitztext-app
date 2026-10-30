@@ -12,16 +12,51 @@ final class RecordingIndicatorController {
     private let model = RecordingIndicatorModel()
     private var panel: NSPanel?
     private var lastStatus: MenuBarStatus = .idle
+    private var visibility = RecordingIndicatorVisibility()
+    private var currentSession: RecordingIndicatorSession?
+    // Retain the previous instance until synchronization, so object addresses cannot
+    // be reused while a hidden session still refers to it.
+    private var dictationWorkflow: (any Workflow)?
+    private var dictationID: UUID?
+    private static let placementKey = "BlitztextRecordingPillPlacement"
+    private var savedPlacement: RecordingIndicatorPlacement.Saved?
+    private var screenObserver: NSObjectProtocol?
     /// Counts show and hide transitions; a fade that finishes late only hides the
     /// panel if no newer transition happened meanwhile.
     private var transition = 0
 
     init(appState: AppState) {
         self.appState = appState
+        if let data = UserDefaults.standard.data(forKey: Self.placementKey) {
+            savedPlacement = try? JSONDecoder().decode(RecordingIndicatorPlacement.Saved.self, from: data)
+        }
+        screenObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, let panel = self.panel, panel.isVisible else { return }
+                self.place(panel)
+            }
+        }
+    }
+
+    deinit {
+        if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
+    }
+
+    /// A new dictation can start with the same status as the one it replaces; without this
+    /// it would inherit that one's "hidden for this dictation".
+    func activeWorkflowChanged() {
+        update(to: lastStatus)
     }
 
     func update(to status: MenuBarStatus) {
         lastStatus = status
+        synchronizeSession(for: status)
+        if visibility.isHidden(currentSession) {
+            hideImmediately()
+            return
+        }
         guard appState.appSettings.showsRecordingIndicator else {
             hide()
             return
@@ -65,7 +100,9 @@ final class RecordingIndicatorController {
         let panel = panel ?? makePanel()
         self.panel = panel
         if placing { place(panel) }
-        panel.ignoresMouseEvents = !model.status.isRecording && model.status != .meeting
+        // Processing remains interactive for dragging and the hide context menu.
+        // A plain click is still a no-op unless recording or showing a meeting.
+        panel.ignoresMouseEvents = false
         if !panel.isVisible {
             panel.alphaValue = 0
             panel.orderFrontRegardless()
@@ -81,12 +118,12 @@ final class RecordingIndicatorController {
         transition += 1
         let current = transition
         isHiding = true
-        panel.ignoresMouseEvents = true
         Task { [weak self] in
             if let delay {
                 try? await Task.sleep(for: delay)
             }
             guard let self, self.transition == current else { return }
+            panel.ignoresMouseEvents = true
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.25
                 panel.animator().alphaValue = 0
@@ -100,22 +137,97 @@ final class RecordingIndicatorController {
         }
     }
 
-    /// Bottom centre, above the Dock, of the screen with the pointer: on a Mac with
-    /// several displays that is the one you are working on.
+    private func synchronizeSession(for status: MenuBarStatus) {
+        if let workflow = appState.activeWorkflow {
+            if dictationWorkflow !== workflow {
+                dictationID = UUID()
+                dictationWorkflow = workflow
+            }
+        } else {
+            dictationWorkflow = nil
+            dictationID = nil
+        }
+        let meetingID = appState.meeting.recordingID
+        visibility.synchronize(dictation: dictationID, meeting: meetingID)
+        switch status {
+        case .recording, .processing, .success, .copied:
+            currentSession = dictationID.map(RecordingIndicatorSession.dictation)
+        case .meeting:
+            currentSession = meetingID.map(RecordingIndicatorSession.meeting)
+        case .idle, .error:
+            currentSession = nil
+        }
+    }
+
+    private func hideSession(_ session: RecordingIndicatorSession?) {
+        // A menu can outlive its recording; do not hide a newer session by accident.
+        guard let session, session == currentSession else { return }
+        visibility.hide(session)
+        hideImmediately()
+    }
+
+    private func hideImmediately() {
+        transition += 1
+        isHiding = false
+        panel?.ignoresMouseEvents = true
+        panel?.alphaValue = 0
+        panel?.orderOut(nil)
+    }
+
+    private func clicked(_ session: RecordingIndicatorSession?) {
+        guard let session, session == currentSession else { return }
+        switch lastStatus {
+        case .recording where appState.activeWorkflow?.isRecording == true:
+            appState.stopCurrentWorkflow()
+        case .meeting where appState.meeting.isRecording:
+            appState.openMeeting()
+        default:
+            break
+        }
+    }
+
+    private func pointerScreen() -> NSScreen? {
+        NSScreen.screens.first(where: { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) })
+            ?? NSScreen.main ?? NSScreen.screens.first
+    }
+
+    /// On the screen with the pointer, the one you work on: at the position you dragged the
+    /// pill to, otherwise bottom centre above the Dock.
     private func place(_ panel: NSPanel) {
-        let pointer = NSEvent.mouseLocation
-        guard let screen = NSScreen.screens.first(where: { NSMouseInRect(pointer, $0.frame, false) })
-            ?? NSScreen.main ?? NSScreen.screens.first else { return }
+        guard let screen = pointerScreen() else { return }
         let size = RecordingPill.panelSize
         let frame = screen.visibleFrame
-        panel.setFrame(
-            NSRect(x: frame.midX - size.width / 2, y: frame.minY + 16, width: size.width, height: size.height),
-            display: true
-        )
+        let origin = savedPlacement.map { RecordingIndicatorPlacement.restore($0, size: size, in: frame) }
+            ?? RecordingIndicatorPlacement.clamp(
+                CGPoint(x: frame.midX - size.width / 2, y: frame.minY + 16), size: size, to: frame
+            )
+        panel.setFrame(NSRect(origin: origin, size: size), display: true)
+    }
+
+    private func move(to origin: CGPoint) {
+        guard let panel, let screen = pointerScreen() else { return }
+        panel.setFrameOrigin(RecordingIndicatorPlacement.clamp(origin, size: panel.frame.size, to: screen.visibleFrame))
+    }
+
+    private func rememberPosition() {
+        guard let panel else { return }
+        let center = CGPoint(x: panel.frame.midX, y: panel.frame.midY)
+        guard let screen = NSScreen.screens.first(where: { $0.frame.contains(center) }) ?? pointerScreen() else { return }
+        let saved = RecordingIndicatorPlacement.save(origin: panel.frame.origin, size: panel.frame.size, in: screen.visibleFrame)
+        savedPlacement = saved
+        if let data = try? JSONEncoder().encode(saved) {
+            UserDefaults.standard.set(data, forKey: Self.placementKey)
+        }
+    }
+
+    private func resetPosition() {
+        savedPlacement = nil
+        UserDefaults.standard.removeObject(forKey: Self.placementKey)
+        if let panel { place(panel) }
     }
 
     private func makePanel() -> NSPanel {
-        let panel = NSPanel(
+        let panel = RecordingPillPanel(
             contentRect: NSRect(origin: .zero, size: RecordingPill.panelSize),
             styleMask: [.nonactivatingPanel, .borderless],
             backing: .buffered,
@@ -130,12 +242,19 @@ final class RecordingIndicatorController {
         panel.hidesOnDeactivate = false
         panel.becomesKeyOnlyIfNeeded = true
         let appState = appState
-        let hosting = FirstClickHostingView(rootView: RecordingPill(
+        let hosting = RecordingPillInteractionView(rootView: RecordingPill(
             model: model,
             appState: appState,
             onStop: { appState.stopCurrentWorkflow() },
             onOpenMeeting: { appState.openMeeting() }
         ))
+        hosting.session = { [weak self] in self?.currentSession }
+        hosting.onClick = { [weak self] in self?.clicked($0) }
+        hosting.onMove = { [weak self] in self?.move(to: $0) }
+        hosting.onDragEnd = { [weak self] in self?.rememberPosition() }
+        hosting.onHide = { [weak self] in self?.hideSession($0) }
+        hosting.onResetPosition = { [weak self] in self?.resetPosition() }
+        hosting.toolTip = "Ziehen verschiebt die Anzeige. Rechtsklick bietet Ausblenden und Position zurücksetzen."
         // The pill has a fixed size; the panel never resizes with its content.
         hosting.sizingOptions = []
         hosting.frame = NSRect(origin: .zero, size: RecordingPill.panelSize)
@@ -144,22 +263,10 @@ final class RecordingIndicatorController {
     }
 }
 
-private extension MenuBarStatus {
-    var isRecording: Bool {
-        if case .recording = self { return true }
-        return false
-    }
-}
-
 @Observable
 @MainActor
 final class RecordingIndicatorModel {
     var status: MenuBarStatus = .idle
-}
-
-/// Takes the first click, so the pill reacts without activating Blitztext.
-private final class FirstClickHostingView<Content: View>: NSHostingView<Content> {
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
 /// The pill: night surface with lilac, the same in light and dark mode, so it reads on
@@ -177,20 +284,21 @@ struct RecordingPill: View {
 
     var body: some View {
         Group {
+            // No SwiftUI buttons: they still saw the mouse under `RecordingPillInteractionView`
+            // and stopped the recording when a drag ended on the pill. Clicks come from that
+            // view, which tells them from drags; VoiceOver gets the same actions here.
             switch model.status {
             case .recording:
-                Button(action: onStop) {
-                    capsule
-                }
-                .buttonStyle(.plain)
-                .help("Klicken stoppt die Aufnahme")
+                capsule
+                    .help("Klicken stoppt die Aufnahme. Ziehen verschiebt die Anzeige; Rechtsklick blendet sie für dieses Diktat aus.")
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityAction(.default, onStop)
             case .meeting:
                 // Opens the meeting page instead of stopping: ending a meeting by a stray click would hurt.
-                Button(action: onOpenMeeting) {
-                    capsule
-                }
-                .buttonStyle(.plain)
-                .help("Meeting l\u{00E4}uft. Klicken \u{00F6}ffnet die Meeting-Seite.")
+                capsule
+                    .help("Meeting l\u{00E4}uft. Klicken \u{00F6}ffnet die Meeting-Seite.")
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityAction(.default, onOpenMeeting)
             default:
                 capsule
             }

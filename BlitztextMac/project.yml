@@ -109,6 +109,7 @@ targets:
       - path: Services/WebsiteHost.swift
       - path: Services/TranscriptParagraphService.swift
       - path: Services/ClipboardPasteService.swift
+      - path: Services/MeetingSummaryClipboard.swift
       - path: ../BlitztextShared/Transcription/HallucinationFilter.swift
       - path: ../BlitztextShared/Transcription/SpokenEmailAddress.swift
       - path: Services/ShortcutModifiers.swift
@@ -117,12 +118,18 @@ targets:
       - path: ../BlitztextShared/Meeting/EchoFilter.swift
       - path: Services/LocalLanguageModel/LocalModelCatalog.swift
       - path: Services/AudioPadding.swift
+      - path: Features/RecordingIndicator/RecordingIndicatorInteraction.swift
       - path: ../BlitztextShared/Meeting/SpeakerAlignment.swift
       - path: Features/Meeting/WAVRecovery.swift
       - path: Services/LocalLanguageModel/GemmaChatFormat.swift
       - path: Features/Meeting/TextParts.swift
       - path: Services/FocusedFieldReader.swift
       - path: ../BlitztextShared/Meeting/ListDisplay.swift
+      - path: Features/Workflows/WorkflowPhase.swift
+      - path: Features/Workflows/DictationRun.swift
+      - path: Services/RecordingFile.swift
+      - path: Services/TranscriptionQualityService.swift
+      - path: ../BlitztextShared/Transcription/CompiledModelCheck.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.blitztext.mac.tests

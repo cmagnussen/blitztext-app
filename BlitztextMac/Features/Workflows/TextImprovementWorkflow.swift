@@ -13,7 +13,7 @@ final class TextImprovementWorkflow: Workflow {
     var onPhaseChange: WorkflowPhaseChangeHandler?
     private(set) var transcript: String?
 
-    private let recorder = AudioRecorder()
+    private let dictation: DictationRun
     private let settings: TextImprovementSettings
     private let language: String
     private let localModelName: String
@@ -21,7 +21,6 @@ final class TextImprovementWorkflow: Workflow {
     private let postProcessor: TranscriptPostProcessor
     /// Text around the cursor for the AI step, nil when not allowed or not readable.
     private let fieldContext: @MainActor () -> String?
-    private var processingTask: Task<Void, Never>?
 
     init(
         settings: TextImprovementSettings,
@@ -37,101 +36,65 @@ final class TextImprovementWorkflow: Workflow {
         self.rewriteEngine = rewriteEngine
         self.postProcessor = postProcessor
         self.fieldContext = fieldContext
+        dictation = DictationRun(recorder: AudioRecorder())
+        dictation.onPhase = { [weak self] phase in self?.phase = phase }
+        dictation.onOutput = { [weak self] text in self?.onOutput?(text) }
     }
 
     // MARK: - Recording State
 
-    var isRecording: Bool { recorder.isRecording }
-    var audioLevel: Float { recorder.audioLevel }
+    var isRecording: Bool { dictation.isRecording }
+    var audioLevel: Float { dictation.audioLevel }
 
     // MARK: - Workflow Protocol
 
     func start() {
-        phase = .running("Aufnahme läuft ...")
-        recorder.startRecording()
-
-        if let error = recorder.errorMessage {
-            phase = .error(error)
-        }
+        dictation.start()
     }
 
     func stop() {
-        if recorder.isRecording {
-            recorder.stopRecording()
-            guard !TranscriptionQualityService.shouldRejectRecording(duration: recorder.lastRecordingDuration) else {
-                recorder.discardRecording()
-                phase = .error("Keine Aufnahme erkannt.")
-                return
-            }
-            processRecording()
-        } else {
-            processingTask?.cancel()
-            phase = .idle
-        }
+        dictation.stop(processing: process)
     }
 
     func reset() {
-        processingTask?.cancel()
-        if recorder.isRecording {
-            recorder.stopRecording()
-            recorder.discardRecording()
-        }
-        phase = .idle
+        dictation.cancel()
     }
 
     // MARK: - Two-Phase Processing: Whisper -> GPT
 
-    private func processRecording() {
-        guard let url = recorder.recordingURL else {
-            phase = .error("Keine Aufnahme vorhanden.")
-            return
+    private func process(
+        _ recording: URL,
+        seconds recordingDuration: TimeInterval,
+        step: @escaping @MainActor (String) -> Void
+    ) async throws -> String? {
+        // Phase 1: local transcription (Parakeet or WhisperKit)
+        let rawText = try await LocalTranscriptionService.transcribe(
+            audioURL: recording,
+            language: language,
+            modelName: localModelName
+        ) {
+            step(LocalTranscriptionService.slowPreparationMessage)
+        }
+        let cleanedRawText = TranscriptionQualityService.cleanedTranscript(rawText)
+        guard !TranscriptionQualityService.isLikelyArtifact(cleanedRawText, recordingDuration: recordingDuration) else {
+            return nil
         }
 
-        phase = .running("Wird transkribiert ...")
-        let recordingDuration = recorder.lastRecordingDuration
+        let processedRawText = postProcessor.process(cleanedRawText)
+        guard !processedRawText.isEmpty else { return nil }
 
-        processingTask = Task {
-            // The recording is not kept once it is transcribed (docs/privacy.md).
-            defer { try? FileManager.default.removeItem(at: url) }
-            do {
-                // Phase 1: local transcription (Parakeet or WhisperKit)
-                let rawText = try await LocalTranscriptionService.transcribe(
-                    audioURL: url,
-                    language: language,
-                    modelName: localModelName
-                ) { [weak self] in
-                    self?.phase = .running(LocalTranscriptionService.slowPreparationMessage)
-                }
-                let cleanedRawText = TranscriptionQualityService.cleanedTranscript(rawText)
-                guard !TranscriptionQualityService.isLikelyArtifact(cleanedRawText, recordingDuration: recordingDuration) else {
-                    phase = .error("Keine Aufnahme erkannt.")
-                    return
-                }
+        // Cancelled meanwhile (Escape): no AI step for a text that is not pasted.
+        try Task.checkCancellation()
+        transcript = processedRawText
 
-                let processedRawText = postProcessor.process(cleanedRawText)
-                guard !processedRawText.isEmpty else {
-                    phase = .error("Keine Aufnahme erkannt.")
-                    return
-                }
+        // Phase 2: AI improvement (on device or the connected provider)
+        step("Text wird verbessert ...")
 
-                if Task.isCancelled { return }
-                transcript = processedRawText
-
-                // Phase 2: AI improvement (on device or the connected provider)
-                phase = .running("Text wird verbessert ...")
-
-                let improved = try await TextRewriter.rewrite(
-                    processedRawText,
-                    instruction: ModePrompts.withFieldContext(ModePrompts.textImprovement(settings), context: fieldContext()),
-                    engine: rewriteEngine
-                )
-
-                let cleanedImproved = TranscriptionQualityService.cleanedTranscript(improved)
-                phase = .done(cleanedImproved)
-                onOutput?(cleanedImproved)
-            } catch {
-                phase = .error(error.localizedDescription)
-            }
-        }
+        let improved = try await TextRewriter.rewrite(
+            processedRawText,
+            instruction: ModePrompts.withFieldContext(ModePrompts.textImprovement(settings), context: fieldContext()),
+            engine: rewriteEngine
+        )
+        return TranscriptionQualityService.cleanedTranscript(improved)
     }
 }

@@ -18,6 +18,19 @@ enum GemmaChatFormat {
     static let channelStart = "<|channel>"
     static let channelEnd = "<channel|>"
 
+    /// Control tokens that never belong in a text answer: the image, audio and video markers
+    /// of the multimodal model, the tool-call syntax and the padding and unknown tokens.
+    /// Gemma 4 12B wrote `<audio|>` in the middle of a word at temperature 0 ("Lieferung
+    /// <audio|>ig"), and removing the token afterwards still leaves the broken word, so
+    /// generation must not pick these at all. End-of-turn and thinking tokens stay allowed.
+    static let blockedTokens = [
+        "<|image>", "<|image|>", "<image|>",
+        "<|audio>", "<|audio|>", "<audio|>",
+        "<|video|>",
+        "<|tool>", "<tool|>", "<|tool_call>", "<tool_call|>", "<|\"|>",
+        "<pad>", "<bos>", "<unk>", "<mask>",
+    ]
+
     /// Whether a `config.json` `model_type` is a Gemma 4 model (`gemma4`, `gemma4_unified`,
     /// `gemma4_text`).
     static func isGemma4(modelType: String) -> Bool {
@@ -69,7 +82,7 @@ enum GemmaChatFormat {
         if let end = text.range(of: turnEnd) {
             text = String(text[..<end.lowerBound])
         }
-        for token in ["<eos>", bosToken, "<pad>", turnStart] {
+        for token in ["<eos>", turnStart] + blockedTokens {
             text = text.replacingOccurrences(of: token, with: "")
         }
         return text.trimmingCharacters(in: .whitespacesAndNewlines)

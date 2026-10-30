@@ -2,7 +2,7 @@ import AVFoundation
 import Observation
 
 @Observable
-final class AudioRecorder: NSObject, AVAudioRecorderDelegate {
+final class AudioRecorder: NSObject, AVAudioRecorderDelegate, DictationRecorder {
     var isRecording = false
     var recordingURL: URL?
     var errorMessage: String?
@@ -15,8 +15,10 @@ final class AudioRecorder: NSObject, AVAudioRecorderDelegate {
     /// One file per recording: deleting one after its transcription never hits the next.
     private var fileURL = AudioRecorder.newFileURL()
 
+    /// Uncompressed: nothing has to be encoded while recording and decoded again right after,
+    /// a step that left the models without audio on macOS 27.2 (public issue #40).
     private static func newFileURL() -> URL {
-        FileManager.default.temporaryDirectory.appendingPathComponent("recording-\(UUID().uuidString).m4a")
+        FileManager.default.temporaryDirectory.appendingPathComponent("recording-\(UUID().uuidString).wav")
     }
 
     /// Deletes this recorder's audio, for recordings that are not transcribed.
@@ -33,7 +35,7 @@ final class AudioRecorder: NSObject, AVAudioRecorderDelegate {
         let files = (try? FileManager.default.contentsOfDirectory(at: temp, includingPropertiesForKeys: nil)) ?? []
         for file in files {
             let name = file.lastPathComponent
-            let leftover = (name.hasPrefix("recording") && file.pathExtension == "m4a")
+            let leftover = (name.hasPrefix("recording") && ["wav", "m4a"].contains(file.pathExtension))
                 || (["blitztext-padded-", "blitztext-live-", "blitztext-import-"].contains { name.hasPrefix($0) } && file.pathExtension == "wav")
                 || (name.hasPrefix("fluidaudio-streaming-") && file.pathExtension == "raw")
             if leftover { try? FileManager.default.removeItem(at: file) }
@@ -54,11 +56,14 @@ final class AudioRecorder: NSObject, AVAudioRecorderDelegate {
             break
         }
 
+        // 16 kHz mono, the rate the models work at: 32 KB per second, deleted after use.
         let settings: [String: Any] = [
-            AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
+            AVFormatIDKey: Int(kAudioFormatLinearPCM),
             AVSampleRateKey: 16000,
             AVNumberOfChannelsKey: 1,
-            AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue,
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsFloatKey: false,
+            AVLinearPCMIsBigEndianKey: false,
         ]
 
         do {

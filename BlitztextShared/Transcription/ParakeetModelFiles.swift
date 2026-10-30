@@ -27,11 +27,35 @@ struct ParakeetModelFiles {
         parent.appendingPathComponent(Repo.parakeetV3.folderName, isDirectory: true)
     }
 
+    /// Where Ultra downloads first. FluidAudio names the folder after the model, so the
+    /// staging place is a parent of its own; an interrupted download resumes in there.
+    var stagedUltraDirectory: URL {
+        parent.appendingPathComponent("download", isDirectory: true)
+            .appendingPathComponent(Repo.parakeetUltra.folderName, isDirectory: true)
+    }
+
     /// The build to load: Ultra when complete, else v3, nil when nothing is downloaded.
+    /// Ultra must be complete, not only present: builds before October 2026 downloaded it
+    /// straight into place, and an interrupted download left it half there.
     var installed: Build? {
-        if AsrModels.modelsExist(at: ultraDirectory, version: .ultra) { return .ultra }
+        if AsrModels.modelsExist(at: ultraDirectory, version: .ultra), CompiledModelCheck.isComplete(ultraDirectory) {
+            return .ultra
+        }
         if AsrModels.modelsExist(at: legacyDirectory, version: .v3) { return .legacy }
         return nil
+    }
+
+    /// Moves a complete staged Ultra into place in one step, replacing a half one.
+    func installStagedUltra() throws {
+        guard CompiledModelCheck.isComplete(stagedUltraDirectory) else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        let fileManager = FileManager.default
+        if fileManager.fileExists(atPath: ultraDirectory.path) {
+            try fileManager.removeItem(at: ultraDirectory)
+        }
+        try fileManager.moveItem(at: stagedUltraDirectory, to: ultraDirectory)
+        try? fileManager.removeItem(at: stagedUltraDirectory.deletingLastPathComponent())
     }
 
     func directory(for build: Build) -> URL {

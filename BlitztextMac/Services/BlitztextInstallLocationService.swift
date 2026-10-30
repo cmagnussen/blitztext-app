@@ -75,12 +75,17 @@ enum BlitztextInstallLocationService {
         return .unknown
     }
 
-    /// Jamf installs Blitztext into /Applications on managed Macs. There the app neither
-    /// moves itself nor updates itself; device management does both.
+    /// Blackboat's Jamf installed Blitztext here, with the package of
+    /// `scripts/release-macos.sh` (identifier `app.blitztext.mac.pkg`, older packages `app.blitztext.mac`),
+    /// and keeps it current. The app then neither moves nor updates itself. Jamf of another
+    /// company, or any other device management, does not deliver Blitztext: there the
+    /// receipt is missing and Sparkle stays on. Public releases are ZIPs, never packages.
     static let isManagedByJamf: Bool = {
         let fileManager = FileManager.default
-        return fileManager.fileExists(atPath: "/usr/local/jamf/bin/jamf")
-            || fileManager.fileExists(atPath: "/Library/Application Support/JAMF")
+        guard fileManager.fileExists(atPath: "/usr/local/jamf/bin/jamf") else { return false }
+        return ["app.blitztext.mac.pkg", "app.blitztext.mac"].contains { identifier in
+            fileManager.fileExists(atPath: "/var/db/receipts/\(identifier).plist")
+        }
     }()
 
     static var shouldOfferMoveToApplications: Bool {

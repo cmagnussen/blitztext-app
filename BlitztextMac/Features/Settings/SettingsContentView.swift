@@ -349,12 +349,8 @@ struct AboutBlitztextSection: View {
             }
             .buttonStyle(SubtleButtonStyle())
 
-            if appState.appUpdateService.isManagedByDeviceManagement {
-                Text("Neue Versionen installiert die Ger\u{00E4}teverwaltung dieses Macs automatisch.")
-                    .font(.ui(12))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            } else if appState.appUpdateService.updatesInApp {
+            // Macs where Jamf delivers Blitztext show nothing about updates: nobody has to act.
+            if appState.appUpdateService.updatesInApp {
                 if !BlitztextInstallLocationService.currentInstallLocation.isCanonicalInstall {
                     Text("Auto-Updates laufen erst sauber, wenn Blitztext aus /Applications gestartet wird.")
                         .font(.ui(12))
@@ -599,10 +595,10 @@ struct CustomizeSettingsView: View {
             // MARK: Aufnahme & Einfuegen
             SettingsSection(title: "Aufnahme & Einf\u{00FC}gen") {
 
-                Toggle("Aufnahme unten am Bildschirm zeigen", isOn: $appState.appSettings.showsRecordingIndicator)
+                Toggle("Aufnahmeanzeige zeigen", isOn: $appState.appSettings.showsRecordingIndicator)
                     .toggleStyle(.trailingSwitch)
 
-                Text("Eine kleine lila Anzeige bewegt sich mit deiner Stimme, solange Blitztext aufnimmt und schreibt. Ein Klick darauf stoppt die Aufnahme.")
+                Text("Eine kleine lila Anzeige bewegt sich mit deiner Stimme, solange Blitztext aufnimmt und schreibt. Ein Klick stoppt die Aufnahme oder öffnet das laufende Meeting. Ziehen verschiebt sie, ein Rechtsklick blendet sie für die laufende Aufnahme aus.")
                     .font(.ui(12))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
