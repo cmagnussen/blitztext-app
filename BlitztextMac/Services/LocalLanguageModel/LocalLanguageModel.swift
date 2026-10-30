@@ -84,10 +84,15 @@ actor LocalLanguageModel {
                 instruction: instruction, text: text, format: format, tokenizer: context.tokenizer
             )
             let parameters = GenerateParameters(maxTokens: maxTokens, temperature: 0)
+            // Unknown strings come back as the unknown token, which is blocked anyway.
+            let blocked = Array(Set(GemmaChatFormat.blockedTokens.compactMap(context.tokenizer.convertTokenToId)))
             var generated: [Int] = []
             var info: GenerateCompletionInfo?
             let (stream, generation) = try generateTokensTask(
-                input: LMInput(tokens: MLXArray(promptTokens)), parameters: parameters, context: context
+                input: LMInput(tokens: MLXArray(promptTokens)),
+                parameters: parameters,
+                context: context,
+                components: GenerationComponents(logitProcessorFactory: { BlockedTokens(ids: blocked) })
             )
             for await item in stream {
                 switch item {
@@ -179,6 +184,25 @@ actor LocalLanguageModel {
         container = loaded
         return loaded
     }
+}
+
+/// Makes the given tokens impossible to pick, see `GemmaChatFormat.blockedTokens`.
+private struct BlockedTokens: LogitProcessor {
+    private let ids: MLXArray?
+
+    init(ids: [Int]) {
+        self.ids = ids.isEmpty ? nil : MLXArray(ids.map(UInt32.init))[.newAxis, 0...]
+    }
+
+    mutating func prompt(_ prompt: MLXArray) {}
+
+    func process(logits: MLXArray) -> MLXArray {
+        guard let ids else { return logits }
+        let blocked = MLXArray.full(ids.shape, values: MLXArray(-Float.infinity)).asType(logits.dtype)
+        return putAlong(logits, ids, values: blocked, axis: -1)
+    }
+
+    mutating func didSample(token: MLXArray) {}
 }
 
 #if DEBUG

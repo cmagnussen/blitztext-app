@@ -19,11 +19,10 @@ final class TranscriptionWorkflow: Workflow {
     var onOutput: WorkflowOutputHandler?
     var onPhaseChange: WorkflowPhaseChangeHandler?
 
-    private let recorder = AudioRecorder()
+    private let dictation: DictationRun
     private let language: String
     private let localModelName: String
     private let postProcessor: TranscriptPostProcessor
-    private var transcriptionTask: Task<Void, Never>?
 
     init(
         type: WorkflowType = .tapTalk,
@@ -35,96 +34,62 @@ final class TranscriptionWorkflow: Workflow {
         self.language = language
         self.localModelName = localModelName
         self.postProcessor = postProcessor
+        dictation = DictationRun(recorder: AudioRecorder())
+        dictation.onPhase = { [weak self] phase in self?.phase = phase }
+        dictation.onOutput = { [weak self] text in self?.onOutput?(text) }
     }
 
     func start() {
-        phase = .running("Aufnahme läuft ...")
-        recorder.startRecording()
-
-        if let error = recorder.errorMessage {
-            phase = .error(error)
-        }
+        dictation.start()
     }
 
     func stop() {
-        if recorder.isRecording {
-            recorder.stopRecording()
-            guard !TranscriptionQualityService.shouldRejectRecording(duration: recorder.lastRecordingDuration) else {
-                recorder.discardRecording()
-                phase = .error("Keine Aufnahme erkannt.")
-                return
-            }
-            transcribe()
-        } else {
-            transcriptionTask?.cancel()
-            phase = .idle
-        }
+        dictation.stop(processing: transcribe)
     }
 
     func reset() {
-        transcriptionTask?.cancel()
-        if recorder.isRecording {
-            recorder.stopRecording()
-            recorder.discardRecording()
-        }
-        phase = .idle
+        dictation.cancel()
     }
 
-    var isRecording: Bool { recorder.isRecording }
-    var audioLevel: Float { recorder.audioLevel }
+    var isRecording: Bool { dictation.isRecording }
+    var audioLevel: Float { dictation.audioLevel }
 
-    private func transcribe() {
-        guard let url = recorder.recordingURL else {
-            phase = .error("Keine Aufnahme vorhanden.")
-            return
-        }
-
-        phase = .running("Wird transkribiert ...")
-        let recordingDuration = recorder.lastRecordingDuration
-        let requestLanguage = language
+    private func transcribe(
+        _ recording: URL,
+        seconds recordingDuration: TimeInterval,
+        step: @escaping @MainActor (String) -> Void
+    ) async throws -> String? {
         let stopTime = Date()
-
-        transcriptionTask = Task(priority: .userInitiated) {
-            // The recording is not kept once it is transcribed (docs/privacy.md).
-            defer { try? FileManager.default.removeItem(at: url) }
-            let requestStart = Date()
-            do {
-                let text = try await LocalTranscriptionService.transcribe(
-                    audioURL: url,
-                    language: requestLanguage,
-                    modelName: localModelName
-                ) { [weak self] in
-                    self?.phase = .running(LocalTranscriptionService.slowPreparationMessage)
-                }
-                try Task.checkCancellation()
-
-                let responseReceivedAt = Date()
-                let cleaned = TranscriptionQualityService.cleanedTranscript(text)
-                guard !TranscriptionQualityService.isLikelyArtifact(cleaned, recordingDuration: recordingDuration) else {
-                    tapTalkLogger.info(
-                        "TapTalk rejected short artifact after \(elapsedMilliseconds(since: stopTime)) ms"
-                    )
-                    phase = .error("Keine Aufnahme erkannt.")
-                    return
-                }
-
-                let processed = postProcessor.process(cleaned)
-                guard !processed.isEmpty else {
-                    phase = .error("Keine Aufnahme erkannt.")
-                    return
-                }
-
-                tapTalkLogger.info(
-                    "TapTalk ready in \(elapsedMilliseconds(since: stopTime, until: responseReceivedAt)) ms (request \(elapsedMilliseconds(since: requestStart, until: responseReceivedAt)) ms)"
-                )
-                phase = .done(processed)
-                onOutput?(processed)
-            } catch {
-                tapTalkLogger.error(
-                    "TapTalk failed after \(elapsedMilliseconds(since: stopTime)) ms: \(error.localizedDescription, privacy: .public)"
-                )
-                phase = .error(error.localizedDescription)
+        do {
+            let text = try await LocalTranscriptionService.transcribe(
+                audioURL: recording,
+                language: language,
+                modelName: localModelName
+            ) {
+                step(LocalTranscriptionService.slowPreparationMessage)
             }
+
+            let responseReceivedAt = Date()
+            let cleaned = TranscriptionQualityService.cleanedTranscript(text)
+            guard !TranscriptionQualityService.isLikelyArtifact(cleaned, recordingDuration: recordingDuration) else {
+                tapTalkLogger.info(
+                    "TapTalk rejected short artifact after \(elapsedMilliseconds(since: stopTime)) ms"
+                )
+                return nil
+            }
+
+            let processed = postProcessor.process(cleaned)
+            guard !processed.isEmpty else { return nil }
+
+            tapTalkLogger.info(
+                "TapTalk ready in \(elapsedMilliseconds(since: stopTime, until: responseReceivedAt)) ms"
+            )
+            return processed
+        } catch {
+            tapTalkLogger.error(
+                "TapTalk failed after \(elapsedMilliseconds(since: stopTime)) ms: \(error.localizedDescription, privacy: .public)"
+            )
+            throw error
         }
     }
 }

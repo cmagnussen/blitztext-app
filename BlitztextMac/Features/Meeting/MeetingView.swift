@@ -524,7 +524,11 @@ struct MeetingView: View {
 
     private func copyButton(_ title: String, target: CopyTarget, text: String) -> some View {
         Button {
-            appState.copyToClipboard(text)
+            if target == .summary {
+                MeetingSummaryClipboard.copy(text)
+            } else {
+                appState.copyToClipboard(text)
+            }
             copied = target
         } label: {
             Label(copied == target ? "Kopiert" : title, systemImage: copied == target ? "checkmark" : "doc.on.doc")

@@ -62,4 +62,16 @@ final class GemmaChatFormatTests: XCTestCase {
     func testCleanedRemovesStrayControlTokens() {
         XCTAssertEqual(GemmaChatFormat.cleaned("<channel|>Antwort<eos>"), "Antwort")
     }
+
+    func testCleanedRemovesMultimodalMarkers() {
+        XCTAssertEqual(GemmaChatFormat.cleaned("<|image>Antwort<audio|> mit Rest<pad>"), "Antwort mit Rest")
+    }
+
+    func testBlockedTokensKeepEndOfTurnAndThinking() {
+        let blocked = Set(GemmaChatFormat.blockedTokens)
+        XCTAssertTrue(blocked.contains("<audio|>"))
+        for token in [GemmaChatFormat.turnEnd, GemmaChatFormat.turnStart, GemmaChatFormat.channelStart, GemmaChatFormat.channelEnd, "<eos>"] {
+            XCTAssertFalse(blocked.contains(token), token)
+        }
+    }
 }
