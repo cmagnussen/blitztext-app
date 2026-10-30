@@ -199,6 +199,7 @@ final class AppState {
         KeychainService.removeLegacyServerCredentials()
         AudioRecorder.removeLeftoverRecordings()
         preferParakeetIfNothingInstalled()
+        replaceWhisperOnIntel()
         autoSelectFastLocalModelIfNeeded()
         prewarmLocalTranscriptionIfNeeded()
         upgradeParakeetIfNeeded()
@@ -699,17 +700,24 @@ final class AppState {
         return true
     }
 
-    /// Up to 1.13 a new Mac started with Whisper Small selected. On Apple Silicon Parakeet
-    /// Ultra is the better choice; switch while nothing has been downloaded yet.
+    /// Up to 1.13 a new Mac started with Whisper Small selected. Parakeet Ultra is the better
+    /// choice; switch while nothing has been downloaded yet.
     private func preferParakeetIfNothingInstalled() {
         // Once only, so a later deliberate choice of Whisper Small is kept.
         guard !appSettings.hasCheckedParakeetDefault else { return }
         appSettings.hasCheckedParakeetDefault = true
-        guard ParakeetTranscriber.isSupported,
-              LocalTranscriptionService.installedModels().isEmpty,
+        guard LocalTranscriptionService.installedModels().isEmpty,
               appSettings.selectedLocalTranscriptionModelName == LocalTranscriptionService.recommendedFastModelName else {
             return
         }
+        appSettings.selectedLocalTranscriptionModelName = ParakeetTranscriber.modelName
+    }
+
+    /// Intel Macs only get Parakeet (Whisper crashes there, issue #30), so a Whisper choice
+    /// from an earlier version moves to Parakeet; the setup assistant offers the download.
+    private func replaceWhisperOnIntel() {
+        guard !LocalTranscriptionService.whisperIsSupported,
+              appSettings.selectedLocalTranscriptionModelName != ParakeetTranscriber.modelName else { return }
         appSettings.selectedLocalTranscriptionModelName = ParakeetTranscriber.modelName
     }
 

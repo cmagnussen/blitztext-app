@@ -143,8 +143,8 @@ struct MeetingView: View {
                     icon: "exclamationmark.triangle.fill",
                     title: blocker,
                     tint: BlitztextTheme.danger,
-                    actionTitle: ParakeetTranscriber.isSupported ? "Einstellungen" : nil,
-                    action: ParakeetTranscriber.isSupported ? { appState.page = .settings } : nil
+                    actionTitle: "Einstellungen",
+                    action: { appState.page = .settings }
                 )
             }
 

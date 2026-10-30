@@ -127,10 +127,19 @@ actor LocalTranscriptionService {
     static let defaultModelName = "openai_whisper-large-v3-v20240930_626MB"
     static let fastModelName = "openai_whisper-large-v3-v20240930_turbo_632MB"
     static let recommendedFastModelName = "openai_whisper-small_216MB"
-    /// What a new Mac starts with: Parakeet Ultra on Apple Silicon (faster and more accurate),
-    /// Whisper Small on Intel.
+    /// What a new Mac starts with: Parakeet Ultra, faster and more accurate than Whisper.
     static var initialModelName: String {
-        ParakeetTranscriber.isSupported ? ParakeetTranscriber.modelName : recommendedFastModelName
+        ParakeetTranscriber.modelName
+    }
+
+    /// WhisperKit writes past the end of a buffer on Intel Macs and crashes the app (public
+    /// issue #30), so Intel Macs only get Parakeet.
+    static var whisperIsSupported: Bool {
+        #if arch(arm64)
+        return true
+        #else
+        return false
+        #endif
     }
     static let modelRepo = "argmaxinc/whisperkit-coreml"
     /// Both builds of Whisper large-v3-turbo carry the same 4-bit weights, so the app lists
@@ -164,10 +173,8 @@ actor LocalTranscriptionService {
     }
 
     static func supportedModelNames(selected: String) -> [String] {
-        (ParakeetTranscriber.isSupported ? [ParakeetTranscriber.modelName] : []) + [
-            recommendedFastModelName,
-            turboModelName(selected: selected)
-        ]
+        guard whisperIsSupported else { return [ParakeetTranscriber.modelName] }
+        return [ParakeetTranscriber.modelName, recommendedFastModelName, turboModelName(selected: selected)]
     }
     static let modelPageURL = URL(
         string: "https://huggingface.co/argmaxinc/whisperkit-coreml/tree/main/openai_whisper-large-v3-v20240930_626MB"
@@ -224,11 +231,12 @@ actor LocalTranscriptionService {
 
     static func installedModels() -> [LocalTranscriptionModel] {
         let directory = AppSupportPaths.whisperKitModelsDirectoryURL
-        let urls = (try? FileManager.default.contentsOfDirectory(
+        // A Whisper download from an earlier version is never used on Intel, not even as fallback.
+        let urls = whisperIsSupported ? (try? FileManager.default.contentsOfDirectory(
             at: directory,
             includingPropertiesForKeys: [.isDirectoryKey],
             options: [.skipsHiddenFiles]
-        )) ?? []
+        )) ?? [] : []
 
         let parakeet = ParakeetTranscriber.isInstalled
             ? [LocalTranscriptionModel(id: ParakeetTranscriber.modelName, url: ParakeetTranscriber.modelsDirectoryURL)]

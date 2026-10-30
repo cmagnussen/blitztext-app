@@ -82,10 +82,7 @@ final class MeetingController {
 
     /// Meetings need Parakeet: its word timings place every word with a person.
     static var blocker: String? {
-        guard ParakeetTranscriber.isSupported else {
-            return "Meetings brauchen einen Mac mit Apple-Chip."
-        }
-        return ParakeetTranscriber.isInstalled
+        ParakeetTranscriber.isInstalled
             ? nil
             : "F\u{00FC}r Meetings braucht Blitztext Parakeet. Bitte in den Einstellungen unter Sprachmodell laden."
     }
