@@ -1,4 +1,5 @@
 import AVFoundation
+import CoreAudio
 import Observation
 
 @Observable
@@ -11,6 +12,8 @@ final class AudioRecorder: NSObject, AVAudioRecorderDelegate, DictationRecorder 
 
     private var audioRecorder: AVAudioRecorder?
     private var levelTimer: Timer?
+    /// The default input before the chosen microphone took over, restored after recording.
+    private var previousInput: AudioObjectID?
 
     /// One file per recording: deleting one after its transcription never hits the next.
     private var fileURL = AudioRecorder.newFileURL()
@@ -66,12 +69,15 @@ final class AudioRecorder: NSObject, AVAudioRecorderDelegate, DictationRecorder 
             AVLinearPCMIsBigEndianKey: false,
         ]
 
+        previousInput = MicrophoneSelection.applyForRecording()
+
         do {
             audioRecorder = try AVAudioRecorder(url: fileURL, settings: settings)
             audioRecorder?.delegate = self
             audioRecorder?.isMeteringEnabled = true
             guard audioRecorder?.record() == true else {
                 audioRecorder = nil
+                restoreInput()
                 errorMessage = "Die Aufnahme lie\u{00DF} sich nicht starten. Darf Blitztext das Mikrofon nutzen?"
                 return
             }
@@ -79,6 +85,7 @@ final class AudioRecorder: NSObject, AVAudioRecorderDelegate, DictationRecorder 
             recordingURL = nil
             startMetering()
         } catch {
+            restoreInput()
             errorMessage = "Aufnahme konnte nicht gestartet werden: \(error.localizedDescription)"
         }
     }
@@ -87,9 +94,15 @@ final class AudioRecorder: NSObject, AVAudioRecorderDelegate, DictationRecorder 
         stopMetering()
         lastRecordingDuration = audioRecorder?.currentTime ?? 0
         audioRecorder?.stop()
+        restoreInput()
         isRecording = false
         recordingURL = fileURL
         audioLevel = 0
+    }
+
+    private func restoreInput() {
+        MicrophoneSelection.restore(previousInput)
+        previousInput = nil
     }
 
     private func startMetering() {

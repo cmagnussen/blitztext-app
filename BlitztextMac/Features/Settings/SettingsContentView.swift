@@ -595,6 +595,8 @@ struct CustomizeSettingsView: View {
             // MARK: Aufnahme & Einfuegen
             SettingsSection(title: "Aufnahme & Einf\u{00FC}gen") {
 
+                MicrophonePickerRow()
+
                 Toggle("Aufnahmeanzeige zeigen", isOn: $appState.appSettings.showsRecordingIndicator)
                     .toggleStyle(.trailingSwitch)
 
@@ -1228,5 +1230,49 @@ struct FlowLayout: Layout {
         }
 
         return (positions, CGSize(width: maxX, height: y + rowHeight))
+    }
+}
+
+// MARK: - Mikrofon
+
+/// Which microphone Blitztext records with; "macOS-Standard" follows the system setting.
+struct MicrophonePickerRow: View {
+    @State private var selection = MicrophoneSelection.preferredUID
+    @State private var devices = MicrophoneSelection.inputDevices()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("Mikrofon")
+                Spacer()
+                Picker("", selection: $selection) {
+                    Text("macOS-Standard").tag("")
+                    if !selection.isEmpty && !devices.contains(where: { $0.id == selection }) {
+                        Text("Nicht verbunden").tag(selection)
+                    }
+                    ForEach(devices) { device in
+                        Text(device.name).tag(device.id)
+                    }
+                }
+                .labelsHidden()
+                .controlSize(.small)
+                .fixedSize()
+                Button {
+                    devices = MicrophoneSelection.inputDevices()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .buttonStyle(.borderless)
+                .help("Mikrofone neu suchen")
+            }
+            Text("Blitztext nimmt mit diesem Mikrofon auf und stellt danach das vorherige macOS-Mikrofon wieder ein. Ist es nicht verbunden, nimmt Blitztext das macOS-Standardmikrofon.")
+                .font(.ui(12))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .onChange(of: selection) { _, newValue in
+            MicrophoneSelection.preferredUID = newValue
+        }
+        .onAppear { devices = MicrophoneSelection.inputDevices() }
     }
 }

@@ -1,4 +1,5 @@
 import AVFoundation
+import CoreAudio
 import Foundation
 import Observation
 
@@ -47,6 +48,8 @@ final class MeetingController {
 
     @ObservationIgnored private let settingsProvider: () -> Settings
     @ObservationIgnored private var recorder: AVAudioRecorder?
+    /// The default input before the chosen microphone took over, restored after the meeting.
+    @ObservationIgnored private var previousInput: AudioObjectID?
     /// A `SystemAudioCapture` (macOS 14.2 and later) during an online meeting.
     @ObservationIgnored private var systemCapture: Any?
     /// The live notes free their model; the evaluation waits for that.
@@ -126,11 +129,14 @@ final class MeetingController {
         ]
         do {
             try FileManager.default.createDirectory(at: MeetingStore.directoryURL, withIntermediateDirectories: true)
+            previousInput = MicrophoneSelection.applyForRecording()
             let recorder = try AVAudioRecorder(url: record.audioURL, settings: settings)
             let observer = RecorderObserver { [weak self] in self?.recordingInterrupted() }
             recorder.delegate = observer
             recorder.isMeteringEnabled = true
             guard recorder.record() else {
+                MicrophoneSelection.restore(previousInput)
+                previousInput = nil
                 phase = .failed("Die Aufnahme lie\u{00DF} sich nicht starten. Darf Blitztext das Mikrofon nutzen?", meetingID: nil)
                 return
             }
@@ -163,6 +169,8 @@ final class MeetingController {
             // The speaker models download on first use; fetch them while the network is likely there.
             Task.detached(priority: .utility) { try? await SpeakerDiarizer.shared.prepare() }
         } catch {
+            MicrophoneSelection.restore(previousInput)
+            previousInput = nil
             phase = .failed("Die Aufnahme lie\u{00DF} sich nicht starten: \(error.localizedDescription)", meetingID: nil)
         }
     }
@@ -276,6 +284,8 @@ final class MeetingController {
 
     private func endRecording() {
         recorder = nil
+        MicrophoneSelection.restore(previousInput)
+        previousInput = nil
         pausedAt = nil
         if let liveNotes {
             liveNotesShutdown = Task { await liveNotes.stop() }
