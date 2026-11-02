@@ -11,6 +11,7 @@ final class EmojiTextWorkflow: Workflow {
     }
     var onOutput: WorkflowOutputHandler?
     var onPhaseChange: WorkflowPhaseChangeHandler?
+    var onKeptTranscript: WorkflowOutputHandler?
     private(set) var transcript: String?
 
     private let dictation: DictationRun
@@ -39,6 +40,7 @@ final class EmojiTextWorkflow: Workflow {
         dictation = DictationRun(recorder: AudioRecorder())
         dictation.onPhase = { [weak self] phase in self?.phase = phase }
         dictation.onOutput = { [weak self] text in self?.onOutput?(text) }
+        dictation.onKeptTranscript = { [weak self] text in self?.onKeptTranscript?(text) }
     }
 
     // MARK: - Recording State
@@ -90,11 +92,17 @@ final class EmojiTextWorkflow: Workflow {
         // Phase 2: Add emojis
         step("Emojis werden eingef\u{00FC}gt ...")
 
-        let result = try await TextRewriter.rewrite(
-            processedRawText,
-            instruction: ModePrompts.withFieldContext(ModePrompts.emoji(settings), context: fieldContext()),
-            engine: rewriteEngine
-        )
+        // A failure keeps what was said (`AIStepFailed`).
+        let result: String
+        do {
+            result = try await TextRewriter.rewrite(
+                processedRawText,
+                instruction: ModePrompts.withFieldContext(ModePrompts.emoji(settings), context: fieldContext()),
+                engine: rewriteEngine
+            )
+        } catch {
+            throw AIStepFailed.wrapping(error, transcript: processedRawText)
+        }
         let cleanedResult = TranscriptionQualityService.cleanedTranscript(result)
         guard cleanedResult != ModePrompts.nothingRecognizedMarker else { return nil }
         return cleanedResult

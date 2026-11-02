@@ -57,6 +57,8 @@ final class AppState {
     private(set) var lastInsertion: LastInsertion?
     /// Shown on the main page after "Wortgenau statt KI-Text" could not replace in place.
     var lastInsertionNotice: String?
+    /// Dictations whose transcription failed; the menu offers them again (`UnfinishedRecordings`).
+    var unfinishedRecordings: [UnfinishedRecordings.Item] = []
     private var lastPopoverPasteTarget: PasteTarget?
     /// The field the active dictation goes into, read when it started.
     private var activeField: FocusedField?
@@ -68,9 +70,18 @@ final class AppState {
     // Persisted settings
     var appSettings: AppSettings {
         didSet {
+            let modesChanged = oldValue.customModes != appSettings.customModes
+            if modesChanged {
+                CustomModeCatalog.modes = appSettings.customModes
+            }
+            // Snapshot runs show sample modes: no writes, no shortcuts, no model loading.
+            guard !Self.isToolRun else { return }
             saveSettings()
-            prewarmLocalTranscriptionIfNeeded()
-            if oldValue.customHotkeys != appSettings.customHotkeys {
+            // Typing a mode's name or instruction needs no speech model.
+            if !modesChanged {
+                prewarmLocalTranscriptionIfNeeded()
+            }
+            if oldValue.customHotkeys != appSettings.customHotkeys || modesChanged {
                 hotkeyService.updateCustomHotkeys(appSettings.resolvedCustomHotkeys)
             }
             if oldValue.historyRetention != appSettings.historyRetention {
@@ -182,8 +193,11 @@ final class AppState {
         self.textImprovementSettings = Self.loadTextImprovementSettings()
         self.dampfAblassenSettings = Self.loadDampfAblassenSettings()
         self.emojiTextSettings = Self.loadEmojiTextSettings()
-        self.history = TranscriptHistoryStore(retention: loadedAppSettings.historyRetention)
+        self.history = TranscriptHistoryStore(retention: loadedAppSettings.historyRetention, persistent: !Self.isToolRun)
+        CustomModeCatalog.modes = loadedAppSettings.customModes
         if Self.isToolRun { return }
+        seedCustomModesIfNeeded()
+        removeCustomModeOrphans()
         meeting.onPhaseChange = { [unowned self] in self.publishMenuBarStatus() }
         meeting.onEvaluationEnd = { [unowned self] result in
             // With the menu open the result is on screen already.
@@ -198,7 +212,12 @@ final class AppState {
         migrateToSetupAssistant()
         KeychainService.removeLegacyServerCredentials()
         AudioRecorder.removeLeftoverRecordings()
+        refreshUnfinishedRecordings()
+        NotificationCenter.default.addObserver(forName: UnfinishedRecordings.didChange, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshUnfinishedRecordings() }
+        }
         preferParakeetIfNothingInstalled()
+        replaceWhisperOnIntel()
         autoSelectFastLocalModelIfNeeded()
         prewarmLocalTranscriptionIfNeeded()
         upgradeParakeetIfNeeded()
@@ -217,7 +236,10 @@ final class AppState {
         case .emojiText:
             let name = emojiTextSettings.customName.trimmingCharacters(in: .whitespaces)
             return name.isEmpty ? type.displayName : name
-        default:
+        case .custom(let id):
+            // Read through the observed settings so renames show up at once.
+            return WorkflowType.customName(appSettings.customMode(id: id))
+        case .tapTalk, .localTapTalk:
             return type.displayName
         }
     }
@@ -234,10 +256,78 @@ final class AppState {
                 return "Braucht Apple Intelligence oder einen API-Key."
             }
             return type.subtitle
+        case .custom(let id):
+            guard let mode = appSettings.customMode(id: id) else { return "Diesen Modus gibt es nicht mehr." }
+            guard mode.hasInstruction else { return "Ohne Anweisung: wortgenau." }
+            guard canRewrite else {
+                return "Braucht Apple Intelligence oder einen API-Key."
+            }
+            return type.subtitle
         }
     }
 
-    /// Badge label: the custom shortcut when set, otherwise the built-in fn shortcut.
+    // MARK: - Own Modes
+
+    /// Built-in modes followed by the user's own modes, for the menu, shortcuts and pickers.
+    var menuModes: [WorkflowType] {
+        WorkflowType.builtInMenuCases + appSettings.customModes.map { .custom($0.id) }
+    }
+
+    /// False for an own mode that was deleted.
+    func modeExists(_ type: WorkflowType) -> Bool {
+        guard let id = type.customModeID else { return true }
+        return appSettings.customMode(id: id) != nil
+    }
+
+    /// True when the mode rewrites the transcript with a language model (as on iOS: an own
+    /// mode without an instruction stays word for word).
+    func needsLanguageModel(_ type: WorkflowType) -> Bool {
+        switch type {
+        case .tapTalk, .localTapTalk: return false
+        case .textImprover, .dampfAblassen, .emojiText: return true
+        case .custom(let id): return appSettings.customMode(id: id)?.hasInstruction ?? false
+        }
+    }
+
+    @discardableResult
+    func addCustomMode(_ mode: CustomMode) -> WorkflowType {
+        appSettings.customModes.append(mode)
+        return .custom(mode.id)
+    }
+
+    func updateCustomMode(_ mode: CustomMode) {
+        guard let index = appSettings.customModes.firstIndex(where: { $0.id == mode.id }),
+              appSettings.customModes[index] != mode else { return }
+        appSettings.customModes[index] = mode
+    }
+
+    /// Takes the mode's shortcut along; its app and website rules go back to Blitztext.
+    func deleteCustomMode(id: String) {
+        appSettings.deleteCustomMode(id: id)
+    }
+
+    /// E-Mail and Stichpunkte once, so the most common formats are there from the start (as on
+    /// iOS). Modes deleted later stay deleted.
+    private func seedCustomModesIfNeeded() {
+        guard !appSettings.hasSeededCustomModes else { return }
+        var settings = appSettings
+        settings.hasSeededCustomModes = true
+        settings.customModes += CustomModeTemplate.defaultSeeds.map { $0.makeMode() }
+        appSettings = settings
+    }
+
+    /// Shortcuts and rules left behind by own modes that no longer exist go away at launch.
+    private func removeCustomModeOrphans() {
+        var settings = appSettings
+        settings.removeCustomModeOrphans()
+        guard settings.customHotkeys != appSettings.customHotkeys
+            || settings.appModeRules != appSettings.appModeRules
+            || settings.websiteModeRules != appSettings.websiteModeRules else { return }
+        appSettings = settings
+    }
+
+    /// Badge label: the custom shortcut when set, otherwise the built-in fn shortcut. Empty for
+    /// an own mode without a shortcut.
     func hotkeyLabel(for type: WorkflowType) -> String {
         appSettings.customHotkey(for: type)?.displayLabel ?? type.hotkeyLabel
     }
@@ -376,6 +466,21 @@ final class AppState {
             configureWorkflowHandlers(workflow)
             activeWorkflow = workflow
             workflow.start()
+
+        case .custom(let id):
+            guard let mode = appSettings.customMode(id: id) else { return }
+            let workflow = CustomModeWorkflow(
+                mode: mode,
+                protectedTerms: textImprovementSettings.protectedTerms,
+                language: transcriptionSettings.language,
+                localModelName: selectedLocalModelName,
+                rewriteEngine: appSettings.rewriteEngine,
+                postProcessor: postProcessor,
+                fieldContext: fieldContextForAI
+            )
+            configureWorkflowHandlers(workflow)
+            activeWorkflow = workflow
+            workflow.start()
         }
 
         // An online meeting records the Mac's sound; muting it would cut the call out.
@@ -414,6 +519,9 @@ final class AppState {
             return selectedLocalModelIsInstalled
         case .textImprover, .dampfAblassen, .emojiText:
             return selectedLocalModelIsInstalled && canRewrite
+        case .custom:
+            // Like the built-in AI modes; a deleted mode cannot run.
+            return modeExists(type) && selectedLocalModelIsInstalled && (!needsLanguageModel(type) || canRewrite)
         }
     }
 
@@ -512,7 +620,9 @@ final class AppState {
         accessibilityPermissionGranted = trusted
         guard trusted else {
             copyToClipboard(text)
-            menuBarStatus = .error(activeWorkflow?.type)
+            let message = "Einf\u{00FC}gen braucht die Bedienungshilfen. Der Text liegt in der Zwischenablage."
+            menuBarStatus = .error(activeWorkflow?.type, message)
+            scheduleMenuBarStatusReset(after: RecordingIndicatorNotice.errorSeconds(for: message))
             return
         }
 
@@ -634,6 +744,8 @@ final class AppState {
     }()
 
     private func saveSettings() {
+        // Debug tool runs never write the settings the installed Blitztext uses.
+        guard !Self.isToolRun else { return }
         let container = SettingsContainer(
             app: appSettings,
             transcription: transcriptionSettings,
@@ -642,12 +754,23 @@ final class AppState {
             emojiText: emojiTextSettings
         )
         if let data = try? JSONEncoder().encode(container) {
-            try? data.write(to: Self.settingsURL)
+            // Atomic like the history: a crash mid-write must not leave a truncated file,
+            // because a file that does not decode silently resets every setting.
+            try? data.write(to: Self.settingsURL, options: .atomic)
+        }
+        if appSettings.hasSeededCustomModes {
+            CustomModeFile.save(appSettings.customModes, to: AppSupportPaths.customModesURL)
         }
     }
 
     private static func loadAppSettings() -> AppSettings {
-        loadContainer()?.app ?? AppSettings()
+        var settings = loadContainer()?.app ?? AppSettings()
+        // An older build may have rewritten settings.json without the own modes.
+        if let modes = CustomModeFile.load(from: AppSupportPaths.customModesURL) {
+            settings.customModes = modes
+            settings.hasSeededCustomModes = true
+        }
+        return settings
     }
 
     private static func loadTranscriptionSettings() -> TranscriptionSettings {
@@ -668,7 +791,20 @@ final class AppState {
 
     private static func loadContainer() -> SettingsContainer? {
         guard let data = try? Data(contentsOf: settingsURL) else { return nil }
-        return try? JSONDecoder().decode(SettingsContainer.self, from: data)
+        if let container = try? JSONDecoder().decode(SettingsContainer.self, from: data) {
+            return container
+        }
+        // Keep a file this build cannot read aside, the way MeetingStore does, so it can be
+        // recovered instead of being overwritten with defaults.
+        keepUnreadableSettingsAside()
+        return nil
+    }
+
+    private static func keepUnreadableSettingsAside() {
+        let stamp = Int(Date().timeIntervalSince1970)
+        let aside = settingsURL.deletingLastPathComponent()
+            .appendingPathComponent("settings.unreadable-\(stamp).json")
+        try? FileManager.default.moveItem(at: settingsURL, to: aside)
     }
 
     func refreshAccessibilityPermission() {
@@ -699,17 +835,24 @@ final class AppState {
         return true
     }
 
-    /// Up to 1.13 a new Mac started with Whisper Small selected. On Apple Silicon Parakeet
-    /// Ultra is the better choice; switch while nothing has been downloaded yet.
+    /// Up to 1.13 a new Mac started with Whisper Small selected. Parakeet Ultra is the better
+    /// choice; switch while nothing has been downloaded yet.
     private func preferParakeetIfNothingInstalled() {
         // Once only, so a later deliberate choice of Whisper Small is kept.
         guard !appSettings.hasCheckedParakeetDefault else { return }
         appSettings.hasCheckedParakeetDefault = true
-        guard ParakeetTranscriber.isSupported,
-              LocalTranscriptionService.installedModels().isEmpty,
+        guard LocalTranscriptionService.installedModels().isEmpty,
               appSettings.selectedLocalTranscriptionModelName == LocalTranscriptionService.recommendedFastModelName else {
             return
         }
+        appSettings.selectedLocalTranscriptionModelName = ParakeetTranscriber.modelName
+    }
+
+    /// Intel Macs only get Parakeet (Whisper crashes there, issue #30), so a Whisper choice
+    /// from an earlier version moves to Parakeet; the setup assistant offers the download.
+    private func replaceWhisperOnIntel() {
+        guard !LocalTranscriptionService.whisperIsSupported,
+              appSettings.selectedLocalTranscriptionModelName != ParakeetTranscriber.modelName else { return }
         appSettings.selectedLocalTranscriptionModelName = ParakeetTranscriber.modelName
     }
 
@@ -845,12 +988,49 @@ final class AppState {
             guard let self, let workflow else { return }
             self.handleWorkflowPhaseChange(phase, workflow: workflow)
         }
+        workflow.onKeptTranscript = { [weak self, weak workflow] text in
+            guard let self, let workflow, workflow === self.activeWorkflow else { return }
+            self.keepTranscript(text)
+        }
+    }
+
+    func refreshUnfinishedRecordings() {
+        unfinishedRecordings = UnfinishedRecordings.current()
+    }
+
+    /// Transcribes a recording again on the audio file page; with text it is deleted.
+    func transcribeUnfinished(_ item: UnfinishedRecordings.Item) {
+        // The sweep after a dictation may have deleted it since the menu listed it.
+        guard FileManager.default.fileExists(atPath: item.url.path) else {
+            refreshUnfinishedRecordings()
+            return
+        }
+        audioFile.transcribe(item.url, appState: self, title: UnfinishedRecordings.label(for: item), deleteAfterSuccess: true)
+        page = .audioFile
+    }
+
+    func deleteUnfinished(_ item: UnfinishedRecordings.Item) {
+        UnfinishedRecordings.delete(item)
+        refreshUnfinishedRecordings()
+    }
+
+    /// An AI mode failed on a finished transcript (rejected key, no network): the dictation is
+    /// not lost. The word-for-word text goes to the clipboard and the history, never into the
+    /// field, since $%&! exists so that the raw wording does not land there.
+    private func keepTranscript(_ text: String) {
+        copyToClipboard(text)
+        history.add(text, workflow: .tapTalk)
+        lastInsertion = nil
     }
 
     private func handleWorkflowPhaseChange(_ phase: WorkflowPhase, workflow: any Workflow) {
         // A late phase of a replaced workflow must not end, unmute or relabel the next one.
         guard workflow === activeWorkflow else { return }
-        menuBarStatusResetTask?.cancel()
+        // An `.idle` (the cleanup's reset, a cancel) sets no status of its own, so it leaves a
+        // pending reset alone: an error shown after pasting must still clear once readable.
+        if case .idle = phase {} else {
+            menuBarStatusResetTask?.cancel()
+        }
         // Sound comes back as soon as the recording ends, not after the transcription.
         if !workflow.isRecording {
             audioMuter.restoreIfNeeded()
@@ -874,15 +1054,17 @@ final class AppState {
         case .done:
             menuBarStatus = .success(workflow.type)
 
-        case .error:
-            menuBarStatus = .error(workflow.type)
+        case .error(let message):
+            menuBarStatus = .error(workflow.type, message)
+            refreshUnfinishedRecordings()
             microphoneDenied = MicrophonePermission.isDenied
             if activeLaunchSource == .hotkeyBackground {
                 activeWorkflow = nil
                 activePasteTarget = nil
                 page = .main
             }
-            scheduleMenuBarStatusReset(after: 1.6)
+            // The pill shows the message until then, long enough to read it.
+            scheduleMenuBarStatusReset(after: RecordingIndicatorNotice.errorSeconds(for: message))
         }
     }
 
@@ -907,11 +1089,14 @@ final class AppState {
             if !self.isPopoverShown {
                 self.page = .main
             }
+            // An error (pasting without Accessibility) ends with its own reset, once it was readable.
+            if case .error = self.menuBarStatus { return }
             self.menuBarStatus = .idle
         }
     }
 
     private func scheduleMenuBarStatusReset(after delay: TimeInterval) {
+        menuBarStatusResetTask?.cancel()
         menuBarStatusResetTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(delay))
             guard !Task.isCancelled, let self else { return }

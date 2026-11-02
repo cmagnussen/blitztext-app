@@ -1,27 +1,110 @@
+import AVFoundation
 import XCTest
 
 final class HallucinationFilterTests: XCTestCase {
     func testCreditsAreAlwaysInvented() {
-        XCTAssertTrue(HallucinationFilter.isInvented("Untertitel im Auftrag des ZDF, 2021", voicedSeconds: 5))
-        XCTAssertTrue(HallucinationFilter.isInvented("Untertitel der Amara.org-Community", voicedSeconds: 5))
-        XCTAssertTrue(HallucinationFilter.isInvented("Thanks for watching!", voicedSeconds: 5))
+        XCTAssertTrue(HallucinationFilter.isCredit("Untertitel im Auftrag des ZDF, 2021"))
+        XCTAssertTrue(HallucinationFilter.isCredit("Untertitel der Amara.org-Community"))
+        XCTAssertTrue(HallucinationFilter.isCredit("Thanks for watching!"))
+        XCTAssertFalse(HallucinationFilter.isCredit("Vielen Dank."))
+        XCTAssertFalse(HallucinationFilter.isCredit("1234"))
     }
 
-    func testPoliteWordsOnlyCountOnSilence() {
-        XCTAssertTrue(HallucinationFilter.isInvented("Thank you.", voicedSeconds: 0))
-        XCTAssertTrue(HallucinationFilter.isInvented("Vielen Dank.", voicedSeconds: 0.1))
-        XCTAssertFalse(HallucinationFilter.isInvented("Vielen Dank.", voicedSeconds: 1.2))
-        XCTAssertFalse(HallucinationFilter.isInvented("Vielen Dank für die Zahlen.", voicedSeconds: 0))
-        XCTAssertFalse(HallucinationFilter.isInvented("1234", voicedSeconds: 0))
+    /// Review of #68: a cough or click of 0.15 to 0.3 s passes the speech check, and Whisper
+    /// wrote "Thank you." on it again. Said with real speech, the phrase stays.
+    func testDoubtfulPhraseOnlyCountsWithHardlyAnySpeech() {
+        XCTAssertTrue(HallucinationFilter.isInvented("Thank you.", longestVoicedRun: 0.2))
+        XCTAssertTrue(HallucinationFilter.isInvented("Vielen Dank.", longestVoicedRun: 0.25))
+        XCTAssertFalse(HallucinationFilter.isInvented("Vielen Dank.", longestVoicedRun: 0.9))
+        XCTAssertFalse(HallucinationFilter.isInvented("Danke, bis morgen", longestVoicedRun: 0.2))
+        XCTAssertTrue(HallucinationFilter.isInvented("Untertitel im Auftrag des ZDF, 2021", longestVoicedRun: 5))
+        XCTAssertFalse(HallucinationFilter.isInvented("", longestVoicedRun: 0))
+    }
+
+    /// Review of #69: Whisper's invented phrase on a cough or click counts as no speech, so a
+    /// short recording goes instead of being kept as "Aufnahme ohne Text"; real text stays.
+    func testWhisperTextOnHardlyAnySpeechCountsAsNoSpeech() {
+        XCTAssertNil(HallucinationFilter.whisperText("Thank you.", longestVoicedRun: 0.2))
+        XCTAssertNil(HallucinationFilter.whisperText("Untertitel im Auftrag des ZDF, 2021", longestVoicedRun: 0.2))
+        // Speech under the credit: no text, but not "no speech", so the recording is kept.
+        XCTAssertEqual(HallucinationFilter.whisperText("Untertitel im Auftrag des ZDF, 2021", longestVoicedRun: 5), "")
+        XCTAssertEqual(HallucinationFilter.whisperText("Vielen Dank.", longestVoicedRun: 0.9), "Vielen Dank.")
+        XCTAssertEqual(HallucinationFilter.whisperText("Bis morgen.", longestVoicedRun: 0.2), "Bis morgen.")
     }
 
     func testMeasuresVoicedAudio() {
         let silence = [Float](repeating: 0, count: 16_000)
         let roomNoise = (0..<16_000).map { _ in Float.random(in: -0.003...0.003) }
         let speech = (0..<16_000).map { Float(sin(Double($0) / 8)) * 0.2 }
-        XCTAssertEqual(HallucinationFilter.voicedSeconds(silence), 0)
-        XCTAssertEqual(HallucinationFilter.voicedSeconds(roomNoise), 0)
-        XCTAssertGreaterThan(HallucinationFilter.voicedSeconds(speech), 0.9)
+        XCTAssertEqual(HallucinationFilter.longestVoicedRun(silence), 0)
+        XCTAssertEqual(HallucinationFilter.longestVoicedRun(roomNoise), 0)
+        XCTAssertGreaterThan(HallucinationFilter.longestVoicedRun(speech), 0.9)
+        XCTAssertTrue(HallucinationFilter.hasNoSpeech(longestVoicedRun: HallucinationFilter.longestVoicedRun(roomNoise)))
+    }
+
+    func testShortAnswerIsOneRunAndClicksAreNot() {
+        // "Ja." said quickly: 0.2 s of speech, one continuous run.
+        let speech = Self.tone(seconds: 0.2, total: 1)
+        XCTAssertEqual(HallucinationFilter.longestVoicedRun(speech), 0.21, accuracy: 0.031)
+        XCTAssertFalse(HallucinationFilter.hasNoSpeech(longestVoicedRun: HallucinationFilter.longestVoicedRun(speech)))
+
+        // Three keyboard clicks: loud, but only one or two frames each, far below a word.
+        var clicks = [Float](repeating: 0, count: 16_000)
+        for click in [2_000, 6_000, 10_000] {
+            for index in click..<(click + 160) { clicks[index] = 0.6 }
+        }
+        XCTAssertLessThan(HallucinationFilter.longestVoicedRun(clicks), 0.12)
+        XCTAssertTrue(HallucinationFilter.hasNoSpeech(longestVoicedRun: HallucinationFilter.longestVoicedRun(clicks)))
+    }
+
+    func testPiecesOfAnyLengthMeasureTheSame() {
+        var samples = [Float](repeating: 0, count: 8_000) + Self.tone(seconds: 0.4, total: 0.4)
+        samples += [Float](repeating: 0, count: 4_800) + Self.tone(seconds: 0.25, total: 1)
+        var meter = HallucinationFilter.VoicedRunMeter(sampleRate: 16_000)
+        var start = 0
+        while start < samples.count {
+            let end = min(start + 1_000, samples.count)
+            meter.add(samples[start..<end])
+            start = end
+        }
+        XCTAssertEqual(meter.longestRun, HallucinationFilter.longestVoicedRun(samples))
+        XCTAssertEqual(meter.longestRun, 0.42, accuracy: 0.031)
+    }
+
+    func testReadsTheRunFromAFile() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        let silent = folder.appendingPathComponent("silent.wav")
+        try Self.writeWAV((0..<32_000).map { _ in Float.random(in: -0.003...0.003) }, to: silent)
+        XCTAssertEqual(try XCTUnwrap(HallucinationFilter.longestVoicedRun(in: silent)), 0)
+
+        let spoken = folder.appendingPathComponent("spoken.wav")
+        try Self.writeWAV([Float](repeating: 0, count: 16_000) + Self.tone(seconds: 0.3, total: 2), to: spoken)
+        XCTAssertGreaterThanOrEqual(try XCTUnwrap(HallucinationFilter.longestVoicedRun(in: spoken)), 0.15)
+
+        // Unreadable: unknown, so nothing may be dropped for lack of speech.
+        XCTAssertNil(HallucinationFilter.longestVoicedRun(in: folder.appendingPathComponent("missing.wav")))
+    }
+
+    private static func tone(seconds: Double, total: Double) -> [Float] {
+        (0..<Int(total * 16_000)).map { index -> Float in
+            let t = Double(index) / 16_000
+            return t < seconds ? Float(sin(t * 2 * .pi * 180)) * 0.08 : 0
+        }
+    }
+
+    private static func writeWAV(_ samples: [Float], to url: URL) throws {
+        let settings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: 16_000, AVNumberOfChannelsKey: 1,
+            AVLinearPCMBitDepthKey: 16, AVLinearPCMIsFloatKey: false,
+        ]
+        let file = try AVAudioFile(forWriting: url, settings: settings)
+        let buffer = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(samples.count)))
+        buffer.frameLength = buffer.frameCapacity
+        samples.withUnsafeBufferPointer { buffer.floatChannelData![0].update(from: $0.baseAddress!, count: samples.count) }
+        try file.write(from: buffer)
     }
 
     func testRemovesTrailingCredits() {

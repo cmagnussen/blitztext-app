@@ -554,16 +554,24 @@ struct CustomizeSettingsView: View {
             SettingsSection(title: "Tastenk\u{00FC}rzel") {
 
                 VStack(spacing: 6) {
-                    ForEach(WorkflowType.mainMenuCases) { type in
+                    ForEach(appState.menuModes) { type in
                         HStack(spacing: 6) {
                             let replaced = appState.appSettings.customHotkey(for: type) != nil
                                 && !appState.hotkeyService.failedCustomHotkeys.contains(type)
-                            Text(type.hotkeyLabel)
-                                .font(.system(size: 10.5, design: .monospaced))
-                                .strikethrough(replaced)
-                                .foregroundStyle(replaced ? .tertiary : .secondary)
-                                .frame(width: 92, alignment: .leading)
-                                .help(replaced ? "Ersetzt durch dein eigenes K\u{00FC}rzel" : "Standard-K\u{00FC}rzel, nur auf Apple-Tastaturen")
+                            if type.isBuiltIn {
+                                Text(type.hotkeyLabel)
+                                    .font(.system(size: 10.5, design: .monospaced))
+                                    .strikethrough(replaced)
+                                    .foregroundStyle(replaced ? .tertiary : .secondary)
+                                    .frame(width: 92, alignment: .leading)
+                                    .help(replaced ? "Ersetzt durch dein eigenes K\u{00FC}rzel" : "Standard-K\u{00FC}rzel, nur auf Apple-Tastaturen")
+                            } else {
+                                Text("kein fn")
+                                    .font(.system(size: 10.5, design: .monospaced))
+                                    .foregroundStyle(.tertiary)
+                                    .frame(width: 92, alignment: .leading)
+                                    .help("Eigene Modi starten nur mit einem eigenen K\u{00FC}rzel.")
+                            }
                             Text(appState.displayName(for: type))
                                 .font(.ui(11.5, .medium))
                                 .lineLimit(1)
@@ -594,6 +602,8 @@ struct CustomizeSettingsView: View {
 
             // MARK: Aufnahme & Einfuegen
             SettingsSection(title: "Aufnahme & Einf\u{00FC}gen") {
+
+                MicrophonePickerRow()
 
                 Toggle("Aufnahmeanzeige zeigen", isOn: $appState.appSettings.showsRecordingIndicator)
                     .toggleStyle(.trailingSwitch)
@@ -751,7 +761,7 @@ struct CustomizeSettingsView: View {
                     .toggleStyle(.trailingSwitch)
                     .font(.ui(11.5))
 
-                Text("Blitztext+, $%&! und :) bekommen den Text rund um den Cursor als Kontext, etwa die Mail, auf die du antwortest. Mit einem Modell-Anbieter geht dieser Text mit an den Anbieter.")
+                Text("Blitztext+, $%&!, :) und eigene Modi bekommen den Text rund um den Cursor als Kontext, etwa die Mail, auf die du antwortest. Mit einem Modell-Anbieter geht dieser Text mit an den Anbieter.")
                     .font(.ui(12))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -845,6 +855,8 @@ struct CustomizeSettingsView: View {
                     )
                 }
             }
+
+            CustomModesSection(appState: appState)
 
             AppModeRulesSection(appState: appState)
             }
@@ -1030,7 +1042,7 @@ private struct ModeSummary: View {
 }
 
 /// Multi-line instruction field with a placeholder.
-private struct PromptEditor: View {
+struct PromptEditor: View {
     @Binding var text: String
     let placeholder: String
     let height: CGFloat
@@ -1228,5 +1240,49 @@ struct FlowLayout: Layout {
         }
 
         return (positions, CGSize(width: maxX, height: y + rowHeight))
+    }
+}
+
+// MARK: - Mikrofon
+
+/// Which microphone Blitztext records with; "macOS-Standard" follows the system setting.
+struct MicrophonePickerRow: View {
+    @State private var selection = MicrophoneSelection.preferredUID
+    @State private var devices = MicrophoneSelection.inputDevices()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("Mikrofon")
+                Spacer()
+                Picker("", selection: $selection) {
+                    Text("macOS-Standard").tag("")
+                    if !selection.isEmpty && !devices.contains(where: { $0.id == selection }) {
+                        Text("Nicht verbunden").tag(selection)
+                    }
+                    ForEach(devices) { device in
+                        Text(device.name).tag(device.id)
+                    }
+                }
+                .labelsHidden()
+                .controlSize(.small)
+                .fixedSize()
+                Button {
+                    devices = MicrophoneSelection.inputDevices()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .buttonStyle(.borderless)
+                .help("Mikrofone neu suchen")
+            }
+            Text("Gilt f\u{00FC}r Diktate. W\u{00E4}hrend der Aufnahme stellt Blitztext es auch in macOS ein, danach wieder zur\u{00FC}ck. Meetings bleiben beim macOS-Standard, damit ein laufender Call sein Mikrofon beh\u{00E4}lt.")
+                .font(.ui(12))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .onChange(of: selection) { _, newValue in
+            MicrophoneSelection.preferredUID = newValue
+        }
+        .onAppear { devices = MicrophoneSelection.inputDevices() }
     }
 }

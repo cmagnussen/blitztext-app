@@ -156,7 +156,12 @@ struct MacAIProviderSection: View {
     }
 
     private func saveKey(_ provider: AIProvider) {
-        APIKeyStore.save(keyInput, for: provider)
+        // The Keychain can refuse the write (locked keychain, no entitlement). Say so instead
+        // of clearing the field and looking as if the key were stored.
+        guard APIKeyStore.save(keyInput, for: provider) else {
+            testState = .failed("Der Key konnte nicht im Schlüsselbund gespeichert werden.")
+            return
+        }
         keyInput = ""
         appState.aiKeyRevision += 1
         testState = .idle

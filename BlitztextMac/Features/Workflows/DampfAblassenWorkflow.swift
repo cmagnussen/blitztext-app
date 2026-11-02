@@ -11,6 +11,7 @@ final class DampfAblassenWorkflow: Workflow {
     }
     var onOutput: WorkflowOutputHandler?
     var onPhaseChange: WorkflowPhaseChangeHandler?
+    var onKeptTranscript: WorkflowOutputHandler?
     private(set) var transcript: String?
 
     private let dictation: DictationRun
@@ -39,6 +40,7 @@ final class DampfAblassenWorkflow: Workflow {
         dictation = DictationRun(recorder: AudioRecorder())
         dictation.onPhase = { [weak self] phase in self?.phase = phase }
         dictation.onOutput = { [weak self] text in self?.onOutput?(text) }
+        dictation.onKeptTranscript = { [weak self] text in self?.onKeptTranscript?(text) }
     }
 
     // MARK: - Recording State
@@ -90,11 +92,17 @@ final class DampfAblassenWorkflow: Workflow {
         // Phase 2: AI rewrite (on device or the connected provider)
         step("Wird umformuliert ...")
 
-        let answer = try await TextRewriter.rewrite(
-            processedRawText,
-            instruction: ModePrompts.withFieldContext(ModePrompts.dampfAblassen(settings), context: fieldContext()),
-            engine: rewriteEngine
-        )
+        // A failure keeps what was said (`AIStepFailed`).
+        let answer: String
+        do {
+            answer = try await TextRewriter.rewrite(
+                processedRawText,
+                instruction: ModePrompts.withFieldContext(ModePrompts.dampfAblassen(settings), context: fieldContext()),
+                engine: rewriteEngine
+            )
+        } catch {
+            throw AIStepFailed.wrapping(error, transcript: processedRawText)
+        }
         let cleanedAnswer = TranscriptionQualityService.cleanedTranscript(answer)
         guard cleanedAnswer != ModePrompts.nothingRecognizedMarker else { return nil }
         return cleanedAnswer

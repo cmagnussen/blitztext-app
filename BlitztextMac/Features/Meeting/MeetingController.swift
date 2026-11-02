@@ -38,7 +38,10 @@ final class MeetingController {
     private(set) var notice: String?
     /// The meeting being recorded. It is stored as pending from the start, so a quit or crash
     /// keeps the audio for a later evaluation.
-    private(set) var recordingID: UUID?
+    private(set) var recordingID: UUID? {
+        // A dictation during the meeting must not move the meeting to another microphone.
+        didSet { MicrophoneSelection.meetingIsRecording = recordingID != nil }
+    }
     let store: MeetingStore
     /// Lets the menu bar show that a meeting is being recorded.
     @ObservationIgnored var onPhaseChange: (() -> Void)?
@@ -82,10 +85,7 @@ final class MeetingController {
 
     /// Meetings need Parakeet: its word timings place every word with a person.
     static var blocker: String? {
-        guard ParakeetTranscriber.isSupported else {
-            return "Meetings brauchen einen Mac mit Apple-Chip."
-        }
-        return ParakeetTranscriber.isInstalled
+        ParakeetTranscriber.isInstalled
             ? nil
             : "F\u{00FC}r Meetings braucht Blitztext Parakeet. Bitte in den Einstellungen unter Sprachmodell laden."
     }
@@ -429,7 +429,9 @@ final class MeetingController {
                     try? FileManager.default.removeItem(at: record.audioURL)
                     try? FileManager.default.removeItem(at: record.systemAudioURL)
                 } else {
-                    notice = "Das Meeting lie\u{00DF} sich nicht sichern, zum Beispiel weil der Speicher voll ist. Die Aufnahme bleibt erhalten."
+                    // Only a write that really failed: without the Keychain key the meeting
+                    // waits in a side file (`SealedStoreFiles`), which counts as saved.
+                    notice = "Das Meeting lie\u{00DF} sich nicht sichern. Die Aufnahme bleibt auf diesem Mac erhalten."
                 }
                 update(.showing(record.id))
             } catch is CancellationError {
@@ -532,6 +534,18 @@ final class MeetingController {
         notice = nil
         phase = .showing(meetingID)
     }
+
+    /// Gives one part of the transcript to another person. The summary may still name the
+    /// old one, so it says how to bring it up to date.
+    func reassign(turn turnID: UUID, to speaker: Int, in meetingID: UUID) {
+        guard var record = store.meeting(id: meetingID), record.turns.reassign(turn: turnID, to: speaker) else { return }
+        if record.summary != nil {
+            record.summaryNote = Self.reassignedNote
+        }
+        store.upsert(record)
+    }
+
+    static let reassignedNote = "Die Zuordnung hat sich ge\u{00E4}ndert. \u{201E}Neu erstellen\u{201C} bringt die Zusammenfassung und die To-dos auf den neuen Stand."
 
     func rename(speaker: Int, to name: String, in meetingID: UUID) {
         guard var record = store.meeting(id: meetingID) else { return }

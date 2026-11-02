@@ -11,6 +11,7 @@ final class TextImprovementWorkflow: Workflow {
     }
     var onOutput: WorkflowOutputHandler?
     var onPhaseChange: WorkflowPhaseChangeHandler?
+    var onKeptTranscript: WorkflowOutputHandler?
     private(set) var transcript: String?
 
     private let dictation: DictationRun
@@ -39,6 +40,7 @@ final class TextImprovementWorkflow: Workflow {
         dictation = DictationRun(recorder: AudioRecorder())
         dictation.onPhase = { [weak self] phase in self?.phase = phase }
         dictation.onOutput = { [weak self] text in self?.onOutput?(text) }
+        dictation.onKeptTranscript = { [weak self] text in self?.onKeptTranscript?(text) }
     }
 
     // MARK: - Recording State
@@ -90,11 +92,17 @@ final class TextImprovementWorkflow: Workflow {
         // Phase 2: AI improvement (on device or the connected provider)
         step("Text wird verbessert ...")
 
-        let improved = try await TextRewriter.rewrite(
-            processedRawText,
-            instruction: ModePrompts.withFieldContext(ModePrompts.textImprovement(settings), context: fieldContext()),
-            engine: rewriteEngine
-        )
+        // A failure keeps what was said (`AIStepFailed`).
+        let improved: String
+        do {
+            improved = try await TextRewriter.rewrite(
+                processedRawText,
+                instruction: ModePrompts.withFieldContext(ModePrompts.textImprovement(settings), context: fieldContext()),
+                engine: rewriteEngine
+            )
+        } catch {
+            throw AIStepFailed.wrapping(error, transcript: processedRawText)
+        }
         return TranscriptionQualityService.cleanedTranscript(improved)
     }
 }

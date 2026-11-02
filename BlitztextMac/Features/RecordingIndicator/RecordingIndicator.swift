@@ -4,8 +4,9 @@ import SwiftUI
 /// A small pill at the bottom of the screen while Blitztext records or writes, so the
 /// recording is visible wherever you type, not only in the menu bar. Lilac bars follow
 /// the voice; while recording, a click stops it. During a meeting it shows the running
-/// time, and a click opens the meeting page. The panel never takes the focus, so the text
-/// still lands in the app you are typing in.
+/// time, and a click opens the meeting page. A failed dictation shows why until the status
+/// resets, a click puts it away. The panel never takes the focus, so the text still lands
+/// in the app you are typing in.
 @MainActor
 final class RecordingIndicatorController {
     private let appState: AppState
@@ -82,9 +83,32 @@ final class RecordingIndicatorController {
             // Back after a dictation in between, or a meeting just started.
             model.status = status
             show(placing: panel?.isVisible != true || isHiding)
-        case .idle, .error:
+        case .error(_, let message):
+            // A dictation started with a shortcut has no other window that says why it
+            // failed. The open menu shows the error itself. AppState sets idle once it was readable.
+            guard !appState.isPopoverShown else {
+                hide()
+                return
+            }
+            let isNew = model.status != status || panel?.isVisible != true || isHiding
+            model.status = status
+            show(placing: panel?.isVisible != true || isHiding)
+            if isNew { announce(message) }
+        case .idle:
             hide()
         }
+    }
+
+    /// The pill never takes the focus, so VoiceOver would not read the error on its own.
+    private func announce(_ message: String) {
+        NSAccessibility.post(
+            element: NSApp as Any,
+            notification: .announcementRequested,
+            userInfo: [
+                .announcement: message,
+                .priority: NSAccessibilityPriorityLevel.high.rawValue,
+            ]
+        )
     }
 
     /// The setting changed, possibly mid-recording: apply it right away.
@@ -99,9 +123,13 @@ final class RecordingIndicatorController {
         isHiding = false
         let panel = panel ?? makePanel()
         self.panel = panel
-        if placing { place(panel) }
+        if placing {
+            place(panel)
+        } else {
+            fit(panel)
+        }
         // Processing remains interactive for dragging and the hide context menu.
-        // A plain click is still a no-op unless recording or showing a meeting.
+        // A plain click is still a no-op unless recording, showing a meeting or an error.
         panel.ignoresMouseEvents = false
         if !panel.isVisible {
             panel.alphaValue = 0
@@ -175,6 +203,11 @@ final class RecordingIndicatorController {
     }
 
     private func clicked(_ session: RecordingIndicatorSession?) {
+        // An error has no session; a click puts it away.
+        if case .error = model.status {
+            hide()
+            return
+        }
         guard let session, session == currentSession else { return }
         switch lastStatus {
         case .recording where appState.activeWorkflow?.isRecording == true:
@@ -195,13 +228,20 @@ final class RecordingIndicatorController {
     /// pill to, otherwise bottom centre above the Dock.
     private func place(_ panel: NSPanel) {
         guard let screen = pointerScreen() else { return }
-        let size = RecordingPill.panelSize
+        let size = RecordingPill.panelSize(for: model.status)
         let frame = screen.visibleFrame
         let origin = savedPlacement.map { RecordingIndicatorPlacement.restore($0, size: size, in: frame) }
             ?? RecordingIndicatorPlacement.clamp(
                 CGPoint(x: frame.midX - size.width / 2, y: frame.minY + 16), size: size, to: frame
             )
         panel.setFrame(NSRect(origin: origin, size: size), display: true)
+    }
+
+    /// The visible pill switches to or from an error, which needs a larger panel.
+    private func fit(_ panel: NSPanel) {
+        let size = RecordingPill.panelSize(for: model.status)
+        guard panel.frame.size != size, let screen = panel.screen ?? pointerScreen() else { return }
+        panel.setFrame(RecordingIndicatorPlacement.resize(panel.frame, to: size, in: screen.visibleFrame), display: true)
     }
 
     private func move(to origin: CGPoint) {
@@ -281,6 +321,18 @@ struct RecordingPill: View {
     private static let night = BlackboatColor.hex(0x050722)
     /// The capsule plus room for its shadow.
     static let panelSize = CGSize(width: 180, height: 72)
+    /// An error in up to three lines, plus room for the shadow.
+    static let errorPanelSize = CGSize(width: 332, height: 94)
+
+    static func panelSize(for status: MenuBarStatus) -> CGSize {
+        if case .error = status { return errorPanelSize }
+        return panelSize
+    }
+
+    private var showsError: Bool {
+        if case .error = model.status { return true }
+        return false
+    }
 
     var body: some View {
         Group {
@@ -299,6 +351,9 @@ struct RecordingPill: View {
                     .help("Meeting l\u{00E4}uft. Klicken \u{00F6}ffnet die Meeting-Seite.")
                     .accessibilityAddTraits(.isButton)
                     .accessibilityAction(.default, onOpenMeeting)
+            case .error:
+                capsule
+                    .help("Klicken blendet die Meldung aus.")
             default:
                 capsule
             }
@@ -306,18 +361,29 @@ struct RecordingPill: View {
         .accessibilityLabel(accessibilityText)
     }
 
+    /// A capsule; an error gets a wider card with room for its message.
     private var capsule: some View {
-        HStack(spacing: 10) {
+        let shape = showsError ? AnyShape(RoundedRectangle(cornerRadius: 16)) : AnyShape(Capsule())
+        return HStack(spacing: 10) {
             content
         }
-        .frame(width: 148, height: 40)
+        .padding(.horizontal, showsError ? 16 : 0)
+        .frame(
+            width: (showsError ? Self.errorPanelSize : Self.panelSize).width - 32,
+            height: (showsError ? Self.errorPanelSize : Self.panelSize).height - 32
+        )
         .background {
-            Capsule().fill(Self.night.opacity(0.94))
-            Capsule().strokeBorder(Self.lilac.opacity(0.35), lineWidth: 1)
+            if showsError {
+                RoundedRectangle(cornerRadius: 16).fill(Self.night.opacity(0.94))
+                RoundedRectangle(cornerRadius: 16).strokeBorder(Self.lilac.opacity(0.35), lineWidth: 1)
+            } else {
+                Capsule().fill(Self.night.opacity(0.94))
+                Capsule().strokeBorder(Self.lilac.opacity(0.35), lineWidth: 1)
+            }
         }
         .shadow(color: .black.opacity(0.22), radius: 8, y: 3)
         .padding(16)
-        .contentShape(Capsule())
+        .contentShape(shape)
     }
 
     @ViewBuilder
@@ -355,7 +421,18 @@ struct RecordingPill: View {
                 .foregroundStyle(.white.opacity(0.85))
         case .meeting:
             MeetingPillContent(meeting: appState.meeting, lilac: Self.lilac)
-        case .idle, .error:
+        case .error(_, let message):
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.ui(14, .semibold))
+                .foregroundStyle(Color(nsColor: .systemOrange))
+            Text(message)
+                .font(.ui(12, .medium))
+                .foregroundStyle(.white.opacity(0.9))
+                .lineLimit(3)
+                .minimumScaleFactor(0.8)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        case .idle:
             EmptyView()
         }
     }
@@ -367,7 +444,8 @@ struct RecordingPill: View {
         case .success: return "Fertig"
         case .copied: return "Nicht eingef\u{00FC}gt, der Text liegt in der Zwischenablage"
         case .meeting: return "Meeting wird aufgenommen. Klicken \u{00F6}ffnet die Meeting-Seite."
-        case .idle, .error: return ""
+        case .error(_, let message): return message
+        case .idle: return ""
         }
     }
 }

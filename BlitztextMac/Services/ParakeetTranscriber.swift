@@ -1,25 +1,18 @@
 import Foundation
+import CoreML
 import FluidAudio
 
 /// Local transcription with Parakeet via FluidAudio (Apache-2.0): Parakeet Ultra by Moondream,
 /// a post-training of NVIDIA Parakeet TDT 0.6B v3 (both CC BY 4.0). Macs that downloaded v3
 /// with an earlier version keep using it until the background upgrade to Ultra is done.
-/// Runs on the Apple Neural Engine and supports 25 European languages including German.
-/// Apple Silicon only; Intel Macs keep using WhisperKit.
+/// Runs on the Apple Neural Engine, on Intel Macs on the processor, and supports 25 European
+/// languages including German.
 actor ParakeetTranscriber {
     static let shared = ParakeetTranscriber()
 
     /// Settings key of the Parakeet entry, kept from the v3 days so existing choices stay.
     static let modelName = "parakeet-tdt-0.6b-v3"
     static let licenseURL = URL(string: "https://creativecommons.org/licenses/by/4.0/")!
-
-    static var isSupported: Bool {
-        #if arch(arm64)
-        return true
-        #else
-        return false
-        #endif
-    }
 
     static var files: ParakeetModelFiles {
         ParakeetModelFiles(parent: AppSupportPaths.localModelsDirectoryURL.appendingPathComponent("parakeet", isDirectory: true))
@@ -54,11 +47,11 @@ actor ParakeetTranscriber {
     }
 
     static var isInstalled: Bool {
-        isSupported && files.installed != nil
+        files.installed != nil
     }
 
     static var needsUpgrade: Bool {
-        isSupported && files.installed == .legacy
+        files.installed == .legacy
     }
 
     private var manager: AsrManager?
@@ -126,9 +119,21 @@ actor ParakeetTranscriber {
         try await task.value
     }
 
+    /// FluidAudio's default on Apple Silicon (Neural Engine). Intel Macs have none: there the
+    /// models run on the processor, as checked with the x86_64 build.
+    private static var configuration: MLModelConfiguration? {
+        #if arch(x86_64)
+        let configuration = MLModelConfiguration()
+        configuration.computeUnits = .cpuOnly
+        return configuration
+        #else
+        return nil
+        #endif
+    }
+
     /// The loaded model, reloaded when the build on disk changed (v3 to Ultra).
     private func loadedManager() async throws -> AsrManager {
-        guard Self.isSupported, let build = Self.files.installed else {
+        guard let build = Self.files.installed else {
             throw LocalTranscriptionError.modelMissing(Self.modelsDirectoryURL)
         }
         if let manager, managerBuild == build {
@@ -140,7 +145,7 @@ actor ParakeetTranscriber {
 
         let directory = Self.files.directory(for: build)
         let task = Task<AsrManager, Error> {
-            let models = try await AsrModels.load(from: directory, version: build.version)
+            let models = try await AsrModels.load(from: directory, configuration: Self.configuration, version: build.version)
             let manager = AsrManager(config: .default)
             try await manager.loadModels(models)
             return manager

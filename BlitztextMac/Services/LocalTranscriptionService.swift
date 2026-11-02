@@ -1,5 +1,8 @@
 import Foundation
+import OSLog
 import WhisperKit
+
+private let speechLogger = Logger(subsystem: "app.blitztext.mac", category: "Recording")
 
 struct LocalTranscriptionModel: Identifiable, Hashable {
     let id: String
@@ -104,10 +107,11 @@ struct LocalModelRating: Equatable {
     }
 }
 
-enum LocalTranscriptionError: LocalizedError {
+enum LocalTranscriptionError: LocalizedError, NoSpeechVerdict {
     case modelMissing(URL)
     case downloadedModelInvalid(String)
     case noText
+    case noSpeech
 
     var errorDescription: String? {
         switch self {
@@ -117,7 +121,14 @@ enum LocalTranscriptionError: LocalizedError {
             return "Das geladene Modell ist unvollständig: \(modelName)"
         case .noText:
             return "Das lokale Modell hat keinen Text erkannt."
+        case .noSpeech:
+            return "In der Aufnahme war keine Sprache zu hören."
         }
+    }
+
+    var meansNoSpeech: Bool {
+        if case .noSpeech = self { return true }
+        return false
     }
 }
 
@@ -127,10 +138,19 @@ actor LocalTranscriptionService {
     static let defaultModelName = "openai_whisper-large-v3-v20240930_626MB"
     static let fastModelName = "openai_whisper-large-v3-v20240930_turbo_632MB"
     static let recommendedFastModelName = "openai_whisper-small_216MB"
-    /// What a new Mac starts with: Parakeet Ultra on Apple Silicon (faster and more accurate),
-    /// Whisper Small on Intel.
+    /// What a new Mac starts with: Parakeet Ultra, faster and more accurate than Whisper.
     static var initialModelName: String {
-        ParakeetTranscriber.isSupported ? ParakeetTranscriber.modelName : recommendedFastModelName
+        ParakeetTranscriber.modelName
+    }
+
+    /// WhisperKit writes past the end of a buffer on Intel Macs and crashes the app (public
+    /// issue #30), so Intel Macs only get Parakeet.
+    static var whisperIsSupported: Bool {
+        #if arch(arm64)
+        return true
+        #else
+        return false
+        #endif
     }
     static let modelRepo = "argmaxinc/whisperkit-coreml"
     /// Both builds of Whisper large-v3-turbo carry the same 4-bit weights, so the app lists
@@ -164,10 +184,8 @@ actor LocalTranscriptionService {
     }
 
     static func supportedModelNames(selected: String) -> [String] {
-        (ParakeetTranscriber.isSupported ? [ParakeetTranscriber.modelName] : []) + [
-            recommendedFastModelName,
-            turboModelName(selected: selected)
-        ]
+        guard whisperIsSupported else { return [ParakeetTranscriber.modelName] }
+        return [ParakeetTranscriber.modelName, recommendedFastModelName, turboModelName(selected: selected)]
     }
     static let modelPageURL = URL(
         string: "https://huggingface.co/argmaxinc/whisperkit-coreml/tree/main/openai_whisper-large-v3-v20240930_626MB"
@@ -224,11 +242,12 @@ actor LocalTranscriptionService {
 
     static func installedModels() -> [LocalTranscriptionModel] {
         let directory = AppSupportPaths.whisperKitModelsDirectoryURL
-        let urls = (try? FileManager.default.contentsOfDirectory(
+        // A Whisper download from an earlier version is never used on Intel, not even as fallback.
+        let urls = whisperIsSupported ? (try? FileManager.default.contentsOfDirectory(
             at: directory,
             includingPropertiesForKeys: [.isDirectoryKey],
             options: [.skipsHiddenFiles]
-        )) ?? []
+        )) ?? [] : []
 
         let parakeet = ParakeetTranscriber.isInstalled
             ? [LocalTranscriptionModel(id: ParakeetTranscriber.modelName, url: ParakeetTranscriber.modelsDirectoryURL)]
@@ -359,7 +378,15 @@ actor LocalTranscriptionService {
         }
     }
 
-    func transcribe(audioURL: URL, language: String, modelName: String) async throws -> String {
+    /// - Parameter requireSpeech: On for live dictations only. Audio files, including a kept
+    ///   recording the check turned down once (`UnfinishedRecordings`), always reach the model.
+    func transcribe(audioURL: URL, language: String, modelName: String, requireSpeech: Bool = true) async throws -> String {
+        // Every model invents text on a recording without speech (an accidental shortcut), so
+        // none of them runs on one.
+        if requireSpeech, let run = HallucinationFilter.longestVoicedRun(in: audioURL), HallucinationFilter.hasNoSpeech(longestVoicedRun: run) {
+            speechLogger.info("No speech: longest voiced run \(run, format: .fixed(precision: 2)) s, no model run")
+            throw LocalTranscriptionError.noSpeech
+        }
         let resolvedLanguage = language.trimmingCharacters(in: .whitespacesAndNewlines)
         let padded = AudioPadding.paddedCopy(of: audioURL)
         defer { if let padded { try? FileManager.default.removeItem(at: padded) } }
@@ -371,7 +398,14 @@ actor LocalTranscriptionService {
             text = HallucinationFilter.removingTrailingCredits(raw)
         } else {
             let pipeline = try await pipeline(modelName: modelName)
-            text = try await WhisperDictation.transcribe(pipeline, audioPath: audioURL.path)
+            switch try await WhisperDictation.run(pipeline, audioPath: audioURL.path) {
+            case .text(let whisperText):
+                text = whisperText
+            case .inventedOnSilence:
+                // A cough or click that passed the speech check: no speech, so a short
+                // recording goes instead of being kept as "Aufnahme ohne Text".
+                throw LocalTranscriptionError.noSpeech
+            }
         }
 
         guard !text.isEmpty else {
@@ -398,6 +432,7 @@ actor LocalTranscriptionService {
         language: String,
         modelName: String,
         slowPreparationAfter delay: Duration = .seconds(8),
+        requireSpeech: Bool = true,
         onSlowPreparation: @escaping @MainActor () -> Void
     ) async throws -> String {
         let watcher = Task {
@@ -407,7 +442,7 @@ actor LocalTranscriptionService {
             }
         }
         defer { watcher.cancel() }
-        return try await shared.transcribe(audioURL: audioURL, language: language, modelName: modelName)
+        return try await shared.transcribe(audioURL: audioURL, language: language, modelName: modelName, requireSpeech: requireSpeech)
     }
 
     static let slowPreparationMessage = "Sprachmodell wird vorbereitet. Nach einem macOS-Update dauert das einmalig einige Minuten, bitte Blitztext nicht beenden."

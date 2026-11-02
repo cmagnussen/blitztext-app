@@ -17,8 +17,18 @@ enum AppSupportPaths {
         appSupportDirectoryURL.appendingPathComponent(".credentials")
     }
 
+    /// Own modes, besides settings.json (`CustomModeFile`).
+    static var customModesURL: URL {
+        appSupportDirectoryURL.appendingPathComponent("custom-modes.json")
+    }
+
     static var historyURL: URL {
         appSupportDirectoryURL.appendingPathComponent(".history")
+    }
+
+    /// History recorded while `.history` did not open without the Keychain key (`SealedStoreFiles`).
+    static var historyPendingURL: URL {
+        appSupportDirectoryURL.appendingPathComponent(".history-pending")
     }
 
     static var localModelsDirectoryURL: URL {

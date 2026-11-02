@@ -1,11 +1,13 @@
-import Foundation
+import AVFoundation
 
-/// Drops text Whisper invents: subtitle credits from its training data ("Untertitel im
-/// Auftrag des ZDF, 2021") and polite closings on silence ("Thank you.", "Vielen Dank.").
+/// Drops text the speech models invent: subtitle credits from Whisper's training data
+/// ("Untertitel im Auftrag des ZDF, 2021"), doubtful phrases like "Thank you." on a recording
+/// with hardly any speech, and anything at all on a short live dictation without speech, where
+/// Whisper writes "Thank you." and Parakeet "Oh", "Moment." or a French sentence.
 ///
 /// Whisper's no-speech probability would be the natural gate, but WhisperKit reports it
-/// as 0 for these cases, so Blitztext checks how much of the recording is loud enough to
-/// be speech instead.
+/// as 0 for these cases, and Parakeet has none, so Blitztext checks whether the recording
+/// holds a stretch loud enough and long enough to be a word.
 enum HallucinationFilter {
     /// Credits and sign-offs that are never meant as dictation. Normalized, without years.
     static let credits: Set<String> = [
@@ -37,7 +39,8 @@ enum HallucinationFilter {
         "please like and subscribe",
     ]
 
-    /// Short phrases people do say, so they only count as invented on a silent recording.
+    /// Short phrases people do say, so they only count as invented when the recording holds
+    /// hardly any speech: Whisper writes them on a cough or a click that passes the speech check.
     static let doubtfulPhrases: Set<String> = [
         "vielen dank", "danke", "danke schön", "dankeschön", "tschüss", "tschüs",
         "bis zum nächsten mal", "bis bald", "bis dann", "das war s", "ende",
@@ -47,34 +50,111 @@ enum HallucinationFilter {
         "swr", "wdr", "zdf", "ard",
     ]
 
-    /// Less speech than this and a doubtful phrase counts as invented.
-    static let minimumVoicedSeconds = 0.3
+    /// Shorter than this, the longest run of speech is no word: a quick "Ja." is one run of
+    /// about 0.2 s, a click, a chair or a mic bump gives one or two 30 ms frames.
+    static let minimumVoicedSeconds = 0.15
 
-    /// True when the whole transcript is a credit, or a doubtful phrase on a recording
-    /// with hardly any speech.
-    static func isInvented(_ text: String, voicedSeconds: Double) -> Bool {
+    /// Below this longest run, a doubtful phrase counts as invented.
+    static let doubtfulBelowSeconds = 0.3
+
+    /// Only live dictations shorter than this are checked for speech before a model runs: an
+    /// accidental shortcut or tap. A longer recording may just be quiet (a whisper, a voice
+    /// across the room), so it is not thrown away for lack of speech.
+    static let accidentalRecordingSeconds: TimeInterval = 3
+
+    /// True when the whole transcript is a credit.
+    static func isCredit(_ text: String) -> Bool {
+        credits.contains(phraseKey(text))
+    }
+
+    /// True when no run of speech in the recording is long enough to be a word.
+    static func hasNoSpeech(longestVoicedRun: Double) -> Bool {
+        longestVoicedRun < minimumVoicedSeconds
+    }
+
+    /// True when the whole transcript is a credit, or a doubtful phrase on a recording with
+    /// hardly any speech.
+    static func isInvented(_ text: String, longestVoicedRun: Double) -> Bool {
         let key = phraseKey(text)
         guard !key.isEmpty else { return false }
         if credits.contains(key) { return true }
-        return voicedSeconds < minimumVoicedSeconds && doubtfulPhrases.contains(key)
+        return longestVoicedRun < doubtfulBelowSeconds && doubtfulPhrases.contains(key)
     }
 
-    /// Seconds of audio loud enough to be speech: 30 ms frames above about -40 dBFS.
-    static func voicedSeconds(_ samples: [Float], sampleRate: Double = 16_000) -> Double {
-        let frameLength = max(1, Int(sampleRate * 0.03))
-        var voicedFrames = 0
-        var start = 0
-        while start + frameLength <= samples.count {
-            var sum: Float = 0
-            for index in start..<(start + frameLength) {
-                sum += samples[index] * samples[index]
-            }
-            if (sum / Float(frameLength)).squareRoot() > 0.01 {
-                voicedFrames += 1
-            }
-            start += frameLength
+    /// What Whisper's text leaves for a dictation. Nil on hardly any speech when the text is
+    /// invented (a credit or a doubtful phrase on a cough or click), which counts as a dictation
+    /// without speech. A credit on a recording with speech leaves no text instead: someone
+    /// spoke, so the Mac keeps the recording for another try.
+    static func whisperText(_ text: String, longestVoicedRun: Double) -> String? {
+        guard isInvented(text, longestVoicedRun: longestVoicedRun) else { return removingTrailingCredits(text) }
+        return longestVoicedRun < doubtfulBelowSeconds ? nil : ""
+    }
+
+    /// Longest run of speech in samples, see `VoicedRunMeter`.
+    static func longestVoicedRun(_ samples: [Float], sampleRate: Double = 16_000) -> Double {
+        var meter = VoicedRunMeter(sampleRate: sampleRate)
+        meter.add(samples)
+        return meter.longestRun
+    }
+
+    /// Longest run of speech in an audio file, read in pieces. Stops once a run reaches
+    /// `enough`, so a long file with speech is not read to the end. Nil when the file cannot
+    /// be read: then nothing may be dropped for lack of speech.
+    static func longestVoicedRun(in url: URL, enough: Double = minimumVoicedSeconds) -> Double? {
+        guard let file = try? AVAudioFile(forReading: url),
+              let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: 16_384) else { return nil }
+        var meter = VoicedRunMeter(sampleRate: file.processingFormat.sampleRate)
+        while file.framePosition < file.length, meter.longestRun < enough {
+            guard (try? file.read(into: buffer)) != nil else { return nil }
+            guard buffer.frameLength > 0, let channel = buffer.floatChannelData?[0] else { break }
+            meter.add(UnsafeBufferPointer(start: channel, count: Int(buffer.frameLength)))
         }
-        return Double(voicedFrames * frameLength) / sampleRate
+        return meter.longestRun
+    }
+
+    /// Runs of speech in audio fed in pieces of any length: 30 ms frames above about -40 dBFS,
+    /// gaps of up to two frames (60 ms) bridged, so a plosive does not split a word.
+    struct VoicedRunMeter {
+        private let sampleRate: Double
+        private let frameLength: Int
+        private var frameEnergy: Float = 0
+        private var frameFill = 0
+        private var frameIndex = 0
+        private var runStart: Int?
+        private var lastVoiced = 0
+        private var longestFrames = 0
+
+        init(sampleRate: Double) {
+            self.sampleRate = sampleRate
+            frameLength = max(1, Int(sampleRate * 0.03))
+        }
+
+        /// Seconds of the longest run so far, including one still going on.
+        var longestRun: Double {
+            let open = runStart.map { lastVoiced - $0 + 1 } ?? 0
+            return Double(max(longestFrames, open) * frameLength) / sampleRate
+        }
+
+        mutating func add<Samples: Sequence>(_ samples: Samples) where Samples.Element == Float {
+            for sample in samples {
+                frameEnergy += sample * sample
+                frameFill += 1
+                if frameFill == frameLength { endFrame() }
+            }
+        }
+
+        private mutating func endFrame() {
+            if (frameEnergy / Float(frameLength)).squareRoot() > 0.01 {
+                if runStart == nil { runStart = frameIndex }
+                lastVoiced = frameIndex
+            } else if let start = runStart, frameIndex - lastVoiced > 2 {
+                longestFrames = max(longestFrames, lastVoiced - start + 1)
+                runStart = nil
+            }
+            frameIndex += 1
+            frameEnergy = 0
+            frameFill = 0
+        }
     }
 
     /// Removes credits at the end of a transcript ("... bis morgen. Untertitel im Auftrag

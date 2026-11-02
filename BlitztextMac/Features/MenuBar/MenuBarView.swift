@@ -88,10 +88,22 @@ struct MenuBarView: View {
                 if appState.offersTranscriptInstead, let last = appState.lastInsertion {
                     NoticeRow(
                         icon: "arrow.uturn.backward",
-                        title: "Wortgenau statt \(last.mode.displayName)",
+                        title: "Wortgenau statt \(appState.displayName(for: last.mode))",
                         detail: "Ersetzt den eben eingef\u{00FC}gten Text durch dein w\u{00F6}rtliches Diktat.",
                         actionTitle: "Ersetzen",
                         action: { appState.insertTranscriptInstead() }
+                    )
+                }
+
+                ForEach(appState.unfinishedRecordings) { item in
+                    NoticeRow(
+                        icon: "waveform.badge.exclamationmark",
+                        title: "Aufnahme ohne Text",
+                        detail: UnfinishedRecordings.label(for: item) + " Bleibt 24 Stunden gesichert.",
+                        actionTitle: "Transkribieren",
+                        action: { appState.transcribeUnfinished(item) },
+                        secondaryTitle: "L\u{00F6}schen",
+                        secondaryAction: { appState.deleteUnfinished(item) }
                     )
                 }
 
@@ -140,24 +152,8 @@ struct MenuBarView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     SectionHeader(title: "Modi")
 
-                    VStack(spacing: 0) {
-                        ForEach(Array(WorkflowType.mainMenuCases.enumerated()), id: \.element) { index, type in
-                            if index > 0 {
-                                Divider().opacity(0.5).padding(.leading, 62).padding(.trailing, 12)
-                            }
-                            WorkflowRowView(
-                                type: type,
-                                enabled: appState.isWorkflowAvailable(type),
-                                customName: appState.displayName(for: type),
-                                subtitle: appState.workflowSubtitle(for: type),
-                                hotkeyLabel: appState.hotkeyLabel(for: type)
-                            ) {
-                                appState.startWorkflow(type)
-                            }
-                        }
-                    }
-                    .padding(.vertical, 4)
-                    .glassPanel()
+                    modeList
+                        .glassPanel()
                 }
 
                 if let entry = appState.history.entries.first {
@@ -168,6 +164,42 @@ struct MenuBarView: View {
             .padding(.bottom, 16)
 
             footerBar
+        }
+    }
+
+    /// Up to this many modes show at once; with more own modes the list scrolls, so the
+    /// window stays on the screen.
+    private static let visibleModeRows = 7
+
+    @ViewBuilder
+    private var modeList: some View {
+        let modes = appState.menuModes
+        let list = VStack(spacing: 0) {
+            ForEach(Array(modes.enumerated()), id: \.element) { index, type in
+                if index > 0 {
+                    Divider().opacity(0.5).padding(.leading, 62).padding(.trailing, 12)
+                }
+                WorkflowRowView(
+                    type: type,
+                    enabled: appState.isWorkflowAvailable(type),
+                    customName: appState.displayName(for: type),
+                    subtitle: appState.workflowSubtitle(for: type),
+                    hotkeyLabel: appState.hotkeyLabel(for: type)
+                ) {
+                    appState.startWorkflow(type)
+                }
+            }
+        }
+        .padding(.vertical, 4)
+
+        if modes.count > Self.visibleModeRows {
+            // Half a row more than fits shows that there is more below.
+            ScrollView {
+                list
+            }
+            .frame(height: (CGFloat(Self.visibleModeRows) + 0.5) * 53)
+        } else {
+            list
         }
     }
 
