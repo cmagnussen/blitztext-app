@@ -81,6 +81,12 @@ enum HallucinationFilter {
         return longestVoicedRun < doubtfulBelowSeconds && doubtfulPhrases.contains(key)
     }
 
+    /// What Whisper's text leaves for a dictation: nil when it is invented (a credit, or a
+    /// doubtful phrase on hardly any speech), which counts as a dictation without speech.
+    static func whisperText(_ text: String, longestVoicedRun: Double) -> String? {
+        isInvented(text, longestVoicedRun: longestVoicedRun) ? nil : removingTrailingCredits(text)
+    }
+
     /// Longest run of speech in samples, see `VoicedRunMeter`.
     static func longestVoicedRun(_ samples: [Float], sampleRate: Double = 16_000) -> Double {
         var meter = VoicedRunMeter(sampleRate: sampleRate)

@@ -58,7 +58,8 @@ extension TranscriptHistoryEntry {
     }
 }
 
-/// Recent results, stored only on this Mac and encrypted with the Keychain file key.
+/// Recent results, stored only on this Mac and encrypted with the Keychain file key
+/// (`SealedStoreFiles`).
 @Observable
 @MainActor
 final class TranscriptHistoryStore {
@@ -67,23 +68,43 @@ final class TranscriptHistoryStore {
     private(set) var entries: [TranscriptHistoryEntry] = []
     private var retention: HistoryRetention
     private let isPersistent: Bool
-    /// The stored history did not open because the Keychain did not give the file key this
-    /// session: the file stays untouched and this session saves nothing.
+    private let files: SealedStoreFiles
+    /// The stored history did not open because the Keychain did not give the file key: the
+    /// file stays untouched, and what this session records waits in the side file until the
+    /// key is back (`SealedStoreFiles`).
     private var isLockedOut = false
 
-    /// - Parameter persistent: False for snapshot and check runs: no file, no Keychain.
-    init(retention: HistoryRetention, persistent: Bool = true) {
+    /// - Parameters:
+    ///   - persistent: False for snapshot and check runs: no file, no Keychain.
+    ///   - files: Where the history lives; tests pass a folder of their own.
+    init(retention: HistoryRetention, persistent: Bool = true, files: SealedStoreFiles = .history) {
         self.retention = retention
         isPersistent = persistent
-        // The save in `prune` also moves a file with a machine-derived key to the Keychain key.
+        self.files = files
         if persistent {
-            switch Self.load() {
-            case .entries(let stored): entries = stored
-            case .lockedOut: isLockedOut = true
+            switch files.readMain([TranscriptHistoryEntry].self) {
+            case .value(let stored):
+                entries = stored
+            case .missing:
+                break
+            case .unreadable:
+                // Most likely sealed with the Keychain key the Keychain did not give: leave the
+                // file. Another Mac's key or a later format: keep it aside, never overwrite it.
+                if files.keyIsUnavailable() {
+                    isLockedOut = true
+                } else {
+                    files.moveMainAside()
+                }
+            }
+            // Recorded while an earlier session could not open the history.
+            if let pending = files.readPending([TranscriptHistoryEntry].self) {
+                entries = LockedOutMerge.merged(entries, pending, date: \.createdAt)
             }
         } else {
             entries = Self.toolRunEntries
         }
+        // The save in `prune` also merges the side file and moves a file with a
+        // machine-derived key to the Keychain key.
         prune()
     }
 
@@ -107,7 +128,9 @@ final class TranscriptHistoryStore {
     func clear() {
         entries = []
         guard isPersistent else { return }
-        try? FileManager.default.removeItem(at: AppSupportPaths.historyURL)
+        files.removeMain()
+        files.removePending()
+        isLockedOut = false
     }
 
     func updateRetention(_ newRetention: HistoryRetention) {
@@ -122,54 +145,51 @@ final class TranscriptHistoryStore {
             return
         }
 
-        let pruned = Array(entries.filter { now.timeIntervalSince($0.createdAt) < maxAge }.prefix(Self.maxEntries))
-        if pruned != entries {
-            entries = pruned
-        }
-        save()
+        entries = pruned(entries, maxAge: maxAge, now: now)
+        save(now: now)
     }
 
-    private func save() {
-        guard isPersistent, !isLockedOut else { return }
-        guard !entries.isEmpty else {
-            try? FileManager.default.removeItem(at: AppSupportPaths.historyURL)
+    private func pruned(_ entries: [TranscriptHistoryEntry], maxAge: TimeInterval, now: Date) -> [TranscriptHistoryEntry] {
+        Array(entries.filter { now.timeIntervalSince($0.createdAt) < maxAge }.prefix(Self.maxEntries))
+    }
+
+    private func save(now: Date = Date()) {
+        guard isPersistent else { return }
+        if isLockedOut {
+            unlockIfKeyIsBack(now: now)
+        }
+        // History is a convenience; a failed write must never block pasting.
+        if isLockedOut {
+            // Nothing recorded now is lost: it waits in the side file until the key is back.
+            if entries.isEmpty { files.removePending() } else { try? files.writePending(entries) }
             return
         }
-
-        do {
-            try AppSupportPaths.ensureAppSupportDirectoryExists()
-            let data = try JSONEncoder().encode(entries)
-            try KeychainService.sealData(data).write(to: AppSupportPaths.historyURL, options: .atomic)
-        } catch {
-            // History is a convenience; a failed write must never block pasting.
+        guard !entries.isEmpty else {
+            files.removeMain()
+            files.removePending()
+            return
+        }
+        if (try? files.writeMain(entries)) != nil {
+            files.removePending()
         }
     }
 
-    private enum Loaded {
-        case entries([TranscriptHistoryEntry])
-        case lockedOut
-    }
-
-    private static func load() -> Loaded {
-        guard let encrypted = try? Data(contentsOf: AppSupportPaths.historyURL) else { return .entries([]) }
-        if let data = KeychainService.openData(encrypted),
-           let entries = try? JSONDecoder().decode([TranscriptHistoryEntry].self, from: data) {
-            return .entries(entries)
+    /// The Keychain gives the key again (asked again at most every few minutes, without UI):
+    /// read the main file and take over what waited in the side file.
+    private func unlockIfKeyIsBack(now: Date) {
+        guard !files.keyIsUnavailable() else { return }
+        switch files.readMain([TranscriptHistoryEntry].self) {
+        case .value(let stored):
+            entries = LockedOutMerge.merged(stored, entries, date: \.createdAt)
+            if let maxAge = retention.maxAge {
+                entries = pruned(entries, maxAge: maxAge, now: now)
+            }
+        case .missing:
+            break
+        case .unreadable:
+            files.moveMainAside(now: now)
         }
-        // Most likely sealed with the Keychain key the Keychain did not give (locked, denied
-        // prompt): leave the file, a later launch reads it.
-        if KeychainService.fileKeyIsUnavailable { return .lockedOut }
-        // The save on launch would delete a file this build cannot read with the key it has
-        // (another Mac's key, a later format): keep it aside instead, like the meetings.
-        moveUnreadableFileAside()
-        return .entries([])
-    }
-
-    private static func moveUnreadableFileAside() {
-        let url = AppSupportPaths.historyURL
-        let stamp = Int(Date().timeIntervalSince1970)
-        let aside = url.deletingLastPathComponent().appendingPathComponent(url.lastPathComponent + ".unreadable-\(stamp)")
-        try? FileManager.default.moveItem(at: url, to: aside)
+        isLockedOut = false
     }
 
     /// Samples for snapshot runs, nothing for other tool runs.

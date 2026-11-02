@@ -213,6 +213,9 @@ final class AppState {
         KeychainService.removeLegacyServerCredentials()
         AudioRecorder.removeLeftoverRecordings()
         refreshUnfinishedRecordings()
+        NotificationCenter.default.addObserver(forName: UnfinishedRecordings.didChange, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshUnfinishedRecordings() }
+        }
         preferParakeetIfNothingInstalled()
         replaceWhisperOnIntel()
         autoSelectFastLocalModelIfNeeded()
@@ -997,6 +1000,11 @@ final class AppState {
 
     /// Transcribes a recording again on the audio file page; with text it is deleted.
     func transcribeUnfinished(_ item: UnfinishedRecordings.Item) {
+        // The sweep after a dictation may have deleted it since the menu listed it.
+        guard FileManager.default.fileExists(atPath: item.url.path) else {
+            refreshUnfinishedRecordings()
+            return
+        }
         audioFile.transcribe(item.url, appState: self, title: UnfinishedRecordings.label(for: item), deleteAfterSuccess: true)
         page = .audioFile
     }

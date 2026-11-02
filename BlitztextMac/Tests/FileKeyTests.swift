@@ -61,25 +61,33 @@ final class FileKeyTests: XCTestCase {
         XCTAssertNil(KeychainService.resealed(other, with: SymmetricKey(size: .bits256), legacyKeys: [SymmetricKey(size: .bits256)]))
     }
 
-    /// A Keychain that cannot give the key is asked once per session, not at every save
-    /// (review of #68: a prompt with every dictation).
-    func testAnUnavailableKeychainIsAskedOnce() {
+    /// A Keychain that cannot give the key is not asked at every save (review of #68: a
+    /// prompt with every dictation), but again after a few minutes, without UI (review of #69:
+    /// a keychain unlocked later must count).
+    func testAnUnavailableKeychainIsAskedAgainOnlyAfterTheRetryInterval() {
         var cache = KeychainService.FileKeyCache()
-        var asked = 0
-        for _ in 0..<3 {
-            XCTAssertNil(cache.key { asked += 1; return nil })
+        let start = Date(timeIntervalSince1970: 1_793_610_660)
+        var firstAsks: [Bool] = []
+        for seconds in [0.0, 10, 60, 299] {
+            XCTAssertNil(cache.key(now: start.addingTimeInterval(seconds)) { firstAsks.append($0); return nil })
         }
-        XCTAssertEqual(asked, 1)
+        XCTAssertEqual(firstAsks, [true])
+
+        let key = SymmetricKey(size: .bits256)
+        let later = start.addingTimeInterval(KeychainService.FileKeyCache.retryInterval)
+        XCTAssertEqual(cache.key(now: later) { firstAsks.append($0); return key }.map(raw), raw(key))
+        XCTAssertEqual(firstAsks, [true, false])
     }
 
     /// After a Jamf update the restarted app could not add the key ("no keychain found"):
-    /// the Keychain is asked once, and the rest of the session uses the machine key.
-    func testAKeychainThatRefusesTheNewKeyIsNotAskedAgainThisSession() {
+    /// within the retry interval the Keychain is not asked again.
+    func testAKeychainThatRefusesTheNewKeyIsNotAskedAgainRightAway() {
         var cache = KeychainService.FileKeyCache()
+        let start = Date(timeIntervalSince1970: 1_793_610_660)
         var reads = 0
         var adds = 0
-        for _ in 0..<3 {
-            let key = cache.key {
+        for seconds in [0.0, 1, 2] {
+            let key = cache.key(now: start.addingTimeInterval(seconds)) { _ in
                 KeychainService.resolveFileKey(
                     read: { reads += 1; return .missing },
                     add: { _ in adds += 1; return errSecNoDefaultKeychain }
@@ -95,9 +103,17 @@ final class FileKeyTests: XCTestCase {
         var cache = KeychainService.FileKeyCache()
         let key = SymmetricKey(size: .bits256)
         var asked = 0
-        XCTAssertEqual(cache.key { asked += 1; return key }.map(raw), raw(key))
-        XCTAssertEqual(cache.key { asked += 1; return nil }.map(raw), raw(key))
+        XCTAssertEqual(cache.key { _ in asked += 1; return key }.map(raw), raw(key))
+        XCTAssertEqual(cache.key(now: Date().addingTimeInterval(3600)) { _ in asked += 1; return nil }.map(raw), raw(key))
         XCTAssertEqual(asked, 1)
+    }
+
+    /// Only the first read of a normal launch may show the system prompt (to unlock a locked
+    /// keychain). Never after the installer restart (`-BlitztextLaunchedByInstaller YES`).
+    func testOnlyTheFirstReadOfANormalLaunchMayShowUI() {
+        XCTAssertTrue(KeychainService.readMayShowUI(isFirstAsk: true, launchedByInstaller: false))
+        XCTAssertFalse(KeychainService.readMayShowUI(isFirstAsk: false, launchedByInstaller: false))
+        XCTAssertFalse(KeychainService.readMayShowUI(isFirstAsk: true, launchedByInstaller: true))
     }
 
     private func raw(_ key: SymmetricKey) -> Data {

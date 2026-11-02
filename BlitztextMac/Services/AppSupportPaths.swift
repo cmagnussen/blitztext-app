@@ -26,6 +26,11 @@ enum AppSupportPaths {
         appSupportDirectoryURL.appendingPathComponent(".history")
     }
 
+    /// History recorded while `.history` did not open without the Keychain key (`SealedStoreFiles`).
+    static var historyPendingURL: URL {
+        appSupportDirectoryURL.appendingPathComponent(".history-pending")
+    }
+
     static var localModelsDirectoryURL: URL {
         appSupportDirectoryURL.appendingPathComponent("models", isDirectory: true)
     }

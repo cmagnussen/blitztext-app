@@ -109,38 +109,68 @@ enum KeychainService {
         }
     }
 
-    /// The answer of the Keychain, asked once per session. A Keychain that cannot give the key
-    /// (locked, denied prompt) is not asked again: otherwise every save, at every dictation and
-    /// menu opening, could bring the prompt back and take the focus from the paste.
+    /// The answer of the Keychain. A key that was found is kept for the session. A Keychain
+    /// that cannot give one (locked, denied prompt, a session outside the user's keychain list)
+    /// is left alone for `retryInterval` and then asked again, without UI: every save at every
+    /// dictation must not bring a prompt back, but a keychain unlocked later must still count.
     struct FileKeyCache {
         private enum State {
             case unknown
             case available(SymmetricKey)
-            case unavailable
+            case unavailable(since: Date)
         }
+
+        static let retryInterval: TimeInterval = 5 * 60
 
         private var state = State.unknown
 
-        mutating func key(resolve: () -> SymmetricKey?) -> SymmetricKey? {
+        /// - Parameter resolve: Gets `true` for the first question of the session, the only one
+        ///   that may show UI (see `readMayShowUI`).
+        mutating func key(now: Date = Date(), resolve: (_ isFirstAsk: Bool) -> SymmetricKey?) -> SymmetricKey? {
+            let isFirstAsk: Bool
             switch state {
             case .available(let key):
                 return key
-            case .unavailable:
-                return nil
+            case .unavailable(let since):
+                guard now.timeIntervalSince(since) >= Self.retryInterval else { return nil }
+                isFirstAsk = false
             case .unknown:
-                let key = resolve()
-                state = key.map { .available($0) } ?? .unavailable
-                return key
+                isFirstAsk = true
             }
+            let key = resolve(isFirstAsk)
+            state = key.map { .available($0) } ?? .unavailable(since: now)
+            return key
         }
     }
 
-    /// True when the Keychain did not give the file key this session. A file that does not
-    /// open may then be sealed with it: the stores leave it as it is and write nothing, until
-    /// a later launch can read it. Without the key, new files are sealed with the machine key,
-    /// which the next launch still reads and moves to the Keychain key.
+    /// True when the Keychain did not give the file key (asked again at most every
+    /// `FileKeyCache.retryInterval`). A file that does not open may then be sealed with it: the
+    /// stores leave it as it is and keep what this session records in a side file with the
+    /// machine key (`SealedStoreFiles`), merged in once the key is back.
     static var fileKeyIsUnavailable: Bool {
         fileKey == nil
+    }
+
+    /// Seals a side file written while the Keychain key is unavailable, with the machine key
+    /// that every launch can open (`openData` tries it).
+    static func sealWithMachineKey(_ data: Data) throws -> Data {
+        guard let combined = try AES.GCM.seal(data, using: machineKey).combined else {
+            throw KeychainError.saveFailed(-1)
+        }
+        return combined
+    }
+
+    /// The Jamf postinstall restart passes `-BlitztextLaunchedByInstaller YES`. Such a session
+    /// may run outside the user's keychain list, where macOS offered to reset the keychain.
+    static var launchedByInstaller: Bool {
+        UserDefaults.standard.bool(forKey: "BlitztextLaunchedByInstaller")
+    }
+
+    /// The first read of a normal launch may show the system prompt, e.g. to unlock a locked
+    /// login keychain; otherwise those Macs would never get their key. Never after an
+    /// installer restart, and never on a retry.
+    static func readMayShowUI(isFirstAsk: Bool, launchedByInstaller: Bool) -> Bool {
+        isFirstAsk && !launchedByInstaller
     }
 
     // MARK: - Keychain
@@ -148,16 +178,20 @@ enum KeychainService {
     private static var fileKey: SymmetricKey? {
         lock.lock()
         defer { lock.unlock() }
-        return fileKeyCache.key {
-            withoutUserInteraction { resolveFileKey(read: readStoredKey, add: addKey) }
+        let installer = launchedByInstaller
+        return fileKeyCache.key { isFirstAsk in
+            let interactive = readMayShowUI(isFirstAsk: isFirstAsk, launchedByInstaller: installer)
+            return resolveFileKey(
+                read: { interactive ? readStoredKey(interactive: true) : withoutUserInteraction { readStoredKey(interactive: false) } },
+                // Adding a new key never shows UI: started outside the user's normal session (the
+                // Jamf restart after an update), macOS showed "Schlüsselbund nicht gefunden" for
+                // it, with a button that resets the user's keychain.
+                add: { data in withoutUserInteraction { addKey(data) } }
+            )
         }
     }
 
-    /// The file key calls never show UI. Started outside the user's normal session (the Jamf
-    /// postinstall restart after an update), macOS showed "Schlüsselbund nicht gefunden" for
-    /// the new key, with a button that resets the user's keychain. Without interaction the call
-    /// fails instead, the key counts as unavailable for the session, and the files keep the
-    /// machine key, which every build reads.
+    /// Keychain calls inside fail instead of showing UI.
     private static func withoutUserInteraction<T>(_ body: () -> T) -> T {
         var previous = DarwinBoolean(true)
         let known = SecKeychainGetUserInteractionAllowed(&previous) == errSecSuccess
@@ -166,11 +200,13 @@ enum KeychainService {
         return body()
     }
 
-    private static func readStoredKey() -> StoredKey {
+    private static func readStoredKey(interactive: Bool) -> StoredKey {
         var query = baseQuery()
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
-        query[kSecUseAuthenticationUI as String] = kSecUseAuthenticationUIFail
+        if !interactive {
+            query[kSecUseAuthenticationUI as String] = kSecUseAuthenticationUIFail
+        }
         var result: AnyObject?
         switch SecItemCopyMatching(query as CFDictionary, &result) {
         case errSecSuccess:

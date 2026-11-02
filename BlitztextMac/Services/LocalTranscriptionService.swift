@@ -398,7 +398,14 @@ actor LocalTranscriptionService {
             text = HallucinationFilter.removingTrailingCredits(raw)
         } else {
             let pipeline = try await pipeline(modelName: modelName)
-            text = try await WhisperDictation.transcribe(pipeline, audioPath: audioURL.path)
+            switch try await WhisperDictation.run(pipeline, audioPath: audioURL.path) {
+            case .text(let whisperText):
+                text = whisperText
+            case .inventedOnSilence:
+                // A cough or click that passed the speech check: no speech, so a short
+                // recording goes instead of being kept as "Aufnahme ohne Text".
+                throw LocalTranscriptionError.noSpeech
+            }
         }
 
         guard !text.isEmpty else {

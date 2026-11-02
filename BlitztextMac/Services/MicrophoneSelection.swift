@@ -46,8 +46,23 @@ enum MicrophoneSelection {
     }
 
     /// True while a Blitztext meeting records (`MeetingController.recordingID`). The meeting
-    /// records from the macOS default input, so a dictation then leaves it alone.
-    static var meetingIsRecording = false
+    /// records from the macOS default input, so a dictation then leaves it alone. A switch a
+    /// dictation left during the meeting is undone once it ends.
+    static var meetingIsRecording = false {
+        didSet {
+            if restoreIsDueAfterMeeting(wasRecording: oldValue, isRecording: meetingIsRecording, dictationIsRecording: dictationIsRecording) {
+                restore()
+            }
+        }
+    }
+
+    /// True while a dictation records (`AudioRecorder`).
+    static var dictationIsRecording = false
+
+    /// A meeting ended and no dictation still uses the chosen microphone.
+    static func restoreIsDueAfterMeeting(wasRecording: Bool, isRecording: Bool, dictationIsRecording: Bool) -> Bool {
+        wasRecording && !isRecording && !dictationIsRecording
+    }
 
     /// Makes the chosen microphone the default input for a dictation. Meetings never call it:
     /// a call running at the same time keeps its microphone, and while a meeting records a
@@ -73,9 +88,10 @@ enum MicrophoneSelection {
         !preferredUID.isEmpty && !meetingIsRecording
     }
 
-    /// Puts the previous input back after a recording, and at launch after a crash.
+    /// Puts the previous input back after a recording, and at launch after a crash. Not while
+    /// a meeting records (started during the dictation): it keeps its input until it ends.
     static func restore() {
-        guard let change = pendingSwitch else { return }
+        guard !meetingIsRecording, let change = pendingSwitch else { return }
         pendingSwitch = nil
         let currentUID = defaultInput.flatMap { string($0, kAudioDevicePropertyDeviceUID) }
         guard shouldRestore(currentUID: currentUID, after: change),

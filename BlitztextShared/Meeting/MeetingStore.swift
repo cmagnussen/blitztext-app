@@ -74,17 +74,14 @@ struct MeetingRecord: Codable, Equatable, Identifiable {
 }
 
 /// Meetings stay on the device: on the iPhone protected by iOS Data Protection, on the Mac
-/// encrypted like the history, with a key derived from this Mac (`KeychainService`).
+/// encrypted like the history, with the Keychain file key (`KeychainService`,
+/// `SealedStoreFiles`).
 @Observable
 @MainActor
 final class MeetingStore {
     private(set) var meetings: [MeetingRecord] = []
     /// False for previews and snapshots: nothing is read from or written to disk.
     private let isPersistent: Bool
-    /// The stored meetings did not open because the Keychain did not give the file key this
-    /// session: the file stays untouched, nothing is written (so no meeting audio is deleted
-    /// as saved), until a later launch can read it.
-    private var isLockedOut = false
 
     nonisolated static var directoryURL: URL {
         #if os(macOS)
@@ -96,50 +93,83 @@ final class MeetingStore {
     }
 
     #if os(macOS)
-    nonisolated private static var fileURL: URL { directoryURL.appendingPathComponent(".meetings") }
+    private let files: SealedStoreFiles
+    /// The stored meetings did not open because the Keychain did not give the file key: the
+    /// file stays untouched, and the meetings of this session wait in the side file until the
+    /// key is back (`SealedStoreFiles`). They are on disk there, so their audio may go.
+    private var isLockedOut = false
+
+    nonisolated static var files: SealedStoreFiles {
+        .keychain(
+            main: directoryURL.appendingPathComponent(".meetings"),
+            pending: directoryURL.appendingPathComponent(".meetings-pending")
+        )
+    }
+
+    /// - Parameter files: Where the meetings live; tests pass a folder of their own.
+    init(persistent: Bool = true, files: SealedStoreFiles = MeetingStore.files) {
+        isPersistent = persistent
+        self.files = files
+        guard persistent else { return }
+        switch files.readMain([MeetingRecord].self) {
+        case .value(let stored):
+            meetings = stored
+        case .missing:
+            break
+        case .unreadable:
+            // Most likely sealed with the Keychain key the Keychain did not give: leave the
+            // file. Another Mac's key or a later format: keep it aside, never overwrite it.
+            if files.keyIsUnavailable() {
+                isLockedOut = true
+            } else {
+                files.moveMainAside()
+            }
+        }
+        // Recorded while an earlier session could not open the meetings.
+        if let pending = files.readPending([MeetingRecord].self) {
+            meetings = LockedOutMerge.merged(meetings, pending, date: \.createdAt)
+            save()
+        }
+        migrateSpeakerLabels()
+        // Meetings saved with a machine-derived key move to the Keychain key now, not only
+        // with the next change.
+        if !isLockedOut {
+            files.migrateLegacy(files.mainURL)
+        }
+    }
     #else
     nonisolated private static var fileURL: URL { directoryURL.appendingPathComponent("meetings.json") }
-    #endif
 
     init(persistent: Bool = true) {
         isPersistent = persistent
         guard persistent, FileManager.default.fileExists(atPath: Self.fileURL.path) else { return }
-        if let data = Self.readStoredData(),
+        if let data = try? Data(contentsOf: Self.fileURL),
            let meetings = try? JSONDecoder().decode([MeetingRecord].self, from: data) {
             self.meetings = meetings
         } else {
-            #if os(macOS)
-            if KeychainService.fileKeyIsUnavailable {
-                isLockedOut = true
-                return
-            }
-            #endif
-            // Never overwrite meetings that only this build cannot read (another Mac's key,
-            // a later format): keep the file aside so they can still be recovered.
-            Self.moveUnreadableFileAside()
+            // Never overwrite meetings that only this build cannot read (a later format):
+            // keep the file aside so they can still be recovered.
+            let stamp = Int(Date().timeIntervalSince1970)
+            let aside = Self.fileURL.deletingLastPathComponent()
+                .appendingPathComponent(Self.fileURL.lastPathComponent + ".unreadable-\(stamp)")
+            try? FileManager.default.moveItem(at: Self.fileURL, to: aside)
         }
         migrateSpeakerLabels()
-        #if os(macOS)
-        // Meetings saved with a machine-derived key move to the Keychain key now, not only
-        // with the next change.
-        KeychainService.migrateIfLegacy(at: Self.fileURL)
-        #endif
     }
+    #endif
 
     #if DEBUG
     /// The stored meetings for debug checks: reads only, never moves an unreadable file aside.
     static func readWithoutRepair() -> [MeetingRecord]? {
-        guard let data = readStoredData() else { return nil }
+        #if os(macOS)
+        if case .value(let stored) = files.readMain([MeetingRecord].self) { return stored }
+        return nil
+        #else
+        guard let data = try? Data(contentsOf: fileURL) else { return nil }
         return try? JSONDecoder().decode([MeetingRecord].self, from: data)
+        #endif
     }
     #endif
-
-    private static func moveUnreadableFileAside() {
-        let stamp = Int(Date().timeIntervalSince1970)
-        let aside = fileURL.deletingLastPathComponent()
-            .appendingPathComponent(fileURL.lastPathComponent + ".unreadable-\(stamp)")
-        try? FileManager.default.moveItem(at: fileURL, to: aside)
-    }
 
     /// Summaries written before speakers became "Person N" still name them "Sprecher N".
     private func migrateSpeakerLabels() {
@@ -191,28 +221,48 @@ final class MeetingStore {
     @discardableResult
     private func save() -> Bool {
         guard isPersistent else { return true }
-        guard !isLockedOut else { return false }
+        #if os(macOS)
+        if isLockedOut {
+            unlockIfKeyIsBack()
+        }
         do {
-            try FileManager.default.createDirectory(at: Self.directoryURL, withIntermediateDirectories: true)
-            let data = try JSONEncoder().encode(meetings)
-            #if os(macOS)
-            try KeychainService.sealData(data).write(to: Self.fileURL, options: .atomic)
-            #else
-            // "Until first unlock": processing may finish while the phone is locked.
-            try data.write(to: Self.fileURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
-            #endif
+            if isLockedOut {
+                try files.writePending(meetings)
+            } else {
+                try files.writeMain(meetings)
+                files.removePending()
+            }
             return true
         } catch {
             return false
         }
-    }
-
-    private static func readStoredData() -> Data? {
-        guard let stored = try? Data(contentsOf: fileURL) else { return nil }
-        #if os(macOS)
-        return KeychainService.openData(stored)
         #else
-        return stored
+        do {
+            try FileManager.default.createDirectory(at: Self.directoryURL, withIntermediateDirectories: true)
+            let data = try JSONEncoder().encode(meetings)
+            // "Until first unlock": processing may finish while the phone is locked.
+            try data.write(to: Self.fileURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+            return true
+        } catch {
+            return false
+        }
         #endif
     }
+
+    #if os(macOS)
+    /// The Keychain gives the key again (asked again at most every few minutes, without UI):
+    /// read the main file and take over the meetings that waited in the side file.
+    private func unlockIfKeyIsBack() {
+        guard !files.keyIsUnavailable() else { return }
+        switch files.readMain([MeetingRecord].self) {
+        case .value(let stored):
+            meetings = LockedOutMerge.merged(stored, meetings, date: \.createdAt)
+        case .missing:
+            break
+        case .unreadable:
+            files.moveMainAside()
+        }
+        isLockedOut = false
+    }
+    #endif
 }

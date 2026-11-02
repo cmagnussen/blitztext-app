@@ -9,7 +9,22 @@ import WhisperKit
 /// No dictionary prompt: with WhisperKit 0.18 and Large v3 Turbo, any `promptTokens`
 /// (even a single word) made the decoder stop at once and return an empty text.
 enum WhisperDictation {
+    enum Outcome: Equatable {
+        case text(String)
+        /// Only a phrase Whisper invents on silence ("Thank you."), on a recording with hardly
+        /// any speech: the Mac treats it as a dictation without speech, so a short one goes.
+        case inventedOnSilence
+    }
+
+    /// The text, empty when Whisper most likely invented it.
     static func transcribe(_ pipeline: WhisperKit, audioPath: String) async throws -> String {
+        switch try await run(pipeline, audioPath: audioPath) {
+        case .text(let text): return text
+        case .inventedOnSilence: return ""
+        }
+    }
+
+    static func run(_ pipeline: WhisperKit, audioPath: String) async throws -> Outcome {
         let samples = try AudioProcessor.loadAudioAsFloatArray(fromPath: audioPath)
         // No fixed language: Whisper follows a given language strictly and turns English
         // speech into German. Detection keeps every dictation in its spoken language.
@@ -20,9 +35,9 @@ enum WhisperDictation {
             .joined(separator: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
-        if HallucinationFilter.isInvented(text, longestVoicedRun: HallucinationFilter.longestVoicedRun(samples)) {
-            return ""
+        guard let kept = HallucinationFilter.whisperText(text, longestVoicedRun: HallucinationFilter.longestVoicedRun(samples)) else {
+            return .inventedOnSilence
         }
-        return HallucinationFilter.removingTrailingCredits(text)
+        return .text(kept)
     }
 }

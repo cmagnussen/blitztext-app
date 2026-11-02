@@ -21,6 +21,15 @@ final class HallucinationFilterTests: XCTestCase {
         XCTAssertFalse(HallucinationFilter.isInvented("", longestVoicedRun: 0))
     }
 
+    /// Review of #69: Whisper's invented phrase on a cough or click counts as no speech, so a
+    /// short recording goes instead of being kept as "Aufnahme ohne Text"; real text stays.
+    func testWhisperTextOnHardlyAnySpeechCountsAsNoSpeech() {
+        XCTAssertNil(HallucinationFilter.whisperText("Thank you.", longestVoicedRun: 0.2))
+        XCTAssertNil(HallucinationFilter.whisperText("Untertitel im Auftrag des ZDF, 2021", longestVoicedRun: 5))
+        XCTAssertEqual(HallucinationFilter.whisperText("Vielen Dank.", longestVoicedRun: 0.9), "Vielen Dank.")
+        XCTAssertEqual(HallucinationFilter.whisperText("Bis morgen.", longestVoicedRun: 0.2), "Bis morgen.")
+    }
+
     func testMeasuresVoicedAudio() {
         let silence = [Float](repeating: 0, count: 16_000)
         let roomNoise = (0..<16_000).map { _ in Float.random(in: -0.003...0.003) }

@@ -66,16 +66,23 @@ enum UnfinishedRecordings {
             .sorted { $0.recordedAt > $1.recordedAt }
     }
 
+    /// Posted when the sweep deleted a recording, so an open menu drops its row.
+    static let didChange = Notification.Name("app.blitztext.unfinished-recordings-changed")
+
     /// Deletes recordings older than `keptFor`, without reading them.
     @MainActor static func removeExpired(now: Date = Date()) {
         let files = (try? FileManager.default.contentsOfDirectory(
             at: directoryURL, includingPropertiesForKeys: [.creationDateKey]
         )) ?? []
+        var removed = false
         for url in files where url.pathExtension == "wav" && !inProgress.contains(url) {
             let recordedAt = (try? url.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? now
-            if isExpired(recordedAt, now: now) {
-                try? FileManager.default.removeItem(at: url)
+            if isExpired(recordedAt, now: now), (try? FileManager.default.removeItem(at: url)) != nil {
+                removed = true
             }
+        }
+        if removed {
+            NotificationCenter.default.post(name: didChange, object: nil)
         }
     }
 

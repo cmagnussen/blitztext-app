@@ -11,6 +11,15 @@ final class MicrophoneSelectionTests: XCTestCase {
         XCTAssertFalse(MicrophoneSelection.shouldSwitch(preferredUID: "", meetingIsRecording: false))
     }
 
+    /// Review of #69: a meeting started while a dictation recorded keeps its input; the switch
+    /// is undone when the meeting ends, unless a dictation still records.
+    func testRestoreWaitsForTheMeetingToEnd() {
+        XCTAssertTrue(MicrophoneSelection.restoreIsDueAfterMeeting(wasRecording: true, isRecording: false, dictationIsRecording: false))
+        XCTAssertFalse(MicrophoneSelection.restoreIsDueAfterMeeting(wasRecording: true, isRecording: false, dictationIsRecording: true))
+        XCTAssertFalse(MicrophoneSelection.restoreIsDueAfterMeeting(wasRecording: false, isRecording: true, dictationIsRecording: false))
+        XCTAssertFalse(MicrophoneSelection.restoreIsDueAfterMeeting(wasRecording: false, isRecording: false, dictationIsRecording: false))
+    }
+
     func testRestoresWhileTheChosenMicrophoneIsStillTheInput() {
         XCTAssertTrue(MicrophoneSelection.shouldRestore(currentUID: "USB-Headset", after: change))
     }

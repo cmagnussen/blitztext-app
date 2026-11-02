@@ -429,7 +429,9 @@ final class MeetingController {
                     try? FileManager.default.removeItem(at: record.audioURL)
                     try? FileManager.default.removeItem(at: record.systemAudioURL)
                 } else {
-                    notice = "Das Meeting lie\u{00DF} sich nicht sichern, zum Beispiel weil der Speicher voll ist. Die Aufnahme bleibt erhalten."
+                    // Only a write that really failed: without the Keychain key the meeting
+                    // waits in a side file (`SealedStoreFiles`), which counts as saved.
+                    notice = "Das Meeting lie\u{00DF} sich nicht sichern. Die Aufnahme bleibt auf diesem Mac erhalten."
                 }
                 update(.showing(record.id))
             } catch is CancellationError {

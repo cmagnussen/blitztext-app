@@ -67,6 +67,7 @@ final class AudioRecorder: NSObject, AVAudioRecorderDelegate, DictationRecorder 
         ]
 
         MicrophoneSelection.applyForRecording()
+        MicrophoneSelection.dictationIsRecording = true
 
         do {
             audioRecorder = try AVAudioRecorder(url: fileURL, settings: settings)
@@ -98,6 +99,7 @@ final class AudioRecorder: NSObject, AVAudioRecorderDelegate, DictationRecorder 
     }
 
     private func restoreInput() {
+        MicrophoneSelection.dictationIsRecording = false
         MicrophoneSelection.restore()
     }
 
