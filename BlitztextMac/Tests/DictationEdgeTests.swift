@@ -10,6 +10,17 @@ final class HallucinationFilterTests: XCTestCase {
         XCTAssertFalse(HallucinationFilter.isCredit("1234"))
     }
 
+    /// Review of #68: a cough or click of 0.15 to 0.3 s passes the speech check, and Whisper
+    /// wrote "Thank you." on it again. Said with real speech, the phrase stays.
+    func testDoubtfulPhraseOnlyCountsWithHardlyAnySpeech() {
+        XCTAssertTrue(HallucinationFilter.isInvented("Thank you.", longestVoicedRun: 0.2))
+        XCTAssertTrue(HallucinationFilter.isInvented("Vielen Dank.", longestVoicedRun: 0.25))
+        XCTAssertFalse(HallucinationFilter.isInvented("Vielen Dank.", longestVoicedRun: 0.9))
+        XCTAssertFalse(HallucinationFilter.isInvented("Danke, bis morgen", longestVoicedRun: 0.2))
+        XCTAssertTrue(HallucinationFilter.isInvented("Untertitel im Auftrag des ZDF, 2021", longestVoicedRun: 5))
+        XCTAssertFalse(HallucinationFilter.isInvented("", longestVoicedRun: 0))
+    }
+
     func testMeasuresVoicedAudio() {
         let silence = [Float](repeating: 0, count: 16_000)
         let roomNoise = (0..<16_000).map { _ in Float.random(in: -0.003...0.003) }

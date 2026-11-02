@@ -4,6 +4,13 @@ import XCTest
 final class MicrophoneSelectionTests: XCTestCase {
     private let change = MicrophoneSelection.Switch(previousUID: "BuiltInMicrophoneDevice", chosenUID: "USB-Headset")
 
+    /// Review of #68: a dictation during a Blitztext meeting moved the meeting to its microphone.
+    func testNoSwitchWhileAMeetingRecords() {
+        XCTAssertTrue(MicrophoneSelection.shouldSwitch(preferredUID: "USB-Headset", meetingIsRecording: false))
+        XCTAssertFalse(MicrophoneSelection.shouldSwitch(preferredUID: "USB-Headset", meetingIsRecording: true))
+        XCTAssertFalse(MicrophoneSelection.shouldSwitch(preferredUID: "", meetingIsRecording: false))
+    }
+
     func testRestoresWhileTheChosenMicrophoneIsStillTheInput() {
         XCTAssertTrue(MicrophoneSelection.shouldRestore(currentUID: "USB-Headset", after: change))
     }

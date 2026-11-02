@@ -67,13 +67,23 @@ final class TranscriptHistoryStore {
     private(set) var entries: [TranscriptHistoryEntry] = []
     private var retention: HistoryRetention
     private let isPersistent: Bool
+    /// The stored history did not open because the Keychain did not give the file key this
+    /// session: the file stays untouched and this session saves nothing.
+    private var isLockedOut = false
 
     /// - Parameter persistent: False for snapshot and check runs: no file, no Keychain.
     init(retention: HistoryRetention, persistent: Bool = true) {
         self.retention = retention
         isPersistent = persistent
         // The save in `prune` also moves a file with a machine-derived key to the Keychain key.
-        entries = persistent ? Self.load() : Self.toolRunEntries
+        if persistent {
+            switch Self.load() {
+            case .entries(let stored): entries = stored
+            case .lockedOut: isLockedOut = true
+            }
+        } else {
+            entries = Self.toolRunEntries
+        }
         prune()
     }
 
@@ -120,7 +130,7 @@ final class TranscriptHistoryStore {
     }
 
     private func save() {
-        guard isPersistent else { return }
+        guard isPersistent, !isLockedOut else { return }
         guard !entries.isEmpty else {
             try? FileManager.default.removeItem(at: AppSupportPaths.historyURL)
             return
@@ -135,16 +145,24 @@ final class TranscriptHistoryStore {
         }
     }
 
-    private static func load() -> [TranscriptHistoryEntry] {
-        guard let encrypted = try? Data(contentsOf: AppSupportPaths.historyURL) else { return [] }
-        guard let data = KeychainService.openData(encrypted),
-              let entries = try? JSONDecoder().decode([TranscriptHistoryEntry].self, from: data) else {
-            // The save on launch would delete a file this build cannot read (Keychain locked,
-            // another Mac's key): keep it aside instead, like the meetings.
-            moveUnreadableFileAside()
-            return []
+    private enum Loaded {
+        case entries([TranscriptHistoryEntry])
+        case lockedOut
+    }
+
+    private static func load() -> Loaded {
+        guard let encrypted = try? Data(contentsOf: AppSupportPaths.historyURL) else { return .entries([]) }
+        if let data = KeychainService.openData(encrypted),
+           let entries = try? JSONDecoder().decode([TranscriptHistoryEntry].self, from: data) {
+            return .entries(entries)
         }
-        return entries
+        // Most likely sealed with the Keychain key the Keychain did not give (locked, denied
+        // prompt): leave the file, a later launch reads it.
+        if KeychainService.fileKeyIsUnavailable { return .lockedOut }
+        // The save on launch would delete a file this build cannot read with the key it has
+        // (another Mac's key, a later format): keep it aside instead, like the meetings.
+        moveUnreadableFileAside()
+        return .entries([])
     }
 
     private static func moveUnreadableFileAside() {

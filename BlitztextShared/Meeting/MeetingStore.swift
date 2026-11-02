@@ -81,6 +81,10 @@ final class MeetingStore {
     private(set) var meetings: [MeetingRecord] = []
     /// False for previews and snapshots: nothing is read from or written to disk.
     private let isPersistent: Bool
+    /// The stored meetings did not open because the Keychain did not give the file key this
+    /// session: the file stays untouched, nothing is written (so no meeting audio is deleted
+    /// as saved), until a later launch can read it.
+    private var isLockedOut = false
 
     nonisolated static var directoryURL: URL {
         #if os(macOS)
@@ -104,6 +108,12 @@ final class MeetingStore {
            let meetings = try? JSONDecoder().decode([MeetingRecord].self, from: data) {
             self.meetings = meetings
         } else {
+            #if os(macOS)
+            if KeychainService.fileKeyIsUnavailable {
+                isLockedOut = true
+                return
+            }
+            #endif
             // Never overwrite meetings that only this build cannot read (another Mac's key,
             // a later format): keep the file aside so they can still be recovered.
             Self.moveUnreadableFileAside()
@@ -181,6 +191,7 @@ final class MeetingStore {
     @discardableResult
     private func save() -> Bool {
         guard isPersistent else { return true }
+        guard !isLockedOut else { return false }
         do {
             try FileManager.default.createDirectory(at: Self.directoryURL, withIntermediateDirectories: true)
             let data = try JSONEncoder().encode(meetings)

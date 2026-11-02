@@ -45,12 +45,17 @@ enum MicrophoneSelection {
         set { UserDefaults.standard.set(newValue.flatMap { try? JSONEncoder().encode($0) }, forKey: switchKey) }
     }
 
+    /// True while a Blitztext meeting records (`MeetingController.recordingID`). The meeting
+    /// records from the macOS default input, so a dictation then leaves it alone.
+    static var meetingIsRecording = false
+
     /// Makes the chosen microphone the default input for a dictation. Meetings never call it:
-    /// a call running at the same time keeps its microphone. True when it changed something.
+    /// a call running at the same time keeps its microphone, and while a meeting records a
+    /// dictation does not switch either. True when it changed something.
     @discardableResult
     static func applyForRecording() -> Bool {
         let uid = preferredUID
-        guard !uid.isEmpty, pendingSwitch == nil,
+        guard shouldSwitch(preferredUID: uid, meetingIsRecording: meetingIsRecording), pendingSwitch == nil,
               let wanted = device(uid: uid), hasInput(wanted),
               let current = defaultInput, current != wanted,
               let currentUID = string(current, kAudioDevicePropertyDeviceUID) else { return false }
@@ -61,6 +66,11 @@ enum MicrophoneSelection {
             return false
         }
         return true
+    }
+
+    /// Only with a chosen microphone, and never while a meeting records.
+    static func shouldSwitch(preferredUID: String, meetingIsRecording: Bool) -> Bool {
+        !preferredUID.isEmpty && !meetingIsRecording
     }
 
     /// Puts the previous input back after a recording, and at launch after a crash.

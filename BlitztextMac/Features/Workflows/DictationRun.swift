@@ -26,7 +26,7 @@ final class DictationRun {
     nonisolated static let transcribingMessage = "Wird transkribiert ..."
     nonisolated static let nothingRecognizedMessage = "Keine Aufnahme erkannt."
     /// Shorter recordings without speech are not kept (`UnfinishedRecordings`).
-    nonisolated static let minimumSecondsKeptWithoutSpeech: TimeInterval = 3
+    nonisolated static let minimumSecondsKeptWithoutSpeech = HallucinationFilter.accidentalRecordingSeconds
 
     /// Turns the recording into the text to insert; nil when nothing usable was said.
     /// `step` shows what runs, e.g. "Text wird verbessert ...".
@@ -58,6 +58,9 @@ final class DictationRun {
     struct Safekeeping {
         var secure: @MainActor (URL) -> URL?
         var release: @MainActor (URL) -> Void
+        /// Deletes kept recordings past their time; runs after every dictation, so the
+        /// 24 hours hold also for people who never open the menu.
+        var sweep: @MainActor () -> Void = {}
 
         static let none = Safekeeping(secure: { _ in nil }, release: { _ in })
     }
@@ -118,6 +121,7 @@ final class DictationRun {
             defer {
                 if secured { safekeeping.release(recording) }
                 if !keepRecording { try? FileManager.default.removeItem(at: recording) }
+                safekeeping.sweep()
             }
             do {
                 try await recordingCheck(url, seconds)
@@ -154,6 +158,10 @@ final class DictationRun {
                     return
                 }
                 keepRecording = true
+                // Released before the error phase, which refreshes the menu: the recording is
+                // listed there at once, also while the menu is open.
+                safekeeping.release(recording)
+                secured = false
                 onPhase?(.error(error.localizedDescription.appendingSentence(UnfinishedRecordings.notice)))
             }
         }

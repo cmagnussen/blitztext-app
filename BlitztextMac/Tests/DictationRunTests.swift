@@ -161,6 +161,7 @@ final class DictationRunTests: XCTestCase {
     private final class Keeper {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("blitztext-test-kept-\(UUID().uuidString)")
         private(set) var released: [URL] = []
+        private(set) var sweeps = 0
 
         var safekeeping: DictationRun.Safekeeping {
             DictationRun.Safekeeping(
@@ -169,7 +170,8 @@ final class DictationRunTests: XCTestCase {
                     let target = folder.appendingPathComponent(url.lastPathComponent)
                     return (try? FileManager.default.moveItem(at: url, to: target)) == nil ? nil : target
                 },
-                release: { [unowned self] url in released.append(url) }
+                release: { [unowned self] url in released.append(url) },
+                sweep: { [unowned self] in sweeps += 1 }
             )
         }
 
@@ -184,6 +186,13 @@ final class DictationRunTests: XCTestCase {
     func testFailedTranscriptionKeepsTheRecording() async {
         let keeper = Keeper()
         let dictation = Dictation(safekeeping: keeper.safekeeping)
+        // The error phase refreshes the menu: the recording must be released by then.
+        var releasedAtError: Int?
+        let record = dictation.run.onPhase
+        dictation.run.onPhase = { phase in
+            if case .error = phase { releasedAtError = keeper.released.count }
+            record?(phase)
+        }
         dictation.run.start()
         var transcribed: URL?
         await dictation.run.stop { url, _, _ in
@@ -193,6 +202,8 @@ final class DictationRunTests: XCTestCase {
         XCTAssertEqual(transcribed?.deletingLastPathComponent().lastPathComponent, keeper.folder.lastPathComponent)
         XCTAssertEqual(keeper.kept.count, 1)
         XCTAssertEqual(keeper.released.count, 1)
+        XCTAssertEqual(releasedAtError, 1)
+        XCTAssertEqual(keeper.sweeps, 1)
         XCTAssertEqual(dictation.errors, [URLError(.cannotOpenFile).localizedDescription.appendingSentence(UnfinishedRecordings.notice)])
     }
 
@@ -204,6 +215,8 @@ final class DictationRunTests: XCTestCase {
         await dictation.run.stop { _, _, _ in "Text" }?.value
         XCTAssertEqual(keeper.kept, [])
         XCTAssertEqual(dictation.outputs, ["Text"])
+        // Old kept recordings expire after every dictation, not only when the menu opens.
+        XCTAssertEqual(keeper.sweeps, 1)
     }
 
     /// The transcript is kept when only the AI step failed, so the audio is not needed.

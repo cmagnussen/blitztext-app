@@ -67,7 +67,9 @@ final class AudioFileController {
                     audioURL: wav.url,
                     language: language,
                     modelName: modelName,
-                    requireSpeech: !deleteAfterSuccess
+                    // The speech check is for live dictations: a quiet voice memo or a kept
+                    // whisper still reaches the model.
+                    requireSpeech: false
                 ) { [weak self] in
                     self?.phase = .working(LocalTranscriptionService.slowPreparationMessage)
                 }

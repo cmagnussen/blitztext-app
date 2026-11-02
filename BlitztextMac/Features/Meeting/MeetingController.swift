@@ -38,7 +38,10 @@ final class MeetingController {
     private(set) var notice: String?
     /// The meeting being recorded. It is stored as pending from the start, so a quit or crash
     /// keeps the audio for a later evaluation.
-    private(set) var recordingID: UUID?
+    private(set) var recordingID: UUID? {
+        // A dictation during the meeting must not move the meeting to another microphone.
+        didSet { MicrophoneSelection.meetingIsRecording = recordingID != nil }
+    }
     let store: MeetingStore
     /// Lets the menu bar show that a meeting is being recorded.
     @ObservationIgnored var onPhaseChange: (() -> Void)?

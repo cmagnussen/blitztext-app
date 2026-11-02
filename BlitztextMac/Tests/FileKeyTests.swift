@@ -61,6 +61,45 @@ final class FileKeyTests: XCTestCase {
         XCTAssertNil(KeychainService.resealed(other, with: SymmetricKey(size: .bits256), legacyKeys: [SymmetricKey(size: .bits256)]))
     }
 
+    /// A Keychain that cannot give the key is asked once per session, not at every save
+    /// (review of #68: a prompt with every dictation).
+    func testAnUnavailableKeychainIsAskedOnce() {
+        var cache = KeychainService.FileKeyCache()
+        var asked = 0
+        for _ in 0..<3 {
+            XCTAssertNil(cache.key { asked += 1; return nil })
+        }
+        XCTAssertEqual(asked, 1)
+    }
+
+    /// After a Jamf update the restarted app could not add the key ("no keychain found"):
+    /// the Keychain is asked once, and the rest of the session uses the machine key.
+    func testAKeychainThatRefusesTheNewKeyIsNotAskedAgainThisSession() {
+        var cache = KeychainService.FileKeyCache()
+        var reads = 0
+        var adds = 0
+        for _ in 0..<3 {
+            let key = cache.key {
+                KeychainService.resolveFileKey(
+                    read: { reads += 1; return .missing },
+                    add: { _ in adds += 1; return errSecNoDefaultKeychain }
+                )
+            }
+            XCTAssertNil(key)
+        }
+        XCTAssertEqual(reads, 1)
+        XCTAssertEqual(adds, 1)
+    }
+
+    func testAFoundKeyIsKeptForTheSession() {
+        var cache = KeychainService.FileKeyCache()
+        let key = SymmetricKey(size: .bits256)
+        var asked = 0
+        XCTAssertEqual(cache.key { asked += 1; return key }.map(raw), raw(key))
+        XCTAssertEqual(cache.key { asked += 1; return nil }.map(raw), raw(key))
+        XCTAssertEqual(asked, 1)
+    }
+
     private func raw(_ key: SymmetricKey) -> Data {
         key.withUnsafeBytes { Data($0) }
     }

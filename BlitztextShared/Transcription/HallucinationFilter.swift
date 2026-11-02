@@ -1,8 +1,9 @@
 import AVFoundation
 
 /// Drops text the speech models invent: subtitle credits from Whisper's training data
-/// ("Untertitel im Auftrag des ZDF, 2021"), and anything at all on a recording without
-/// speech, where Whisper writes "Thank you." and Parakeet "Oh", "Moment." or a French sentence.
+/// ("Untertitel im Auftrag des ZDF, 2021"), doubtful phrases like "Thank you." on a recording
+/// with hardly any speech, and anything at all on a short live dictation without speech, where
+/// Whisper writes "Thank you." and Parakeet "Oh", "Moment." or a French sentence.
 ///
 /// Whisper's no-speech probability would be the natural gate, but WhisperKit reports it
 /// as 0 for these cases, and Parakeet has none, so Blitztext checks whether the recording
@@ -38,9 +39,28 @@ enum HallucinationFilter {
         "please like and subscribe",
     ]
 
+    /// Short phrases people do say, so they only count as invented when the recording holds
+    /// hardly any speech: Whisper writes them on a cough or a click that passes the speech check.
+    static let doubtfulPhrases: Set<String> = [
+        "vielen dank", "danke", "danke schön", "dankeschön", "tschüss", "tschüs",
+        "bis zum nächsten mal", "bis bald", "bis dann", "das war s", "ende",
+        "thank you", "thanks", "thank you very much", "you", "bye", "bye bye",
+        "okay", "ok", "ja", "hmm", "hm", "mhm",
+        "musik", "music", "applaus", "applause", "lachen",
+        "swr", "wdr", "zdf", "ard",
+    ]
+
     /// Shorter than this, the longest run of speech is no word: a quick "Ja." is one run of
     /// about 0.2 s, a click, a chair or a mic bump gives one or two 30 ms frames.
     static let minimumVoicedSeconds = 0.15
+
+    /// Below this longest run, a doubtful phrase counts as invented.
+    static let doubtfulBelowSeconds = 0.3
+
+    /// Only live dictations shorter than this are checked for speech before a model runs: an
+    /// accidental shortcut or tap. A longer recording may just be quiet (a whisper, a voice
+    /// across the room), so it is not thrown away for lack of speech.
+    static let accidentalRecordingSeconds: TimeInterval = 3
 
     /// True when the whole transcript is a credit.
     static func isCredit(_ text: String) -> Bool {
@@ -50,6 +70,15 @@ enum HallucinationFilter {
     /// True when no run of speech in the recording is long enough to be a word.
     static func hasNoSpeech(longestVoicedRun: Double) -> Bool {
         longestVoicedRun < minimumVoicedSeconds
+    }
+
+    /// True when the whole transcript is a credit, or a doubtful phrase on a recording with
+    /// hardly any speech.
+    static func isInvented(_ text: String, longestVoicedRun: Double) -> Bool {
+        let key = phraseKey(text)
+        guard !key.isEmpty else { return false }
+        if credits.contains(key) { return true }
+        return longestVoicedRun < doubtfulBelowSeconds && doubtfulPhrases.contains(key)
     }
 
     /// Longest run of speech in samples, see `VoicedRunMeter`.

@@ -17,13 +17,14 @@ enum KeychainService {
     private static let account = "files"
 
     private static let lock = NSLock()
-    private static var cachedFileKey: SymmetricKey?
+    private static var fileKeyCache = FileKeyCache()
 
     /// What the Keychain returned for the file key.
     enum StoredKey: Equatable {
         case found(Data)
         case missing
-        /// Locked, access denied, or an entry that is not a 256-bit key.
+        /// Locked, access denied, a prompt that would have been needed, or an entry that is not
+        /// a 256-bit key.
         case unavailable
     }
 
@@ -108,21 +109,68 @@ enum KeychainService {
         }
     }
 
+    /// The answer of the Keychain, asked once per session. A Keychain that cannot give the key
+    /// (locked, denied prompt) is not asked again: otherwise every save, at every dictation and
+    /// menu opening, could bring the prompt back and take the focus from the paste.
+    struct FileKeyCache {
+        private enum State {
+            case unknown
+            case available(SymmetricKey)
+            case unavailable
+        }
+
+        private var state = State.unknown
+
+        mutating func key(resolve: () -> SymmetricKey?) -> SymmetricKey? {
+            switch state {
+            case .available(let key):
+                return key
+            case .unavailable:
+                return nil
+            case .unknown:
+                let key = resolve()
+                state = key.map { .available($0) } ?? .unavailable
+                return key
+            }
+        }
+    }
+
+    /// True when the Keychain did not give the file key this session. A file that does not
+    /// open may then be sealed with it: the stores leave it as it is and write nothing, until
+    /// a later launch can read it. Without the key, new files are sealed with the machine key,
+    /// which the next launch still reads and moves to the Keychain key.
+    static var fileKeyIsUnavailable: Bool {
+        fileKey == nil
+    }
+
     // MARK: - Keychain
 
-    /// Found once, kept for the session; asked again while the Keychain cannot give one.
     private static var fileKey: SymmetricKey? {
         lock.lock()
         defer { lock.unlock() }
-        if let cachedFileKey { return cachedFileKey }
-        cachedFileKey = resolveFileKey(read: readStoredKey, add: addKey)
-        return cachedFileKey
+        return fileKeyCache.key {
+            withoutUserInteraction { resolveFileKey(read: readStoredKey, add: addKey) }
+        }
+    }
+
+    /// The file key calls never show UI. Started outside the user's normal session (the Jamf
+    /// postinstall restart after an update), macOS showed "Schlüsselbund nicht gefunden" for
+    /// the new key, with a button that resets the user's keychain. Without interaction the call
+    /// fails instead, the key counts as unavailable for the session, and the files keep the
+    /// machine key, which every build reads.
+    private static func withoutUserInteraction<T>(_ body: () -> T) -> T {
+        var previous = DarwinBoolean(true)
+        let known = SecKeychainGetUserInteractionAllowed(&previous) == errSecSuccess
+        SecKeychainSetUserInteractionAllowed(false)
+        defer { SecKeychainSetUserInteractionAllowed(known ? previous.boolValue : true) }
+        return body()
     }
 
     private static func readStoredKey() -> StoredKey {
         var query = baseQuery()
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
+        query[kSecUseAuthenticationUI as String] = kSecUseAuthenticationUIFail
         var result: AnyObject?
         switch SecItemCopyMatching(query as CFDictionary, &result) {
         case errSecSuccess:

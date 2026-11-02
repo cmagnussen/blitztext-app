@@ -378,8 +378,8 @@ actor LocalTranscriptionService {
         }
     }
 
-    /// - Parameter requireSpeech: Off to transcribe a kept recording on request, which the
-    ///   speech check already turned down once (`UnfinishedRecordings`), e.g. a quiet whisper.
+    /// - Parameter requireSpeech: On for live dictations only. Audio files, including a kept
+    ///   recording the check turned down once (`UnfinishedRecordings`), always reach the model.
     func transcribe(audioURL: URL, language: String, modelName: String, requireSpeech: Bool = true) async throws -> String {
         // Every model invents text on a recording without speech (an accidental shortcut), so
         // none of them runs on one.

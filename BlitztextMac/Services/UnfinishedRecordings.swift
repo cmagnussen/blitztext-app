@@ -21,7 +21,9 @@ enum UnfinishedRecordings {
     }
 
     /// For `DictationRun`.
-    @MainActor static let safekeeping = DictationRun.Safekeeping(secure: secure, release: release)
+    @MainActor static let safekeeping = DictationRun.Safekeeping(
+        secure: secure, release: release, sweep: { removeExpired() }
+    )
 
     /// Recordings a dictation is transcribing right now; they are not unfinished (yet).
     @MainActor private static var inProgress: Set<URL> = []
@@ -62,6 +64,19 @@ enum UnfinishedRecordings {
                 return Item(url: url, recordedAt: recordedAt, seconds: seconds)
             }
             .sorted { $0.recordedAt > $1.recordedAt }
+    }
+
+    /// Deletes recordings older than `keptFor`, without reading them.
+    @MainActor static func removeExpired(now: Date = Date()) {
+        let files = (try? FileManager.default.contentsOfDirectory(
+            at: directoryURL, includingPropertiesForKeys: [.creationDateKey]
+        )) ?? []
+        for url in files where url.pathExtension == "wav" && !inProgress.contains(url) {
+            let recordedAt = (try? url.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? now
+            if isExpired(recordedAt, now: now) {
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
     }
 
     static func isExpired(_ recordedAt: Date, now: Date) -> Bool {

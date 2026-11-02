@@ -1018,7 +1018,11 @@ final class AppState {
     private func handleWorkflowPhaseChange(_ phase: WorkflowPhase, workflow: any Workflow) {
         // A late phase of a replaced workflow must not end, unmute or relabel the next one.
         guard workflow === activeWorkflow else { return }
-        menuBarStatusResetTask?.cancel()
+        // An `.idle` (the cleanup's reset, a cancel) sets no status of its own, so it leaves a
+        // pending reset alone: an error shown after pasting must still clear once readable.
+        if case .idle = phase {} else {
+            menuBarStatusResetTask?.cancel()
+        }
         // Sound comes back as soon as the recording ends, not after the transcription.
         if !workflow.isRecording {
             audioMuter.restoreIfNeeded()
