@@ -30,9 +30,12 @@ final class AudioFileController {
         return false
     }
 
-    func transcribe(_ url: URL, appState: AppState) {
+    /// - Parameters:
+    ///   - title: Shown instead of the file name, e.g. for a dictation kept after an error.
+    ///   - deleteAfterSuccess: The file goes once there is text (`UnfinishedRecordings`).
+    func transcribe(_ url: URL, appState: AppState, title: String? = nil, deleteAfterSuccess: Bool = false) {
         task?.cancel()
-        fileName = url.lastPathComponent
+        fileName = title ?? url.lastPathComponent
         duration = 0
         transcript = ""
         text = ""
@@ -63,7 +66,8 @@ final class AudioFileController {
                 let raw = try await LocalTranscriptionService.transcribe(
                     audioURL: wav.url,
                     language: language,
-                    modelName: modelName
+                    modelName: modelName,
+                    requireSpeech: !deleteAfterSuccess
                 ) { [weak self] in
                     self?.phase = .working(LocalTranscriptionService.slowPreparationMessage)
                 }
@@ -78,6 +82,10 @@ final class AudioFileController {
                 if Task.isCancelled { return }
 
                 transcript = processed
+                if deleteAfterSuccess {
+                    try? FileManager.default.removeItem(at: url)
+                    appState.refreshUnfinishedRecordings()
+                }
                 finish(processed, mode: .tapTalk, appState: appState)
             } catch {
                 phase = .failed(error.localizedDescription)
@@ -137,6 +145,9 @@ final class AudioFileController {
         case .dampfAblassen: return ModePrompts.dampfAblassen(appState.dampfAblassenSettings)
         case .emojiText: return ModePrompts.emoji(appState.emojiTextSettings)
         case .tapTalk, .localTapTalk: return nil
+        case .custom(let id):
+            guard let custom = appState.appSettings.customMode(id: id), custom.hasInstruction else { return nil }
+            return CustomModeWorkflow.instruction(for: custom, protectedTerms: appState.textImprovementSettings.protectedTerms)
         }
     }
 }

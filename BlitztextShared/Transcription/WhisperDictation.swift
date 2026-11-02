@@ -2,7 +2,8 @@ import Foundation
 import WhisperKit
 
 /// How both apps run Whisper on a dictation: language detection and dropping text that
-/// Whisper most likely invented.
+/// Whisper most likely invented. Recordings without speech never get here: both apps check
+/// for speech before any model runs (`HallucinationFilter.longestVoicedRun(in:)`).
 ///
 /// No dictionary prompt: with WhisperKit 0.18 and Large v3 Turbo, any `promptTokens`
 /// (even a single word) made the decoder stop at once and return an empty text.
@@ -18,7 +19,7 @@ enum WhisperDictation {
             .joined(separator: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
-        if HallucinationFilter.isInvented(text, voicedSeconds: HallucinationFilter.voicedSeconds(samples)) {
+        if HallucinationFilter.isCredit(text) {
             return ""
         }
         return HallucinationFilter.removingTrailingCredits(text)

@@ -13,6 +13,11 @@ protocol DictationRecorder: AnyObject {
     func discardRecording()
 }
 
+/// An error that may say the recording held no speech (`LocalTranscriptionError.noSpeech`).
+protocol NoSpeechVerdict: Error {
+    var meansNoSpeech: Bool { get }
+}
+
 /// Recording, processing and cancelling of one dictation, the same in every mode. The modes
 /// only differ in what they do with the recording (transcribe, then maybe rewrite).
 @MainActor
@@ -20,6 +25,8 @@ final class DictationRun {
     nonisolated static let recordingMessage = "Aufnahme l\u{00E4}uft ..."
     nonisolated static let transcribingMessage = "Wird transkribiert ..."
     nonisolated static let nothingRecognizedMessage = "Keine Aufnahme erkannt."
+    /// Shorter recordings without speech are not kept (`UnfinishedRecordings`).
+    nonisolated static let minimumSecondsKeptWithoutSpeech: TimeInterval = 3
 
     /// Turns the recording into the text to insert; nil when nothing usable was said.
     /// `step` shows what runs, e.g. "Text wird verbessert ...".
@@ -31,6 +38,9 @@ final class DictationRun {
 
     var onPhase: (@MainActor (WorkflowPhase) -> Void)?
     var onOutput: (@MainActor (String) -> Void)?
+    /// The AI step failed on a finished transcript (`AIStepFailed`): the word-for-word
+    /// text to keep, on the clipboard and in the history. Comes right before the error phase.
+    var onKeptTranscript: (@MainActor (String) -> Void)?
 
     private let recorder: any DictationRecorder
     private var processing: Task<Void, Never>?
@@ -42,12 +52,25 @@ final class DictationRun {
     typealias RecordingCheck = (_ recording: URL, _ seconds: TimeInterval) async throws -> Void
     private let recordingCheck: RecordingCheck
 
+    /// Where a recording waits while it is transcribed, so an error or a crash keeps it
+    /// (`UnfinishedRecordings`). `secure` moves it there and returns the new place, nil when
+    /// it stays where it is; `release` ends the transcription. Tests keep it in place.
+    struct Safekeeping {
+        var secure: @MainActor (URL) -> URL?
+        var release: @MainActor (URL) -> Void
+
+        static let none = Safekeeping(secure: { _ in nil }, release: { _ in })
+    }
+    private let safekeeping: Safekeeping
+
     init(
         recorder: any DictationRecorder,
-        recordingCheck: @escaping RecordingCheck = { try await RecordingFile.waitUntilComplete($0, expected: $1) }
+        recordingCheck: @escaping RecordingCheck = { try await RecordingFile.waitUntilComplete($0, expected: $1) },
+        safekeeping: Safekeeping = UnfinishedRecordings.safekeeping
     ) {
         self.recorder = recorder
         self.recordingCheck = recordingCheck
+        self.safekeeping = safekeeping
     }
 
     var isRecording: Bool { recorder.isRecording }
@@ -87,11 +110,22 @@ final class DictationRun {
         let run = currentRun
         let seconds = recorder.lastRecordingDuration
         let task = Task(priority: .userInitiated) {
-            // The recording is not kept once it is transcribed (docs/privacy.md).
-            defer { try? FileManager.default.removeItem(at: url) }
+            var recording = url
+            var secured = false
+            var keepRecording = false
+            // The recording is not kept once it is transcribed (docs/privacy.md); only a failed
+            // transcription keeps it for a while, to be transcribed again.
+            defer {
+                if secured { safekeeping.release(recording) }
+                if !keepRecording { try? FileManager.default.removeItem(at: recording) }
+            }
             do {
                 try await recordingCheck(url, seconds)
-                let text = try await work(url, seconds) { message in
+                if let safe = safekeeping.secure(url) {
+                    recording = safe
+                    secured = true
+                }
+                let text = try await work(recording, seconds) { message in
                     self.report(.running(message), of: run)
                 }
                 // Cancelled meanwhile: an engine may still return its text; it is not pasted.
@@ -102,9 +136,25 @@ final class DictationRun {
                 }
                 onPhase?(.done(text))
                 onOutput?(text)
+            } catch let failed as AIStepFailed {
+                // What was said is not lost; the message says where it is.
+                guard run == currentRun else { return }
+                onKeptTranscript?(failed.transcript)
+                onPhase?(.error(failed.keptMessage))
             } catch {
-                // The cancel itself makes the engines throw; that is no error to show.
-                report(.error(error.localizedDescription), of: run)
+                // The cancel itself makes the engines throw; that is no error to show, and
+                // the recording goes, as the cancel asked.
+                guard run == currentRun else { return }
+                // "No speech" on a short recording is an accidental shortcut: it goes. A longer
+                // one may just have been too quiet (a whisper), so it is kept like a failure.
+                let accidental = (error as? NoSpeechVerdict)?.meansNoSpeech == true
+                    && seconds < Self.minimumSecondsKeptWithoutSpeech
+                guard secured, !(error is CancellationError), !accidental else {
+                    onPhase?(.error(error.localizedDescription))
+                    return
+                }
+                keepRecording = true
+                onPhase?(.error(error.localizedDescription.appendingSentence(UnfinishedRecordings.notice)))
             }
         }
         processing = task

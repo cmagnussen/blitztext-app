@@ -98,6 +98,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             return
         }
         #endif
+        // A dictation interrupted by a crash left the chosen microphone as the macOS input.
+        MicrophoneSelection.restore()
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
         if let button = statusItem.button {
@@ -363,6 +365,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         guard let button = statusItem.button else { return }
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         appState.isPopoverShown = true
+        // A crash may have left a recording; old ones go after 24 hours.
+        appState.refreshUnfinishedRecordings()
         NSApp.activate(ignoringOtherApps: true)
 
         // Transparent window so the HUD material shows through, as in _Space.
@@ -1014,6 +1018,19 @@ enum MacSnapshots {
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         // As on a set-up Mac: the unsigned snapshot binary has no Accessibility grant.
         appState.accessibilityPermissionGranted = true
+        // A dictation whose transcription failed, as the menu offers it again.
+        appState.unfinishedRecordings = [UnfinishedRecordings.Item(
+            url: FileManager.default.temporaryDirectory.appendingPathComponent("snapshot.wav"),
+            recordedAt: Date(timeIntervalSince1970: 1_793_610_660), seconds: 134
+        )]
+        // Two own modes, one with its own shortcut. Tool runs never save settings.
+        appState.appSettings.customModes = sampleCustomModes
+        appState.appSettings.customHotkeys[sampleCustomModes[0].id] = KeyCombo(
+            keyCode: 40,
+            modifierFlags: NSEvent.ModifierFlags([.control, .option]).rawValue,
+            keyLabel: "K"
+        )
+        CustomModesSection.debugExpandedID = sampleCustomModes[0].id
         for (mode, name) in [("light", NSAppearance.Name.aqua), ("dark", NSAppearance.Name.darkAqua)] {
             let appearance = NSAppearance(named: name)
             NSApp.appearance = appearance
@@ -1032,16 +1049,33 @@ enum MacSnapshots {
                 SettingsContentView.debugInitialPane = pane
                 appState.page = .settings
                 capture(MenuBarView(appState: appState), appearance: appearance, to: folder.appendingPathComponent("\(mode)-popover-settings-\(pane.rawValue).png"))
+                // "Modi" holds the built-in modes, the own modes with one open, and the rules.
                 let view = SettingsContentView(appState: appState)
-                    .frame(width: MenuBarView.width, height: 1400, alignment: .top)
+                    .frame(width: MenuBarView.width, height: pane == .workflows ? 1900 : 1400, alignment: .top)
                     .background(BlitztextTheme.page)
                 capture(view, appearance: appearance, to: folder.appendingPathComponent("\(mode)-settings-\(pane.rawValue).png"))
             }
-            for (status, label) in [(MenuBarStatus.recording(.tapTalk), "recording"), (.processing(.tapTalk), "processing"), (.success(.tapTalk), "success"), (.copied(.tapTalk), "copied")] {
+            let customModes = CustomModesSection(appState: appState)
+                .padding(16)
+                .frame(width: MenuBarView.width)
+                .background(BlitztextTheme.page)
+            capture(customModes, appearance: appearance, to: folder.appendingPathComponent("\(mode)-settings-custom-modes.png"))
+            let pillStates: [(MenuBarStatus, String)] = [
+                (.recording(.tapTalk), "recording"), (.processing(.tapTalk), "processing"),
+                (.recording(.custom(sampleCustomModes[0].id)), "recording-custom"),
+                (.success(.tapTalk), "success"), (.copied(.tapTalk), "copied"),
+                (.error(.tapTalk, DictationRun.nothingRecognizedMessage), "error-short"),
+                (.error(.textImprover, AIClientError.http(401, nil).localizedDescription), "error-key"),
+                (.error(.textImprover, TextRewriter.RewriteError.noModel.localizedDescription), "error-long"),
+                // The longest message a dictation shows: a rejected key, transcript kept.
+                (.error(.textImprover, AIStepFailed(transcript: "", reason: AIClientError.http(401, nil).localizedDescription).keptMessage), "error-kept"),
+            ]
+            for (status, label) in pillStates {
                 let model = RecordingIndicatorModel()
                 model.status = status
+                let size = RecordingPill.panelSize(for: status)
                 let pill = RecordingPill(model: model, appState: appState) {}
-                    .frame(width: RecordingPill.panelSize.width, height: RecordingPill.panelSize.height)
+                    .frame(width: size.width, height: size.height)
                     .padding(20)
                     .background(BlitztextTheme.page)
                 capture(pill, appearance: appearance, to: folder.appendingPathComponent("\(mode)-pill-\(label).png"))
@@ -1085,6 +1119,24 @@ enum MacSnapshots {
         }
         meeting.preview(.idle)
     }
+
+    /// Own modes for the snapshots; the id of the first is also in the sample history.
+    static let sampleCustomModes: [CustomMode] = [
+        CustomMode(
+            id: "custom-snapshot-concept",
+            name: "Konzept",
+            icon: "lightbulb.fill",
+            prompt: "Mach aus dem Brainstorming ein kurzes Konzept: eine Überschrift, dann Stichpunkte zu Ziel, Idee und nächsten Schritten. Erfinde nichts dazu.",
+            color: CustomModeColor.night.rawValue
+        ),
+        CustomMode(
+            id: "custom-snapshot-english",
+            name: CustomModeTemplate.english.name,
+            icon: CustomModeTemplate.english.icon,
+            prompt: CustomModeTemplate.english.prompt,
+            color: CustomModeColor.day.rawValue
+        ),
+    ]
 
     private static let sampleMeeting = MeetingRecord(
         id: UUID(uuidString: "5A3B1E00-0000-4000-8000-0000000000AC")!,

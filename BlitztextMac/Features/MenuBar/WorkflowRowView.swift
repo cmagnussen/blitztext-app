@@ -10,6 +10,8 @@ struct WorkflowRowView: View {
 
     @State private var isHovered = false
 
+    private var badgeLabel: String { hotkeyLabel ?? type.hotkeyLabel }
+
     var body: some View {
         Button(action: action) {
             HStack(alignment: .center, spacing: 12) {
@@ -31,8 +33,11 @@ struct WorkflowRowView: View {
 
                 Spacer(minLength: 6)
 
-                HotkeyBadge(label: hotkeyLabel ?? type.hotkeyLabel, enabled: enabled)
-                    .opacity(enabled ? 1 : 0.4)
+                // An own mode without its own shortcut has none to show.
+                if !badgeLabel.isEmpty {
+                    HotkeyBadge(label: badgeLabel, enabled: enabled)
+                        .opacity(enabled ? 1 : 0.4)
+                }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 9)

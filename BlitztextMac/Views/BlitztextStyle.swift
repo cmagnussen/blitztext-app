@@ -262,6 +262,9 @@ struct NoticeRow: View {
     var tint: Color = BlitztextTheme.accent
     var actionTitle: String?
     var action: (() -> Void)?
+    /// A second, quieter button, e.g. "Löschen".
+    var secondaryTitle: String?
+    var secondaryAction: (() -> Void)?
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -285,6 +288,13 @@ struct NoticeRow: View {
 
             Spacer(minLength: 4)
 
+            if let secondaryTitle, let secondaryAction {
+                Button(secondaryTitle, action: secondaryAction)
+                    .buttonStyle(.borderless)
+                    .font(.ui(11.5))
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 3)
+            }
             if let actionTitle, let action {
                 Button(actionTitle, action: action)
                     .buttonStyle(.glassAction)
@@ -341,27 +351,50 @@ extension PageHeader where Trailing == EmptyView {
 
 extension WorkflowType {
     /// Accent family from the Blackboat tokens, as on iOS: day for plain dictation,
-    /// evening for the writing modes, night for Dampf ablassen.
+    /// evening for the writing modes, night for Dampf ablassen. Own modes use their colour.
     var tint: Color {
         switch self {
         case .tapTalk, .localTapTalk: return BlackboatColor.Source.day.primary
         case .dampfAblassen: return BlackboatColor.Source.night.primary
         case .textImprover, .emojiText: return BlackboatColor.Source.evening.primary
+        case .custom: return (customMode?.colorChoice ?? .evening).source.primary
+        }
+    }
+}
+
+extension CustomModeColor {
+    /// The Blackboat accent family behind the name; no colours beyond the tokens.
+    var source: BlackboatColor.Source {
+        switch self {
+        case .day: return .day
+        case .evening: return .evening
+        case .night: return .night
         }
     }
 }
 
 /// The mode's symbol in a circle of its colour, as on iOS.
 struct ModeIcon: View {
-    let type: WorkflowType
+    let icon: String
+    let tint: Color
     var size: CGFloat = 32
 
+    init(type: WorkflowType, size: CGFloat = 32) {
+        self.init(icon: type.icon, tint: type.tint, size: size)
+    }
+
+    init(icon: String, tint: Color, size: CGFloat = 32) {
+        self.icon = icon
+        self.tint = tint
+        self.size = size
+    }
+
     var body: some View {
-        Image(systemName: type.icon)
+        Image(systemName: icon)
             .font(.ui(size * 0.42, .semibold))
-            .foregroundStyle(type.tint)
+            .foregroundStyle(tint)
             .frame(width: size, height: size)
-            .background(Circle().fill(type.tint.opacity(0.14)))
+            .background(Circle().fill(tint.opacity(0.14)))
             .accessibilityHidden(true)
     }
 }

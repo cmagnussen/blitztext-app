@@ -40,6 +40,8 @@ final class HotkeyService {
     private let carbonRegistrar = CarbonHotkeyRegistrar()
     private var customHotkeys: [WorkflowType: KeyCombo] = [:]
     private var customHotkeysSuspended = false
+    /// Carbon ids per mode, stable while Blitztext runs (`HotkeyIDs`).
+    private var hotkeyIDs = HotkeyIDs()
 
     var onHotkeyEvent: ((HotkeyEvent) -> Void)?
     /// Whether a dictation is recording or being processed. Only then does Escape get taken
@@ -123,14 +125,14 @@ final class HotkeyService {
         guard !customHotkeysSuspended else { return }
 
         for (type, combo) in customHotkeys {
-            if !carbonRegistrar.register(id: Self.hotkeyID(for: type), combo: combo) {
+            if !carbonRegistrar.register(id: hotkeyIDs.id(for: type), combo: combo) {
                 failedCustomHotkeys.insert(type)
             }
         }
     }
 
     private func handleCustomHotkey(id: UInt32, pressed: Bool) {
-        guard let type = WorkflowType.allCases.first(where: { Self.hotkeyID(for: $0) == id }) else { return }
+        guard let type = hotkeyIDs.type(for: id), customHotkeys[type] != nil || activeCustomCombo == type else { return }
 
         if pressed {
             // A missed key-up (e.g. while a password field had secure input) can leave an
@@ -147,10 +149,6 @@ final class HotkeyService {
             activeCustomCombo = nil
             onHotkeyEvent?(.up(type))
         }
-    }
-
-    private static func hotkeyID(for type: WorkflowType) -> UInt32 {
-        UInt32((WorkflowType.allCases.firstIndex(of: type) ?? 0) + 1)
     }
 
     /// The built-in fn shortcuts. A mode with its own working shortcut does not

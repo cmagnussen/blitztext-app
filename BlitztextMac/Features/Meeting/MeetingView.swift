@@ -143,8 +143,8 @@ struct MeetingView: View {
                     icon: "exclamationmark.triangle.fill",
                     title: blocker,
                     tint: BlitztextTheme.danger,
-                    actionTitle: ParakeetTranscriber.isSupported ? "Einstellungen" : nil,
-                    action: ParakeetTranscriber.isSupported ? { appState.page = .settings } : nil
+                    actionTitle: "Einstellungen",
+                    action: { appState.page = .settings }
                 )
             }
 
@@ -429,13 +429,30 @@ struct MeetingView: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                SectionHeader(title: "Transkript")
+                SectionHeader(title: "Transkript: Name anklicken zum Zuordnen")
                 ForEach(record.turns) { turn in
                     VStack(alignment: .leading, spacing: 3) {
                         HStack(spacing: 6) {
-                            Text(record.name(for: turn.speaker))
-                                .font(.ui(11.5, .semibold))
-                                .foregroundStyle(color(for: turn.speaker))
+                            // The speaker detection sometimes mixes up two voices; one part can
+                            // go to another person without renaming the whole person.
+                            Menu {
+                                ForEach(record.speakers.filter { $0 != turn.speaker }, id: \.self) { speaker in
+                                    Button(record.name(for: speaker)) {
+                                        meeting.reassign(turn: turn.id, to: speaker, in: record.id)
+                                    }
+                                }
+                                Divider()
+                                Button("Neue Person") {
+                                    meeting.reassign(turn: turn.id, to: record.turns.nextSpeaker, in: record.id)
+                                }
+                            } label: {
+                                Text(record.name(for: turn.speaker))
+                                    .font(.ui(11.5, .semibold))
+                                    .foregroundStyle(color(for: turn.speaker))
+                            }
+                            .menuStyle(.borderlessButton)
+                            .fixedSize()
+                            .help("Diesen Abschnitt einer anderen Person zuordnen")
                             Text(Self.clock(turn.start))
                                 .font(.ui(11).monospacedDigit())
                                 .foregroundStyle(.tertiary)

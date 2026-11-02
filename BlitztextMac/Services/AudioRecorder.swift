@@ -66,12 +66,15 @@ final class AudioRecorder: NSObject, AVAudioRecorderDelegate, DictationRecorder 
             AVLinearPCMIsBigEndianKey: false,
         ]
 
+        MicrophoneSelection.applyForRecording()
+
         do {
             audioRecorder = try AVAudioRecorder(url: fileURL, settings: settings)
             audioRecorder?.delegate = self
             audioRecorder?.isMeteringEnabled = true
             guard audioRecorder?.record() == true else {
                 audioRecorder = nil
+                restoreInput()
                 errorMessage = "Die Aufnahme lie\u{00DF} sich nicht starten. Darf Blitztext das Mikrofon nutzen?"
                 return
             }
@@ -79,6 +82,7 @@ final class AudioRecorder: NSObject, AVAudioRecorderDelegate, DictationRecorder 
             recordingURL = nil
             startMetering()
         } catch {
+            restoreInput()
             errorMessage = "Aufnahme konnte nicht gestartet werden: \(error.localizedDescription)"
         }
     }
@@ -87,9 +91,14 @@ final class AudioRecorder: NSObject, AVAudioRecorderDelegate, DictationRecorder 
         stopMetering()
         lastRecordingDuration = audioRecorder?.currentTime ?? 0
         audioRecorder?.stop()
+        restoreInput()
         isRecording = false
         recordingURL = fileURL
         audioLevel = 0
+    }
+
+    private func restoreInput() {
+        MicrophoneSelection.restore()
     }
 
     private func startMetering() {

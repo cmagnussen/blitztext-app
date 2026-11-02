@@ -11,8 +11,8 @@ settings:
     SWIFT_VERSION: "5.10"
     MACOSX_DEPLOYMENT_TARGET: "14.0"
     ONLY_ACTIVE_ARCH: NO
-    MARKETING_VERSION: "1.15.1"
-    CURRENT_PROJECT_VERSION: "42"
+    MARKETING_VERSION: "1.16"
+    CURRENT_PROJECT_VERSION: "45"
     # In-app updates for installs outside Jamf (Sparkle). The feed is the appcast of the
     # latest public GitHub release; the key is the public half of the signing key.
     SPARKLE_FEED_URL: "https://github.com/cmagnussen/blitztext-app/releases/latest/download/appcast.xml"
@@ -114,10 +114,12 @@ targets:
       - path: ../BlitztextShared/Transcription/SpokenEmailAddress.swift
       - path: Services/ShortcutModifiers.swift
       - path: ../BlitztextShared/AI/InventedDeadlineFilter.swift
+      - path: ../BlitztextShared/AI/AIStepFailed.swift
       - path: ../BlitztextShared/Meeting/SpeakerAlignment.swift
       - path: ../BlitztextShared/Meeting/EchoFilter.swift
       - path: Services/LocalLanguageModel/LocalModelCatalog.swift
       - path: Services/AudioPadding.swift
+      - path: Services/MicrophoneSelection.swift
       - path: Features/RecordingIndicator/RecordingIndicatorInteraction.swift
       - path: ../BlitztextShared/Meeting/SpeakerAlignment.swift
       - path: Features/Meeting/WAVRecovery.swift
@@ -125,11 +127,23 @@ targets:
       - path: Features/Meeting/TextParts.swift
       - path: Services/FocusedFieldReader.swift
       - path: ../BlitztextShared/Meeting/ListDisplay.swift
+      - path: ../BlitztextShared/Meeting/MeetingTurn.swift
       - path: Features/Workflows/WorkflowPhase.swift
       - path: Features/Workflows/DictationRun.swift
+      - path: Services/UnfinishedRecordings.swift
+      - path: Services/AppSupportPaths.swift
       - path: Services/RecordingFile.swift
       - path: Services/TranscriptionQualityService.swift
       - path: ../BlitztextShared/Transcription/CompiledModelCheck.swift
+      # Own modes: model, mode type, rules, shortcut ids, history entries.
+      - path: ../BlitztextShared/Modes/CustomMode.swift
+      - path: Features/Workflows/WorkflowType.swift
+      - path: Features/Settings/ModeRules.swift
+      - path: Services/KeyCombo.swift
+      - path: Services/HotkeyIDs.swift
+      - path: Services/CustomModeFile.swift
+      - path: Services/TranscriptHistoryStore.swift
+      - path: Services/KeychainService.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.blitztext.mac.tests

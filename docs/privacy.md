@@ -4,10 +4,10 @@ Blitztext has no backend. It does not collect, send or store any data on servers
 
 ## What Stays On Your Mac
 
-- **Audio:** recorded and transcribed on your Mac with a local model (Parakeet or Whisper). Temporary recordings are deleted after each workflow.
+- **Audio:** recorded and transcribed on your Mac with a local model (Parakeet or Whisper). Temporary recordings are deleted after each workflow. A dictation whose transcription failed stays on your Mac for up to 24 hours, so it can be transcribed again from the menu; then it is deleted.
 - **Writing modes with Apple Intelligence:** run on your Mac.
 - **Settings, dictionary, prompts:** local app storage.
-- **History (optional):** encrypted on your Mac, kept as long as you choose (off, 24 hours, 7 days).
+- **History (optional):** encrypted on your Mac with a key kept in the macOS Keychain, kept as long as you choose (off, 24 hours, 7 days).
 - **API keys** for an optional model provider: in the macOS Keychain.
 - **Text around the cursor:** when a dictation starts, Blitztext reads the focused text field through the Accessibility API to fit spaces and capitals. Password fields are never read. The text stays on your Mac, unless you turn on "KI-Modi sehen den Text am Cursor" (see below).
 - **Meetings:** the microphone and, for online meetings, the sound your Mac plays are recorded and transcribed on your Mac; speaker detection runs there too. The audio is deleted after the evaluation; transcript and summary are stored encrypted on your Mac. Live notes and the summary use only the local language model or Apple Intelligence, never a model provider, whatever is set for the writing modes.

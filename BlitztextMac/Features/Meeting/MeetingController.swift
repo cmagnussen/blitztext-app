@@ -82,10 +82,7 @@ final class MeetingController {
 
     /// Meetings need Parakeet: its word timings place every word with a person.
     static var blocker: String? {
-        guard ParakeetTranscriber.isSupported else {
-            return "Meetings brauchen einen Mac mit Apple-Chip."
-        }
-        return ParakeetTranscriber.isInstalled
+        ParakeetTranscriber.isInstalled
             ? nil
             : "F\u{00FC}r Meetings braucht Blitztext Parakeet. Bitte in den Einstellungen unter Sprachmodell laden."
     }
@@ -532,6 +529,18 @@ final class MeetingController {
         notice = nil
         phase = .showing(meetingID)
     }
+
+    /// Gives one part of the transcript to another person. The summary may still name the
+    /// old one, so it says how to bring it up to date.
+    func reassign(turn turnID: UUID, to speaker: Int, in meetingID: UUID) {
+        guard var record = store.meeting(id: meetingID), record.turns.reassign(turn: turnID, to: speaker) else { return }
+        if record.summary != nil {
+            record.summaryNote = Self.reassignedNote
+        }
+        store.upsert(record)
+    }
+
+    static let reassignedNote = "Die Zuordnung hat sich ge\u{00E4}ndert. \u{201E}Neu erstellen\u{201C} bringt die Zusammenfassung und die To-dos auf den neuen Stand."
 
     func rename(speaker: Int, to name: String, in meetingID: UUID) {
         guard var record = store.meeting(id: meetingID) else { return }

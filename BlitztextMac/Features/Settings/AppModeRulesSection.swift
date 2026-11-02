@@ -2,23 +2,6 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// One rule: dictating with the Blitztext shortcut in this app uses `mode` instead.
-struct AppModeRule: Codable, Hashable, Identifiable {
-    var bundleID: String
-    var appName: String
-    var mode: WorkflowType
-
-    var id: String { bundleID }
-}
-
-/// The same for a website in a browser, e.g. Gmail. `host` matches subdomains too.
-struct WebsiteModeRule: Codable, Hashable, Identifiable {
-    var host: String
-    var mode: WorkflowType
-
-    var id: String { host }
-}
-
 /// Settings for "Modus je App": e.g. Mail or Gmail always become Blitztext+.
 struct AppModeRulesSection: View {
     @Bindable var appState: AppState
@@ -37,7 +20,8 @@ struct AppModeRulesSection: View {
         ("LinkedIn", "linkedin.com"),
     ]
 
-    private static let selectableModes: [WorkflowType] = [.tapTalk, .textImprover, .dampfAblassen, .emojiText]
+    /// The built-in modes and the user's own modes.
+    private var selectableModes: [WorkflowType] { appState.menuModes }
 
     var body: some View {
         SettingsSection(title: "Modus je App") {
@@ -54,7 +38,7 @@ struct AppModeRulesSection: View {
                         .lineLimit(1)
                     Spacer(minLength: 6)
                     Picker("", selection: binding(for: rule)) {
-                        ForEach(Self.selectableModes) { mode in
+                        ForEach(selectableModes) { mode in
                             Text(appState.displayName(for: mode)).tag(mode)
                         }
                     }
@@ -86,7 +70,7 @@ struct AppModeRulesSection: View {
                         .lineLimit(1)
                     Spacer(minLength: 6)
                     Picker("", selection: binding(for: rule)) {
-                        ForEach(Self.selectableModes) { mode in
+                        ForEach(selectableModes) { mode in
                             Text(appState.displayName(for: mode)).tag(mode)
                         }
                     }
@@ -114,7 +98,8 @@ struct AppModeRulesSection: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            if (rules.contains(where: { $0.mode != .tapTalk }) || websiteRules.contains(where: { $0.mode != .tapTalk }))
+            if (rules.contains(where: { appState.needsLanguageModel(shown($0.mode)) })
+                || websiteRules.contains(where: { appState.needsLanguageModel(shown($0.mode)) }))
                 && !appState.canRewrite {
                 Text("KI-Modi brauchen Apple Intelligence oder einen API-Key. Bis dahin diktiert Blitztext dort wortgenau.")
                     .font(.ui(12))
@@ -168,9 +153,14 @@ struct AppModeRulesSection: View {
         return Self.websitePresets.filter { !existing.contains($0.host) }
     }
 
+    /// A rule whose own mode no longer exists shows and works as Blitztext.
+    private func shown(_ mode: WorkflowType) -> WorkflowType {
+        appState.modeExists(mode) ? mode : .tapTalk
+    }
+
     private func binding(for rule: WebsiteModeRule) -> Binding<WorkflowType> {
         Binding(
-            get: { rule.mode },
+            get: { shown(rule.mode) },
             set: { newMode in
                 guard let index = appState.appSettings.websiteModeRules.firstIndex(where: { $0.id == rule.id }) else { return }
                 appState.appSettings.websiteModeRules[index].mode = newMode
@@ -202,7 +192,7 @@ struct AppModeRulesSection: View {
 
     private func binding(for rule: AppModeRule) -> Binding<WorkflowType> {
         Binding(
-            get: { rule.mode },
+            get: { shown(rule.mode) },
             set: { newMode in
                 guard let index = appState.appSettings.appModeRules.firstIndex(where: { $0.id == rule.id }) else { return }
                 appState.appSettings.appModeRules[index].mode = newMode

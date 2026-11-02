@@ -93,6 +93,11 @@ struct AudioFileView: View {
         return "\(seconds / 60):\(String(format: "%02d", seconds % 60)) min"
     }
 
+    /// The AI modes, including own modes with an instruction.
+    private var rewriteModes: [WorkflowType] {
+        appState.menuModes.filter { appState.needsLanguageModel($0) }
+    }
+
     private var result: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
@@ -127,7 +132,7 @@ struct AudioFileView: View {
 
                 if appState.canRewrite {
                     Menu {
-                        ForEach([WorkflowType.textImprover, .dampfAblassen, .emojiText].filter { $0 != controller.mode }, id: \.self) { mode in
+                        ForEach(rewriteModes.filter { $0 != controller.mode }, id: \.self) { mode in
                             Button(appState.displayName(for: mode)) {
                                 controller.rewrite(as: mode, appState: appState)
                             }

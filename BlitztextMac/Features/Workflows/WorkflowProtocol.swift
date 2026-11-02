@@ -1,71 +1,5 @@
 import Foundation
 
-// MARK: - Workflow Types
-
-enum WorkflowType: String, CaseIterable, Identifiable, Codable {
-    case tapTalk
-    case localTapTalk
-    case textImprover
-    case dampfAblassen
-    case emojiText
-
-    var id: String { rawValue }
-
-    static var mainMenuCases: [WorkflowType] {
-        allCases.filter { $0 != .localTapTalk }
-    }
-
-    var displayName: String {
-        switch self {
-        case .tapTalk: return "Blitztext"
-        case .localTapTalk: return "Blitztext Lokal"
-        case .textImprover: return "Blitztext+"
-        case .dampfAblassen: return "Blitztext $%&!"
-        case .emojiText: return "Blitztext :)"
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .tapTalk: return "mic.fill"
-        case .localTapTalk: return "lock.shield.fill"
-        case .textImprover: return "text.badge.checkmark"
-        case .dampfAblassen: return "flame.fill"
-        case .emojiText: return "face.smiling"
-        }
-    }
-
-    var subtitle: String {
-        switch self {
-        case .tapTalk: return "Sprache rein. Text raus."
-        case .localTapTalk: return "Sprache rein. Text raus."
-        case .textImprover: return "Gesprochen rein. Geschrieben raus."
-        case .dampfAblassen: return "Frust rein. Entspannt raus."
-        case .emojiText: return "Text rein. Emojis dazu."
-        }
-    }
-
-    var hotkeyLabel: String {
-        switch self {
-        case .tapTalk: return "fn + Shift"
-        case .localTapTalk: return "fn + Shift + Ctrl"
-        case .textImprover: return "fn + Control"
-        case .dampfAblassen: return "fn + Option"
-        case .emojiText: return "fn + Cmd"
-        }
-    }
-
-    var accentColor: String {
-        switch self {
-        case .tapTalk: return "blue"
-        case .localTapTalk: return "green"
-        case .textImprover: return "purple"
-        case .dampfAblassen: return "orange"
-        case .emojiText: return "cyan"
-        }
-    }
-}
-
 // MARK: - Workflow State
 
 enum WorkflowLaunchSource: Equatable {
@@ -98,6 +32,8 @@ protocol Workflow: AnyObject, Observable {
     var onPhaseChange: WorkflowPhaseChangeHandler? { get set }
     /// What was said, word for word, before an AI mode rewrote it; nil for plain dictation.
     var transcript: String? { get }
+    /// An AI mode failed on a finished transcript: the word-for-word text to keep.
+    var onKeptTranscript: WorkflowOutputHandler? { get set }
 
     func start()
     func stop()
@@ -106,6 +42,11 @@ protocol Workflow: AnyObject, Observable {
 
 extension Workflow {
     var transcript: String? { nil }
+    /// Plain dictation has no AI step that could fail.
+    var onKeptTranscript: WorkflowOutputHandler? {
+        get { nil }
+        set {}
+    }
 }
 
 // MARK: - App Settings
@@ -122,6 +63,7 @@ struct AppSettings: Codable {
     /// Macs that already had a model when the setup assistant arrived were marked as set up.
     var hasMigratedToSetupAssistant: Bool = false
     /// Optional shortcuts per workflow (keyed by `WorkflowType.rawValue`) for non-Apple keyboards.
+    /// The only shortcut an own mode can have.
     var customHotkeys: [String: KeyCombo] = [:]
     var restoreClipboardAfterPaste: Bool = true
     var correctCustomTermsEnabled: Bool = true
@@ -146,6 +88,10 @@ struct AppSettings: Codable {
     /// Write the summary right after a meeting. Off: transcript by person only, faster;
     /// the summary can still be created later.
     var summarizesMeetings: Bool = true
+    /// The user's own modes ("Eigene Modi"), in menu order.
+    var customModes: [CustomMode] = []
+    /// E-Mail and Stichpunkte were added once, as on iOS; deleting them later sticks.
+    var hasSeededCustomModes: Bool = false
 
     init(
         hotkeyMode: HotkeyMode = .hold,
@@ -181,6 +127,8 @@ struct AppSettings: Codable {
         case automaticParagraphs
         case showsRecordingIndicator
         case summarizesMeetings
+        case customModes
+        case hasSeededCustomModes
     }
 
     init(from decoder: Decoder) throws {
@@ -212,20 +160,45 @@ struct AppSettings: Codable {
         automaticParagraphs = try container.decodeIfPresent(Bool.self, forKey: .automaticParagraphs) ?? false
         showsRecordingIndicator = try container.decodeIfPresent(Bool.self, forKey: .showsRecordingIndicator) ?? true
         summarizesMeetings = try container.decodeIfPresent(Bool.self, forKey: .summarizesMeetings) ?? true
+        customModes = (try? container.decodeIfPresent([CustomMode].self, forKey: .customModes)) ?? []
+        hasSeededCustomModes = try container.decodeIfPresent(Bool.self, forKey: .hasSeededCustomModes) ?? false
     }
 
     func customHotkey(for type: WorkflowType) -> KeyCombo? {
         customHotkeys[type.rawValue]
     }
 
+    /// Own shortcuts of the modes that exist; a deleted own mode's leftovers do not register.
     var resolvedCustomHotkeys: [WorkflowType: KeyCombo] {
-        var result: [WorkflowType: KeyCombo] = [:]
-        for (rawValue, combo) in customHotkeys {
-            if let type = WorkflowType(rawValue: rawValue) {
-                result[type] = combo
-            }
-        }
-        return result
+        CustomModeLinks.resolvedHotkeys(customHotkeys, modes: customModes)
+    }
+
+    func customMode(id: String) -> CustomMode? {
+        customModes.first { $0.id == id }
+    }
+
+    /// Removes an own mode with its shortcut; its app and website rules go back to Blitztext.
+    mutating func deleteCustomMode(id: String) {
+        var modes = customModes
+        var hotkeys = customHotkeys
+        var appRules = appModeRules
+        var websiteRules = websiteModeRules
+        CustomModeLinks.delete(id: id, modes: &modes, hotkeys: &hotkeys, appRules: &appRules, websiteRules: &websiteRules)
+        customModes = modes
+        customHotkeys = hotkeys
+        appModeRules = appRules
+        websiteModeRules = websiteRules
+    }
+
+    /// Tidies shortcuts and rules of own modes that no longer exist.
+    mutating func removeCustomModeOrphans() {
+        var hotkeys = customHotkeys
+        var appRules = appModeRules
+        var websiteRules = websiteModeRules
+        CustomModeLinks.removeOrphans(modes: customModes, hotkeys: &hotkeys, appRules: &appRules, websiteRules: &websiteRules)
+        customHotkeys = hotkeys
+        appModeRules = appRules
+        websiteModeRules = websiteRules
     }
 }
 

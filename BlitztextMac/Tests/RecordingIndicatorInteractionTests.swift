@@ -163,4 +163,29 @@ final class RecordingIndicatorInteractionTests: XCTestCase {
         )
         XCTAssertEqual(origin, CGPoint(x: 10, y: 20))
     }
+
+    func testErrorPillGrowsFromItsBottomCentre() {
+        let visible = CGRect(x: 0, y: 25, width: 1440, height: 850)
+        let pill = CGRect(x: 630, y: 41, width: 180, height: 72)
+        let error = RecordingIndicatorPlacement.resize(pill, to: CGSize(width: 332, height: 94), in: visible)
+        XCTAssertEqual(error, CGRect(x: 554, y: 41, width: 332, height: 94))
+        let back = RecordingIndicatorPlacement.resize(error, to: CGSize(width: 180, height: 72), in: visible)
+        XCTAssertEqual(back, pill)
+    }
+
+    func testErrorPillNearTheScreenEdgeStaysVisible() {
+        let visible = CGRect(x: 0, y: 25, width: 1440, height: 850)
+        let pill = CGRect(x: 1260, y: 803, width: 180, height: 72)
+        let error = RecordingIndicatorPlacement.resize(pill, to: CGSize(width: 332, height: 94), in: visible)
+        XCTAssertTrue(visible.contains(error))
+        XCTAssertEqual(error.origin, CGPoint(x: 1108, y: 781))
+    }
+
+    func testErrorStaysLongEnoughToRead() {
+        XCTAssertEqual(RecordingIndicatorNotice.errorSeconds(for: ""), 2.5)
+        XCTAssertEqual(RecordingIndicatorNotice.errorSeconds(for: "Keine Aufnahme erkannt."), 2.5, accuracy: 0.1)
+        let key = "Der API-Key wurde abgelehnt. Bitte in den Einstellungen pr\u{00FC}fen."
+        XCTAssertEqual(RecordingIndicatorNotice.errorSeconds(for: key), 5.2, accuracy: 0.1)
+        XCTAssertEqual(RecordingIndicatorNotice.errorSeconds(for: String(repeating: "a", count: 400)), 7)
+    }
 }

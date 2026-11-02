@@ -17,6 +17,11 @@ enum AppSupportPaths {
         appSupportDirectoryURL.appendingPathComponent(".credentials")
     }
 
+    /// Own modes, besides settings.json (`CustomModeFile`).
+    static var customModesURL: URL {
+        appSupportDirectoryURL.appendingPathComponent("custom-modes.json")
+    }
+
     static var historyURL: URL {
         appSupportDirectoryURL.appendingPathComponent(".history")
     }

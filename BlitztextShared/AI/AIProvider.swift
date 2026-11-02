@@ -128,13 +128,21 @@ enum APIKeyStore {
         return key
     }
 
+    /// Replaces the stored key in place, so a write the Keychain refuses keeps the old key
+    /// instead of leaving none. An empty key removes it.
     @discardableResult
     static func save(_ key: String, for provider: AIProvider) -> Bool {
         let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
-        delete(for: provider)
-        guard !trimmed.isEmpty else { return true }
+        guard !trimmed.isEmpty else {
+            delete(for: provider)
+            return true
+        }
+        let value = Data(trimmed.utf8)
+        let update = [kSecValueData as String: value]
+        let status = SecItemUpdate(baseQuery(provider) as CFDictionary, update as CFDictionary)
+        guard status == errSecItemNotFound else { return status == errSecSuccess }
         var item = baseQuery(provider)
-        item[kSecValueData as String] = Data(trimmed.utf8)
+        item[kSecValueData as String] = value
         item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         return SecItemAdd(item as CFDictionary, nil) == errSecSuccess
     }

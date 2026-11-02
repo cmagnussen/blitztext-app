@@ -90,6 +90,13 @@ enum RecordingIndicatorPlacement {
         )
     }
 
+    /// The pill changes size (an error needs more room): it keeps its bottom centre, so it
+    /// grows upwards and to both sides, and stays inside the visible frame.
+    static func resize(_ frame: CGRect, to size: CGSize, in visible: CGRect) -> CGRect {
+        let origin = clamp(CGPoint(x: frame.midX - size.width / 2, y: frame.minY), size: size, to: visible)
+        return CGRect(origin: origin, size: size)
+    }
+
     static func restore(_ saved: Saved, size: CGSize, in frame: CGRect) -> CGPoint {
         let x = saved.x.isFinite ? min(max(saved.x, 0), 1) : 0.5
         let y = saved.y.isFinite ? min(max(saved.y, 0), 1) : 0
@@ -97,5 +104,13 @@ enum RecordingIndicatorPlacement {
             x: frame.minX + CGFloat(x) * max(0, frame.width - size.width),
             y: frame.minY + CGFloat(y) * max(0, frame.height - size.height)
         ), size: size, to: frame)
+    }
+}
+
+enum RecordingIndicatorNotice {
+    /// How long an error stays in the pill and on the menu bar icon: about 15 characters a
+    /// second to read it, at least 2.5 and at most 7 seconds.
+    static func errorSeconds(for message: String) -> TimeInterval {
+        min(7, max(2.5, 1 + Double(message.count) / 15))
     }
 }

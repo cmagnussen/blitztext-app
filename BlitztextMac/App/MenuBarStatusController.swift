@@ -5,7 +5,8 @@ enum MenuBarStatus: Equatable {
     case recording(WorkflowType)
     case processing(WorkflowType)
     case success(WorkflowType?)
-    case error(WorkflowType?)
+    /// Failed; the message says why. The pill shows it, a shortcut dictation has no other window.
+    case error(WorkflowType?, String)
     /// Not pasted on purpose, e.g. because another field has the focus; the text is on the clipboard.
     case copied(WorkflowType?)
     /// A meeting is being recorded; shown while no dictation is active.
@@ -101,11 +102,8 @@ final class MenuBarStatusController {
             return "Blitztext: Fertig"
         case .copied:
             return "Blitztext: Text liegt in der Zwischenablage"
-        case .error(let type):
-            if let type {
-                return "\(type.displayName): Fehler"
-            }
-            return "Blitztext: Fehler"
+        case .error(let type, let message):
+            return "\(type?.displayName ?? "Blitztext"): \(message)"
         case .meeting:
             return "Meeting: Aufnahme l\u{00E4}uft"
         }
@@ -221,7 +219,7 @@ private enum MenuBarStatusIconRenderer {
             switch type {
             case .tapTalk, .localTapTalk:
                 values = [0.74, 1.0, 0.82, 0.92]
-            case .textImprover:
+            case .textImprover, .custom:
                 values = [0.66, 0.84, 1.0, 0.8]
             case .dampfAblassen:
                 values = [1.0, 0.76, 0.94, 0.68]
@@ -235,7 +233,7 @@ private enum MenuBarStatusIconRenderer {
             switch type {
             case .tapTalk, .localTapTalk:
                 values = [0.58, 0.72, 0.9, 0.72]
-            case .textImprover:
+            case .textImprover, .custom:
                 values = [0.48, 0.68, 0.92, 0.84]
             case .dampfAblassen:
                 values = [0.84, 0.62, 0.9, 0.56]
@@ -330,7 +328,7 @@ private enum MenuBarStatusIconRenderer {
                 [0.4, 0.62, 0.88, 1.0],
             ]
             return patterns[frame % patterns.count]
-        case .textImprover:
+        case .textImprover, .custom:
             let patterns: [[CGFloat]] = [
                 [1.0, 0.88, 0.52, 0.3],
                 [0.86, 1.0, 0.84, 0.44],
@@ -367,7 +365,7 @@ private enum MenuBarStatusIconRenderer {
                 [0.92, 0.8, 0.64, 0.5],
             ]
             return patterns[frame % patterns.count]
-        case .textImprover:
+        case .textImprover, .custom:
             let patterns: [[CGFloat]] = [
                 [1.0, 0.76, 0.52, 0.34],
                 [0.86, 1.0, 0.74, 0.48],
@@ -406,6 +404,8 @@ private enum MenuBarStatusIconRenderer {
             return "flame.fill"
         case .emojiText:
             return "face.smiling"
+        case .custom:
+            return type.icon
         }
     }
 

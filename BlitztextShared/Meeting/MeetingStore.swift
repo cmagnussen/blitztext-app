@@ -1,13 +1,6 @@
 import Foundation
 import Observation
 
-struct MeetingTurn: Codable, Equatable, Identifiable {
-    var id = UUID()
-    let speaker: Int
-    let start: TimeInterval
-    let text: String
-}
-
 struct MeetingRecord: Codable, Equatable, Identifiable {
     enum Status: String, Codable {
         /// Audio is kept until processing succeeds, so an interrupted meeting can be retried.
@@ -116,6 +109,11 @@ final class MeetingStore {
             Self.moveUnreadableFileAside()
         }
         migrateSpeakerLabels()
+        #if os(macOS)
+        // Meetings saved with a machine-derived key move to the Keychain key now, not only
+        // with the next change.
+        KeychainService.migrateIfLegacy(at: Self.fileURL)
+        #endif
     }
 
     #if DEBUG

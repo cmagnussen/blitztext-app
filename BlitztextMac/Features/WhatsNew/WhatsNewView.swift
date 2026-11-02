@@ -4,7 +4,7 @@ import SwiftUI
 /// or right after the first dictation for people who only use the shortcuts.
 enum WhatsNew {
     /// Bump together with the items when a release deserves a note.
-    static let version = "1.15"
+    static let version = "1.16"
 
     struct Item: Identifiable {
         let icon: String
@@ -15,19 +15,19 @@ enum WhatsNew {
 
     static let items: [Item] = [
         Item(
-            icon: "video.fill",
-            title: "Online-Meetings (Beta)",
-            detail: "Mit dem Schalter \u{201E}Online-Meeting\u{201C} nimmt Blitztext auch den Ton des Macs auf, etwa aus Teams, Zoom oder Meet, und trennt die anderen nach Stimme. Live-Notizen zeigen schon w\u{00E4}hrend des Meetings Themen, Entscheidungen und To-dos. Bitte vorher alle fragen."
+            icon: "wand.and.stars",
+            title: "Eigene Modi",
+            detail: "Unter Einstellungen > Modi legst du eigene Schreibmodi an, etwa f\u{00FC}r Konzepte, Antworten oder eine \u{00DC}bersetzung, mit eigenem K\u{00FC}rzel und unter \u{201E}Modus je App\u{201C}. E-Mail und Stichpunkte sind schon da."
         ),
         Item(
-            icon: "cpu",
-            title: "Lokales Sprachmodell (Beta)",
-            detail: "Unter Einstellungen > Modelle l\u{00E4}sst sich Gemma 4 laden. Es fasst lange Meetings genauer zusammen als Apple Intelligence, ganz auf diesem Mac. Blitztext zeigt, welche Gr\u{00F6}\u{00DF}e zu deinem Mac passt."
+            icon: "lifepreserver",
+            title: "Nichts geht verloren",
+            detail: "Scheitert ein Diktat, sagt die Aufnahmeanzeige warum. Klappt nur der KI-Schritt nicht, liegt der wortgenaue Text in der Zwischenablage. Scheitert die Transkription, bleibt die Aufnahme 24 Stunden und l\u{00E4}sst sich im Men\u{00FC} neu transkribieren."
         ),
         Item(
-            icon: "text.cursor",
-            title: "Text landet am richtigen Ort",
-            detail: "Klickst du in ein anderes Feld, w\u{00E4}hrend ein KI-Modus noch arbeitet, kommt der Text in die Zwischenablage statt ins falsche Feld. Nach einem KI-Modus bietet das Men\u{00FC} \u{201E}Wortgenau statt \u{2026}\u{201C} an. Das erste Wort bleibt erhalten, und Blitztext sagt, wenn das Mikrofon fehlt oder sehr leise ist."
+            icon: "mic.fill",
+            title: "Mikrofon und Meetings",
+            detail: "Unter Allgemein w\u{00E4}hlst du das Mikrofon f\u{00FC}r Diktate, etwa ein Headset. Im Meeting ordnet ein Klick auf den Namen einen Abschnitt einer anderen Person zu."
         ),
     ]
 }
