@@ -160,6 +160,30 @@ final class LockedOutStoreTests: XCTestCase {
         XCTAssertNil(contents(files.pendingURL))
     }
 
+    /// Review of #70: a side file this build cannot read (another Mac's machine key) was
+    /// overwritten or removed by the next save. It is moved aside now, for both stores.
+    func testUnreadableSideFileIsKeptAside() throws {
+        let unreadable = Data("sealed with another Mac's key".utf8)
+        for name in ["history", "meetings"] {
+            let files = files(name)
+            try unreadable.write(to: files.pendingURL)
+
+            keys.fileKeyAvailable = name == "history"
+            if name == "history" {
+                let store = TranscriptHistoryStore(retention: .day, files: files)
+                store.add("Neu", workflow: .tapTalk)
+            } else {
+                let store = MeetingStore(files: files)
+                XCTAssertTrue(store.upsert(MeetingRecord(id: UUID(), createdAt: Date(), title: "Neu", duration: 60, status: .done)))
+            }
+
+            let aside = try FileManager.default.contentsOfDirectory(atPath: folder.path)
+                .filter { $0.hasPrefix(".\(name)-pending.unreadable-") }
+            XCTAssertEqual(aside.count, 1, name)
+            XCTAssertEqual(contents(folder.appendingPathComponent(aside[0])), unreadable, name)
+        }
+    }
+
     /// The side file wins for the same id (it is newer), newest first.
     func testMergeKeepsTheNewerRecord() {
         let id = UUID()

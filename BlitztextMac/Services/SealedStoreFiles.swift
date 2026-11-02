@@ -24,15 +24,22 @@ struct SealedStoreFiles {
     }
 
     func readMain<Value: Decodable>(_ type: Value.Type) -> Read<Value> {
-        guard let stored = try? Data(contentsOf: mainURL) else { return .missing }
-        guard let data = open(stored), let value = try? JSONDecoder().decode(type, from: data) else { return .unreadable }
-        return .value(value)
+        read(type, at: mainURL)
     }
 
-    /// Nil when there is no side file, or none this build can read.
-    func readPending<Value: Decodable>(_ type: Value.Type) -> Value? {
-        guard let stored = try? Data(contentsOf: pendingURL), let data = open(stored) else { return nil }
-        return try? JSONDecoder().decode(type, from: data)
+    /// Nil when there is no side file. One this build cannot read (another Mac's machine key,
+    /// a later format) is moved aside first, so no later save overwrites or removes it: it may
+    /// hold meetings whose audio is already gone.
+    func readPending<Value: Decodable>(_ type: Value.Type, now: Date = Date()) -> Value? {
+        switch read(type, at: pendingURL) {
+        case .value(let value):
+            return value
+        case .missing:
+            return nil
+        case .unreadable:
+            moveAside(pendingURL, now: now)
+            return nil
+        }
     }
 
     func writeMain<Value: Encodable>(_ value: Value) throws {
@@ -54,9 +61,19 @@ struct SealedStoreFiles {
     /// A main file that does not open although the key is there (another Mac's key, a later
     /// format): kept aside instead of being overwritten, so it can still be recovered.
     func moveMainAside(now: Date = Date()) {
-        let aside = mainURL.deletingLastPathComponent()
-            .appendingPathComponent(mainURL.lastPathComponent + ".unreadable-\(Int(now.timeIntervalSince1970))")
-        try? FileManager.default.moveItem(at: mainURL, to: aside)
+        moveAside(mainURL, now: now)
+    }
+
+    private func moveAside(_ url: URL, now: Date) {
+        let aside = url.deletingLastPathComponent()
+            .appendingPathComponent(url.lastPathComponent + ".unreadable-\(Int(now.timeIntervalSince1970))")
+        try? FileManager.default.moveItem(at: url, to: aside)
+    }
+
+    private func read<Value: Decodable>(_ type: Value.Type, at url: URL) -> Read<Value> {
+        guard let stored = try? Data(contentsOf: url) else { return .missing }
+        guard let data = open(stored), let value = try? JSONDecoder().decode(type, from: data) else { return .unreadable }
+        return .value(value)
     }
 
     private func write<Value: Encodable>(_ value: Value, sealedWith seal: (Data) throws -> Data, to url: URL) throws {

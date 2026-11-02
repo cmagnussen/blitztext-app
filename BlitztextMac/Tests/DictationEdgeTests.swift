@@ -25,7 +25,9 @@ final class HallucinationFilterTests: XCTestCase {
     /// short recording goes instead of being kept as "Aufnahme ohne Text"; real text stays.
     func testWhisperTextOnHardlyAnySpeechCountsAsNoSpeech() {
         XCTAssertNil(HallucinationFilter.whisperText("Thank you.", longestVoicedRun: 0.2))
-        XCTAssertNil(HallucinationFilter.whisperText("Untertitel im Auftrag des ZDF, 2021", longestVoicedRun: 5))
+        XCTAssertNil(HallucinationFilter.whisperText("Untertitel im Auftrag des ZDF, 2021", longestVoicedRun: 0.2))
+        // Speech under the credit: no text, but not "no speech", so the recording is kept.
+        XCTAssertEqual(HallucinationFilter.whisperText("Untertitel im Auftrag des ZDF, 2021", longestVoicedRun: 5), "")
         XCTAssertEqual(HallucinationFilter.whisperText("Vielen Dank.", longestVoicedRun: 0.9), "Vielen Dank.")
         XCTAssertEqual(HallucinationFilter.whisperText("Bis morgen.", longestVoicedRun: 0.2), "Bis morgen.")
     }
