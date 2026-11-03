@@ -639,6 +639,15 @@ final class AppState {
         pasteAtCursor(entry.text, target: lastPopoverPasteTarget)
     }
 
+    /// "Lauter stellen" on the quiet-microphone notice. Without a volume Blitztext may set, the
+    /// Sound settings open instead.
+    func raiseMicrophoneVolume() {
+        if !MicrophoneCheck.raiseInputVolume() {
+            MicrophoneCheck.openSoundSettings()
+        }
+        microphoneIssue = MicrophoneCheck.issue
+    }
+
     func prepareForPopoverPresentation() {
         lastPopoverPasteTarget = captureCurrentFrontmostApp()
         microphoneDenied = MicrophonePermission.isDenied

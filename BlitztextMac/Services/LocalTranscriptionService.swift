@@ -120,10 +120,16 @@ enum LocalTranscriptionError: LocalizedError, NoSpeechVerdict {
         case .downloadedModelInvalid(let modelName):
             return "Das geladene Modell ist unvollständig: \(modelName)"
         case .noText:
-            return "Das lokale Modell hat keinen Text erkannt."
+            return Self.withQuietMicrophoneHint("Das lokale Modell hat keinen Text erkannt.")
         case .noSpeech:
-            return "In der Aufnahme war keine Sprache zu hören."
+            return Self.withQuietMicrophoneHint("In der Aufnahme war keine Sprache zu hören.")
         }
+    }
+
+    /// Adds the likely reason when macOS records very quietly.
+    private static func withQuietMicrophoneHint(_ message: String) -> String {
+        guard case .quiet(let percent) = MicrophoneCheck.issue else { return message }
+        return message.appendingSentence("Das Mikrofon ist sehr leise eingestellt (\(percent) %), im Menü lässt es sich lauter stellen.")
     }
 
     var meansNoSpeech: Bool {
@@ -379,12 +385,13 @@ actor LocalTranscriptionService {
     }
 
     /// - Parameter requireSpeech: On for live dictations only. Audio files, including a kept
-    ///   recording the check turned down once (`UnfinishedRecordings`), always reach the model.
+    ///   recording (`UnfinishedRecordings`), always reach the model.
     func transcribe(audioURL: URL, language: String, modelName: String, requireSpeech: Bool = true) async throws -> String {
-        // Every model invents text on a recording without speech (an accidental shortcut), so
-        // none of them runs on one.
-        if requireSpeech, let run = HallucinationFilter.longestVoicedRun(in: audioURL), HallucinationFilter.hasNoSpeech(longestVoicedRun: run) {
-            speechLogger.info("No speech: longest voiced run \(run, format: .fixed(precision: 2)) s, no model run")
+        // Every model invents text on a recording without speech, so none of them runs on an
+        // accidental shortcut. Longer dictations always reach the model, as on iOS: they may
+        // just be quiet (a low input volume, a whisper).
+        if requireSpeech, HallucinationFilter.isAccidentalRecording(audioURL) {
+            speechLogger.info("No speech in a dictation under 3 s, no model run")
             throw LocalTranscriptionError.noSpeech
         }
         let resolvedLanguage = language.trimmingCharacters(in: .whitespacesAndNewlines)
