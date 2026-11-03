@@ -145,6 +145,9 @@ final class SwissSpellingTests: XCTestCase {
         XCTAssertTrue(rules.contains("CHF 23,50 → CHF 23.50"))
         XCTAssertTrue(rules.contains("23,40 Euro → 23.40 Euro"))
         XCTAssertTrue(rules.contains("Euro bleibt Euro"))
+        // Only quantities and amounts are grouped; `apply` cannot undo "80’331 München".
+        XCTAssertTrue(rules.contains("Postleitzahlen"))
+        XCTAssertTrue(rules.contains("(80331 München)"))
         // Swiss words stay; they are not asked for ("Fahrrad" stays "Fahrrad").
         XCTAssertTrue(rules.contains("Lass sie stehen"))
         XCTAssertFalse(rules.contains("wird Velo"))
