@@ -101,15 +101,25 @@ enum TextRewriter {
     ///     gives the same result. Providers keep their default sampling.
     ///   - purpose: `.editTranscript` for the built-in modes; a result that is no edit throws
     ///     `RewriteError.notEdited`, so callers keep the word-for-word text (`AIStepFailed`).
+    ///   - swissSpelling: Adds the Swiss spelling of the setting "Schreibweise". Meeting
+    ///     summaries add it themselves, for German meetings and on every model.
     static func rewrite(
         _ text: String,
         instruction: String,
         engine: Engine,
         dictationRules: Bool = true,
         deterministic: Bool = false,
-        purpose: Purpose = .generate
+        purpose: Purpose = .generate,
+        swissSpelling: Bool = true
     ) async throws -> String {
-        var instruction = dictationRules ? instruction + "\n\n" + ModePrompts.spokenTranscriptRules : instruction
+        // Swiss spelling: the model is asked for it, and its answer gets the same step as a
+        // transcript, so no "ß" slips through. The Swiss rules come before the dictation rules
+        // and the framing rule, so "only the finished text" stays at the end.
+        let swiss = swissSpelling && GermanVariant.current.isSwiss()
+        var instruction = SwissSpelling.addingRules(to: instruction, isSwiss: swiss)
+        if dictationRules {
+            instruction += "\n\n" + ModePrompts.spokenTranscriptRules
+        }
         var prompt = text
         if purpose == .editTranscript {
             instruction += "\n\n" + RewriteGuard.framingRule
@@ -130,12 +140,14 @@ enum TextRewriter {
             result = try await AIClient.complete(instruction: instruction, text: prompt, config: config)
         }
 
-        guard purpose == .editTranscript else { return result }
-        let edited = RewriteGuard.unwrapped(result)
-        if let problem = RewriteGuard.problem(in: edited, source: text) {
-            throw RewriteError.notEdited(problem.message)
+        var answer = result
+        if purpose == .editTranscript {
+            answer = RewriteGuard.unwrapped(result)
+            if let problem = RewriteGuard.problem(in: answer, source: text) {
+                throw RewriteError.notEdited(problem.message)
+            }
         }
-        return edited
+        return swiss ? SwissSpelling.apply(answer) : answer
     }
 
     /// Apple Intelligence on the device and nothing else, for features that promise the text
