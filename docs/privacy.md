@@ -2,6 +2,8 @@
 
 Blitztext has no backend. It does not collect, send or store any data on servers operated by Blitztext or Blackboat.
 
+This page covers the Mac app and, further down, the [iPhone app](#iphone-app). Blitztext is a Blackboat project; the [imprint](https://www.blackboat.com/impressum) names the responsible company, and [Blackboat's privacy policy](https://www.blackboat.com/datenschutz) explains your rights. Questions: blitztext@blackboat.com.
+
 ## What Stays On Your Mac
 
 - **Audio:** recorded and transcribed on your Mac with a local model (Parakeet or Whisper). Temporary recordings are deleted after each workflow. A dictation whose transcription failed stays on your Mac for up to 24 hours, so it can be transcribed again from the menu; then it is deleted.
@@ -27,3 +29,33 @@ To paste, Blitztext puts the text on the clipboard and restores your previous cl
 ## Sensitive Content
 
 Transcription and the Apple Intelligence modes are local. If you configure an external model provider, check whether your content may be sent there.
+
+## iPhone App
+
+The iPhone app needs no account and talks to no Blitztext or Blackboat server. It contains no analytics, no advertising and no tracking.
+
+### What Stays On Your iPhone
+
+- **Audio:** recorded and transcribed on your iPhone with a local model (Parakeet, Whisper or the speech recognition built into iOS). The recording is deleted as soon as its text is done.
+- **Imported audio:** voice memos and voice messages you share with Blitztext are converted and transcribed on your iPhone; the copies are deleted afterwards.
+- **Writing modes with Apple Intelligence:** run on your iPhone.
+- **History (optional):** stored on your iPhone, protected by iOS data protection and shared only between the app and its keyboard, kept as long as you choose (off, 24 hours, 7 days or 30 days; 7 days by default).
+- **Meetings:** recorded, transcribed and split by speaker on your iPhone. The audio is deleted after the evaluation; transcript and summary stay on your iPhone until you delete them. With Apple Intelligence the summary is written on your iPhone; otherwise only through your own model provider, if you allowed it (see below).
+- **Settings, dictionary and your own modes:** local app storage.
+- **API keys** for an optional model provider: in the iOS Keychain, on this device only.
+- **Clipboard:** every result is also copied to the clipboard. iOS may offer it on your other devices (Universal Clipboard).
+
+### Keyboard
+
+Keyboards on iOS have no microphone, so the Blitztext app records and the keyboard only sends start and stop and inserts the result. For this exchange it needs Full Access. It does not record what you type. It reads the text around the cursor in two cases:
+
+- to insert the result into the field where you started; it keeps that text on your iPhone only for the running dictation.
+- when you turn on "Kontext": then the text around the cursor goes along to the writing mode. With Apple Intelligence it stays on your iPhone; with your own model provider it goes to that provider.
+
+Without a running dictation session, a tap on "Blitztext öffnen" in the keyboard opens the Blitztext app, which then records. "Tastatur jetzt starten" in the app's options gets the keyboard ready without that step.
+
+### When Data Leaves Your iPhone
+
+- **Model download:** speech models come from Hugging Face (huggingface.co), which sees the request, as with any download. The speech recognition of iOS loads its language data from Apple.
+- **Optional model provider:** only if you add your own provider (OpenAI, Anthropic, Google Gemini, Mistral, OpenRouter or an address of your own) and allow it in the app; Blitztext asks before any text goes there. Then, whenever Apple Intelligence does not take over or you chose "Immer Modell-Anbieter", the *text* goes directly from your iPhone to that provider: dictations in the writing modes, meeting transcripts for the summary, the terms in your dictionary and, with "Kontext", the text around the cursor. Audio never does. Your contract and the provider's privacy terms apply. You can withdraw the permission at any time under Optionen > KI-Modi.
+- **Feedback:** "Feedback senden" prepares an email to blitztext@blackboat.com with the app version, iOS version, device model and speech model details. You see and can change everything before you send it; the app sends nothing by itself.
