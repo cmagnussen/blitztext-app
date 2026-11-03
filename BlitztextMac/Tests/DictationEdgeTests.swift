@@ -88,10 +88,58 @@ final class HallucinationFilterTests: XCTestCase {
         XCTAssertNil(HallucinationFilter.longestVoicedRun(in: folder.appendingPathComponent("missing.wav")))
     }
 
-    private static func tone(seconds: Double, total: Double) -> [Float] {
+    /// At 27 % input volume a MacBook Pro recorded speech that never reached -40 dBFS, and every
+    /// dictation ended in "keine Sprache". Only a short live dictation is dropped for lack of
+    /// speech now, as on iOS; a longer one always reaches the model.
+    func testOnlyAShortDictationIsDroppedWithoutSpeech() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        let shortcut = folder.appendingPathComponent("shortcut.wav")
+        try Self.writeWAV(Self.roomNoise(seconds: 1), to: shortcut)
+        XCTAssertTrue(HallucinationFilter.isAccidentalRecording(shortcut))
+
+        let shortAnswer = folder.appendingPathComponent("short-answer.wav")
+        try Self.writeWAV(Self.tone(seconds: 0.3, total: 2), to: shortAnswer)
+        XCTAssertFalse(HallucinationFilter.isAccidentalRecording(shortAnswer))
+
+        let long = folder.appendingPathComponent("long.wav")
+        try Self.writeWAV(Self.roomNoise(seconds: 5), to: long)
+        XCTAssertFalse(HallucinationFilter.isAccidentalRecording(long))
+
+        XCTAssertFalse(HallucinationFilter.isAccidentalRecording(folder.appendingPathComponent("missing.wav")))
+    }
+
+    /// The same recording, measured: speech at about -45 dBFS over a floor of about -66 dBFS is
+    /// speech, also in a short dictation. A steady hum below -40 dBFS or a quiet click is none.
+    func testQuietSpeechCountsAboveTheNoiseFloor() throws {
+        let floor = (0..<32_000).map { _ in Float.random(in: -0.0009...0.0009) }
+        let quietAnswer = zip(floor, [Float](repeating: 0, count: 8_000) + Self.tone(seconds: 0.5, total: 1.5, amplitude: 0.008)).map { $0 + $1 }
+        XCTAssertGreaterThanOrEqual(HallucinationFilter.longestVoicedRun(quietAnswer), 0.45)
+
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = folder.appendingPathComponent("quiet-answer.wav")
+        try Self.writeWAV(quietAnswer, to: file)
+        XCTAssertFalse(HallucinationFilter.isAccidentalRecording(file))
+
+        let hum = Self.tone(seconds: 2, total: 2, amplitude: 0.0045)
+        XCTAssertEqual(HallucinationFilter.longestVoicedRun(hum), 0)
+
+        let quietClick = zip(floor, [Float](repeating: 0, count: 8_000) + Self.tone(seconds: 0.06, total: 1.5, amplitude: 0.008)).map { $0 + $1 }
+        XCTAssertTrue(HallucinationFilter.hasNoSpeech(longestVoicedRun: HallucinationFilter.longestVoicedRun(quietClick)))
+    }
+
+    private static func roomNoise(seconds: Double) -> [Float] {
+        (0..<Int(seconds * 16_000)).map { _ in Float.random(in: -0.003...0.003) }
+    }
+
+    private static func tone(seconds: Double, total: Double, amplitude: Float = 0.08) -> [Float] {
         (0..<Int(total * 16_000)).map { index -> Float in
             let t = Double(index) / 16_000
-            return t < seconds ? Float(sin(t * 2 * .pi * 180)) * 0.08 : 0
+            return t < seconds ? Float(sin(t * 2 * .pi * 180)) * amplitude : 0
         }
     }
 

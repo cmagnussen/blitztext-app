@@ -130,9 +130,11 @@ struct MenuBarView: View {
                     NoticeRow(
                         icon: "speaker.wave.1",
                         title: "Mikrofon sehr leise eingestellt (\(percent) %)",
-                        detail: "Dann gehen W\u{00F6}rter verloren. In den Systemeinstellungen unter Ton, Eingang lauter stellen.",
-                        actionTitle: "Ton",
-                        action: { MicrophoneCheck.openSoundSettings() }
+                        detail: "Dann gehen W\u{00F6}rter verloren. \u{201E}Lauter stellen\u{201C} setzt den Eingang auf \(Int(MicrophoneCheck.raisedVolume * 100)) %.",
+                        actionTitle: "Lauter stellen",
+                        action: { appState.raiseMicrophoneVolume() },
+                        secondaryTitle: "Ton",
+                        secondaryAction: { MicrophoneCheck.openSoundSettings() }
                     )
                 case nil:
                     EmptyView()

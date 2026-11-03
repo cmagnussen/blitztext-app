@@ -149,8 +149,9 @@ final class DictationRun {
                 // The cancel itself makes the engines throw; that is no error to show, and
                 // the recording goes, as the cancel asked.
                 guard run == currentRun else { return }
-                // "No speech" on a short recording is an accidental shortcut: it goes. A longer
-                // one may just have been too quiet (a whisper), so it is kept like a failure.
+                // "No speech" on a short recording is an accidental shortcut: it goes. On a
+                // longer one only Whisper's phrase on a cough says so, and someone may have
+                // spoken too quietly, so it is kept like a failure.
                 let accidental = (error as? NoSpeechVerdict)?.meansNoSpeech == true
                     && seconds < Self.minimumSecondsKeptWithoutSpeech
                 guard secured, !(error is CancellationError), !accidental else {
