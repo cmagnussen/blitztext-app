@@ -91,6 +91,17 @@ struct MeetingView: View {
                     .font(.ui(12.5))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+
+                // An existing recording, e.g. an interview, evaluated like a meeting in the room.
+                // Up here, not below the start button: the page is taller than the popover.
+                Button {
+                    NotificationCenter.default.post(name: .chooseMeetingAudioFile, object: nil)
+                } label: {
+                    Label("Audiodatei als Meeting auswerten ...", systemImage: "waveform.badge.plus")
+                }
+                .buttonStyle(.subtle)
+                .disabled(MeetingController.blocker != nil)
+                .help("Zum Beispiel ein Interview oder ein aufgezeichnetes Telefonat. Die Datei bleibt unver\u{00E4}ndert.")
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)

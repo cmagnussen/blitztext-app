@@ -1272,6 +1272,7 @@ extension Notification.Name {
     static let chooseAudioFile = Notification.Name("chooseAudioFile")
     static let showWhatsNew = Notification.Name("showWhatsNew")
     static let showPopover = Notification.Name("showPopover")
+    static let chooseMeetingAudioFile = Notification.Name("chooseMeetingAudioFile")
 }
 
 struct LastInsertion {

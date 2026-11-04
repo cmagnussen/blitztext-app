@@ -319,6 +319,51 @@ final class MeetingController {
 
     // MARK: - Evaluation
 
+    /// An existing recording, e.g. an interview with several people, evaluated like a meeting
+    /// in the room: transcript by person and summary. The same steps as
+    /// `MacMeetingCheck`, with the stored meetings. The file stays as it is; its WAV copy is
+    /// the meeting's audio and goes after the evaluation like a recording.
+    func evaluate(fileAt url: URL) {
+        guard !isRecording, !isProcessing else { return }
+        // A notice from an earlier recording does not belong to this file.
+        notice = nil
+        processingTask?.cancel()
+        evaluation += 1
+        let current = evaluation
+        phase = .processing("Datei wird vorbereitet ...")
+
+        processingTask = Task {
+            var converted: URL?
+            do {
+                let wav = try await Task.detached(priority: .userInitiated) {
+                    try AudioFileConverter.convertToWAV(url)
+                }.value
+                converted = wav.url
+                let record = MeetingRecord(
+                    id: UUID(), createdAt: Date(), title: MeetingRecord.title(forFile: url),
+                    duration: wav.duration, status: .pending
+                )
+                try Task.checkCancellation()
+                try FileManager.default.createDirectory(at: MeetingStore.directoryURL, withIntermediateDirectories: true)
+                try FileManager.default.moveItem(at: wav.url, to: record.audioURL)
+                converted = nil
+                // Like a recording: an unencrypted copy that goes after the evaluation.
+                MeetingStore.excludeFromBackup(record.audioURL)
+                store.upsert(record)
+                guard current == evaluation else { return }
+                process(record.id)
+            } catch {
+                if let converted { try? FileManager.default.removeItem(at: converted) }
+                guard current == evaluation, !(error is CancellationError) else { return }
+                // `AudioFileConverter` says what is wrong in a sentence, as on the audio file page.
+                let message = error.localizedDescription
+                phase = .failed(message, meetingID: nil)
+                // Like a failed evaluation: the menu bar says so when the popover is closed.
+                onEvaluationEnd?(.failure(MeetingEvaluationFailure(message: message)))
+            }
+        }
+    }
+
     /// Runs (or retries) transcription, speaker detection and the summary for a stored meeting.
     func process(_ meetingID: UUID) {
         guard var record = store.meeting(id: meetingID), record.id != recordingID else { return }
