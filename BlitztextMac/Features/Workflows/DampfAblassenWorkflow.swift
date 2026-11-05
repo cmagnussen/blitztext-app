@@ -98,7 +98,8 @@ final class DampfAblassenWorkflow: Workflow {
             answer = try await TextRewriter.rewrite(
                 processedRawText,
                 instruction: ModePrompts.withFieldContext(ModePrompts.dampfAblassen(settings), context: fieldContext()),
-                engine: rewriteEngine
+                engine: rewriteEngine,
+                purpose: .editTranscript
             )
         } catch {
             throw AIStepFailed.wrapping(error, transcript: processedRawText)

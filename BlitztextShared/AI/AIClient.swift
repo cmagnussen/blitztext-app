@@ -74,10 +74,17 @@ enum AIClient {
         ])
 
         let json = try await send(request)
+        let choice = (json["choices"] as? [[String: Any]])?.first
+        let message = choice?["message"] as? [String: Any]
+        // A declined request comes in its own field or as a filter stop, not as the answer.
+        if let refusal = message?["refusal"] as? String, !refusal.isEmpty {
+            throw AIClientError.refused
+        }
+        if (choice?["finish_reason"] as? String) == "content_filter" {
+            throw AIClientError.refused
+        }
         guard
-            let choices = json["choices"] as? [[String: Any]],
-            let message = choices.first?["message"] as? [String: Any],
-            let content = message["content"] as? String,
+            let content = message?["content"] as? String,
             !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         else {
             throw AIClientError.emptyResponse

@@ -98,7 +98,8 @@ final class EmojiTextWorkflow: Workflow {
             result = try await TextRewriter.rewrite(
                 processedRawText,
                 instruction: ModePrompts.withFieldContext(ModePrompts.emoji(settings), context: fieldContext()),
-                engine: rewriteEngine
+                engine: rewriteEngine,
+                purpose: .editTranscript
             )
         } catch {
             throw AIStepFailed.wrapping(error, transcript: processedRawText)

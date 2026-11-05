@@ -102,10 +102,13 @@ final class AudioFileController {
         phase = .working("\(appState.displayName(for: newMode)) wird formuliert ...")
         let engine = appState.appSettings.rewriteEngine
         let source = transcript
+        // Own modes write new text; the built-in ones only edit what was said.
+        let purpose: TextRewriter.Purpose
+        if case .custom = newMode { purpose = .generate } else { purpose = .editTranscript }
 
         task = Task {
             do {
-                let rewritten = try await TextRewriter.rewrite(source, instruction: instruction, engine: engine)
+                let rewritten = try await TextRewriter.rewrite(source, instruction: instruction, engine: engine, purpose: purpose)
                 let cleaned = TranscriptionQualityService.cleanedTranscript(rewritten)
                 if Task.isCancelled { return }
                 finish(cleaned, mode: newMode, appState: appState)

@@ -11,8 +11,8 @@ settings:
     SWIFT_VERSION: "5.10"
     MACOSX_DEPLOYMENT_TARGET: "14.0"
     ONLY_ACTIVE_ARCH: NO
-    MARKETING_VERSION: "1.16.3"
-    CURRENT_PROJECT_VERSION: "48"
+    MARKETING_VERSION: "1.16.4"
+    CURRENT_PROJECT_VERSION: "49"
     # In-app updates for installs outside Jamf (Sparkle). The feed is the appcast of the
     # latest public GitHub release; the key is the public half of the signing key.
     SPARKLE_FEED_URL: "https://github.com/cmagnussen/blitztext-app/releases/latest/download/appcast.xml"
@@ -115,6 +115,7 @@ targets:
       - path: Services/ShortcutModifiers.swift
       - path: ../BlitztextShared/AI/InventedDeadlineFilter.swift
       - path: ../BlitztextShared/AI/AIStepFailed.swift
+      - path: ../BlitztextShared/AI/RewriteGuard.swift
       - path: ../BlitztextShared/Meeting/SpeakerAlignment.swift
       - path: ../BlitztextShared/Meeting/EchoFilter.swift
       - path: Services/LocalLanguageModel/LocalModelCatalog.swift

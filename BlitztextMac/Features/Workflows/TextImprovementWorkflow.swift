@@ -98,7 +98,8 @@ final class TextImprovementWorkflow: Workflow {
             improved = try await TextRewriter.rewrite(
                 processedRawText,
                 instruction: ModePrompts.withFieldContext(ModePrompts.textImprovement(settings), context: fieldContext()),
-                engine: rewriteEngine
+                engine: rewriteEngine,
+                purpose: .editTranscript
             )
         } catch {
             throw AIStepFailed.wrapping(error, transcript: processedRawText)
