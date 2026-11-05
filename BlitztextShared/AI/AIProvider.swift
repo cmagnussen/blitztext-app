@@ -103,10 +103,73 @@ enum AIProviderStore {
         }
     }
 
-    /// True when a provider is set up and has its key (or needs none).
+    /// True when a provider is set up, has its key (or needs none) and may receive text.
     static var isConfigured: Bool {
-        guard let config else { return false }
-        return !config.provider.requiresAPIKey || APIKeyStore.key(for: config.provider) != nil
+        guard let config, hasKey(config) else { return false }
+        return AIProviderConsent.allows(config)
+    }
+
+    /// True when only the permission to send text is missing.
+    static var awaitsConsent: Bool {
+        guard let config, hasKey(config) else { return false }
+        return !AIProviderConsent.allows(config)
+    }
+
+    private static func hasKey(_ config: AIProviderConfig) -> Bool {
+        !config.provider.requiresAPIKey || APIKeyStore.key(for: config.provider) != nil
+    }
+}
+
+/// The user's explicit permission to send text to the connected provider. The iPhone app asks
+/// before any text goes there (App Review 5.1.2: explicit permission before personal data goes to
+/// a third-party AI). It belongs to the provider and the host of its address, so a new recipient
+/// asks again. The Mac app does not ask; it is not distributed through the App Store.
+enum AIProviderConsent {
+    private static let key = "AIProviderConsent.recipient"
+
+    static var isRequired: Bool {
+        #if os(iOS)
+        return true
+        #else
+        return false
+        #endif
+    }
+
+    /// Provider and host, e.g. "openAI|api.openai.com".
+    static func recipient(of config: AIProviderConfig) -> String {
+        let host = URL(string: config.baseURL)?.host() ?? config.baseURL
+        return config.provider.rawValue + "|" + host.lowercased()
+    }
+
+    /// The host shown to the user, e.g. "api.openai.com".
+    static func host(of config: AIProviderConfig) -> String {
+        URL(string: config.baseURL)?.host() ?? config.baseURL
+    }
+
+    static func isGranted(for config: AIProviderConfig) -> Bool {
+        UserDefaults.standard.string(forKey: key) == recipient(of: config)
+    }
+
+    static func allows(_ config: AIProviderConfig) -> Bool {
+        !isRequired || isGranted(for: config)
+    }
+
+    static func grant(for config: AIProviderConfig) {
+        UserDefaults.standard.set(recipient(of: config), forKey: key)
+    }
+
+    static func revoke() {
+        UserDefaults.standard.removeObject(forKey: key)
+    }
+
+    /// The provider's name, or for an own address its host.
+    static func recipientName(of config: AIProviderConfig) -> String {
+        config.provider == .custom ? host(of: config) : config.provider.displayName
+    }
+
+    /// Why an AI step does not go to the provider yet.
+    static func missingMessage(for config: AIProviderConfig) -> String {
+        "Erlaube in den Optionen unter KI-Modi, dass Texte an \(recipientName(of: config)) gehen."
     }
 }
 

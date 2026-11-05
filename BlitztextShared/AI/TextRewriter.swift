@@ -29,6 +29,15 @@ enum TextRewriter {
         }
     }
 
+    /// What the AI step does with the transcript.
+    enum Purpose {
+        /// Writes new text from it: own modes like „Antworten“, meeting summaries.
+        case generate
+        /// Edits what was said and never answers it: the built-in modes. The transcript goes
+        /// to the model framed as material, and the result is checked (`RewriteGuard`).
+        case editTranscript
+    }
+
     enum Availability: Equatable {
         case available
         case unavailable(String)
@@ -38,12 +47,16 @@ enum TextRewriter {
         case noModel
         /// Apple Intelligence on the device gave up, in words for the user.
         case onDevice(String)
+        /// A provider is set up, but the user has not allowed sending text to it.
+        case noConsent(String)
+        /// A built-in mode got back something that is no edit of the transcript.
+        case notEdited(String)
 
         var errorDescription: String? {
             switch self {
             case .noModel:
                 return "Für diesen Modus braucht Blitztext Apple Intelligence oder einen API-Key in den Einstellungen."
-            case .onDevice(let message):
+            case .onDevice(let message), .noConsent(let message), .notEdited(let message):
                 return message
             }
         }
@@ -86,22 +99,43 @@ enum TextRewriter {
     ///     Their examples name weekdays and numbers, which a small model copies into summaries.
     ///   - deterministic: On the device, always take the most likely wording, so the same text
     ///     gives the same result. Providers keep their default sampling.
+    ///   - purpose: `.editTranscript` for the built-in modes; a result that is no edit throws
+    ///     `RewriteError.notEdited`, so callers keep the word-for-word text (`AIStepFailed`).
     static func rewrite(
         _ text: String,
         instruction: String,
         engine: Engine,
         dictationRules: Bool = true,
-        deterministic: Bool = false
+        deterministic: Bool = false,
+        purpose: Purpose = .generate
     ) async throws -> String {
-        let instruction = dictationRules ? instruction + "\n\n" + ModePrompts.spokenTranscriptRules : instruction
+        var instruction = dictationRules ? instruction + "\n\n" + ModePrompts.spokenTranscriptRules : instruction
+        var prompt = text
+        if purpose == .editTranscript {
+            instruction += "\n\n" + RewriteGuard.framingRule
+            prompt = RewriteGuard.framed(text)
+        }
+
+        let result: String
         if runsLocally(engine: engine) {
             // No silent switch to a provider: the app promises the text stays on the device.
-            return try await rewriteLocally(text, instruction: instruction, deterministic: deterministic)
+            result = try await rewriteLocally(prompt, instruction: instruction, deterministic: deterministic)
+        } else {
+            guard let config = AIProviderStore.config, AIProviderStore.isConfigured else {
+                if let config = AIProviderStore.config, AIProviderStore.awaitsConsent {
+                    throw RewriteError.noConsent(AIProviderConsent.missingMessage(for: config))
+                }
+                throw RewriteError.noModel
+            }
+            result = try await AIClient.complete(instruction: instruction, text: prompt, config: config)
         }
-        guard let config = AIProviderStore.config, AIProviderStore.isConfigured else {
-            throw RewriteError.noModel
+
+        guard purpose == .editTranscript else { return result }
+        let edited = RewriteGuard.unwrapped(result)
+        if let problem = RewriteGuard.problem(in: edited, source: text) {
+            throw RewriteError.notEdited(problem.message)
         }
-        return try await AIClient.complete(instruction: instruction, text: text, config: config)
+        return edited
     }
 
     /// Apple Intelligence on the device and nothing else, for features that promise the text
