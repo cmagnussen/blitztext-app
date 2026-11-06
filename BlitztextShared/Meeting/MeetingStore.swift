@@ -36,6 +36,17 @@ struct MeetingRecord: Codable, Equatable, Identifiable {
         Array(Set(turns.map(\.speaker))).sorted()
     }
 
+    /// Gives one part to another person (`[MeetingTurn].reassign`). A name nobody speaks under
+    /// any more goes with the last part, so "Neue Person", which may get that number again,
+    /// starts without a stranger's name.
+    @discardableResult
+    mutating func reassign(turn id: UUID, to speaker: Int) -> Bool {
+        guard turns.reassign(turn: id, to: speaker) else { return false }
+        let speaking = Set(turns.map(\.speaker))
+        speakerNames = speakerNames.filter { speaking.contains($0.key) }
+        return true
+    }
+
     /// "Name: text" per turn, the form used for the summary and for copying.
     var transcriptText: String {
         transcriptText(ownName: nil)
@@ -90,6 +101,16 @@ final class MeetingStore {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
             .appendingPathComponent("Blitztext/Meetings", isDirectory: true)
         #endif
+    }
+
+    /// Keeps a recording out of Time Machine and iCloud backups: it is unencrypted and goes
+    /// once the meeting is evaluated, a copy in a backup would not. Only the audio files; the
+    /// encrypted meetings in the same folder stay in the backup.
+    nonisolated static func excludeFromBackup(_ url: URL) {
+        var url = url
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try? url.setResourceValues(values)
     }
 
     #if os(macOS)
