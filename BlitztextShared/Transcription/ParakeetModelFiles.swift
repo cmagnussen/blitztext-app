@@ -45,6 +45,14 @@ struct ParakeetModelFiles {
         return nil
     }
 
+    /// A staged download cut short after the model folders were made. FluidAudio only checks
+    /// the folders, counts it as there and downloads nothing, so it has to start over. Cut
+    /// short earlier, FluidAudio downloads what is missing.
+    var stagedUltraIsCutShort: Bool {
+        AsrModels.modelsExist(at: stagedUltraDirectory, version: .ultra)
+            && !CompiledModelCheck.isComplete(stagedUltraDirectory)
+    }
+
     /// Moves a complete staged Ultra into place in one step, replacing a half one.
     func installStagedUltra() throws {
         guard CompiledModelCheck.isComplete(stagedUltraDirectory) else {
