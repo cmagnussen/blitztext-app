@@ -134,6 +134,7 @@ final class MeetingController {
                 phase = .failed("Die Aufnahme lie\u{00DF} sich nicht starten. Darf Blitztext das Mikrofon nutzen?", meetingID: nil)
                 return
             }
+            MeetingStore.excludeFromBackup(record.audioURL)
             self.recorder = recorder
             recorderObserver = observer
             recordingID = record.id
@@ -176,6 +177,7 @@ final class MeetingController {
         }
         do {
             try capture.start(writingTo: record.systemAudioURL)
+            MeetingStore.excludeFromBackup(record.systemAudioURL)
             systemCapture = capture
             isRecordingSystemAudio = true
         } catch {
@@ -362,6 +364,8 @@ final class MeetingController {
                 let turns: [SpeakerTurn]
                 // An online meeting: the system sound holds the other people.
                 var system: (words: [TimedWord], wav: URL)?
+                // Before the cancel checks below, so a cancel after the conversion leaves no copy.
+                defer { if let system { try? FileManager.default.removeItem(at: system.wav) } }
                 if FileManager.default.fileExists(atPath: record.systemAudioURL.path) {
                     update(.processing("Ton des Macs wird transkribiert ..."))
                     do {
@@ -374,7 +378,6 @@ final class MeetingController {
                     }
                     try Task.checkCancellation()
                 }
-                defer { if let system { try? FileManager.default.removeItem(at: system.wav) } }
 
                 update(.processing("Stimmen werden erkannt ..."))
                 do {
@@ -446,8 +449,14 @@ final class MeetingController {
     /// The other people of an online meeting. Nil when the file holds no speech, e.g. one cut
     /// short by a crash; the microphone then is the whole meeting.
     private static func transcribeSystemAudio(_ url: URL, language: String) async throws -> (words: [TimedWord], wav: URL)? {
-        let wav = try AudioFileConverter.convertToWAV(url).url
+        // About 1.4 GB an hour: on the main actor this froze Blitztext for seconds, shortcuts
+        // included. Converted away from it, like an audio file (`AudioFileController`).
+        let wav = try await Task.detached(priority: .userInitiated) {
+            try AudioFileConverter.convertToWAV(url).url
+        }.value
         do {
+            // Cancelled during the conversion: no transcription nobody waits for.
+            try Task.checkCancellation()
             let words = try await ParakeetTranscriber.shared.transcribeWords(audioURL: wav, language: language)
             guard !words.isEmpty else {
                 try? FileManager.default.removeItem(at: wav)
@@ -463,8 +472,16 @@ final class MeetingController {
     /// Creates the summary (again), e.g. after renaming people.
     func resummarize(_ meetingID: UUID) async {
         guard var record = store.meeting(id: meetingID) else { return }
+        let turns = record.turns
         await summarize(&record)
-        store.setSummary(record.summary, note: record.summaryNote, for: meetingID)
+        // A part given to another person while the model wrote: the new summary still has
+        // the old assignment, so the note that says so stays.
+        // A note of the summary itself (e.g. the local model failed) stays in front.
+        var note = record.summaryNote
+        if record.summary != nil, let current = store.meeting(id: meetingID), current.turns != turns {
+            note = note.map { $0.appendingSentence(Self.reassignedNote) } ?? Self.reassignedNote
+        }
+        store.setSummary(record.summary, note: note, for: meetingID)
     }
 
     /// On this Mac only: the downloaded local model, which summarizes more exactly, otherwise
@@ -538,7 +555,7 @@ final class MeetingController {
     /// Gives one part of the transcript to another person. The summary may still name the
     /// old one, so it says how to bring it up to date.
     func reassign(turn turnID: UUID, to speaker: Int, in meetingID: UUID) {
-        guard var record = store.meeting(id: meetingID), record.turns.reassign(turn: turnID, to: speaker) else { return }
+        guard var record = store.meeting(id: meetingID), record.reassign(turn: turnID, to: speaker) else { return }
         if record.summary != nil {
             record.summaryNote = Self.reassignedNote
         }

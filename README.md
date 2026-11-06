@@ -124,7 +124,7 @@ More in [docs/setup.md](docs/setup.md) and [docs/local-models.md](docs/local-mod
 
 ## Build It Yourself
 
-You need Xcode 26 or newer (for the Apple Intelligence APIs) and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`).
+You need Xcode 26 or newer (for the Apple Intelligence APIs) and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`). The local language model (MLX) also needs Xcode's Metal Toolchain, a separate download since Xcode 26. If the build stops with "missing Metal Toolchain", run `xcodebuild -downloadComponent MetalToolchain` once (about 840 MB).
 
 ```bash
 git clone https://github.com/cmagnussen/blitztext-app.git

@@ -611,7 +611,9 @@ final class AppState {
     /// Restores focus when needed, then pastes via Cmd+V.
     /// With `restoreClipboardAfterPaste` the previous clipboard comes back once the target app
     /// has read the text. Otherwise, or when pasting is impossible, the text stays on the clipboard.
-    private func pasteAtCursor(_ text: String, target: PasteTarget? = nil) {
+    /// - Parameter onGaveUp: Called when the target app never came to the front and the text
+    ///   only went to the clipboard.
+    private func pasteAtCursor(_ text: String, target: PasteTarget? = nil, onGaveUp: (() -> Void)? = nil) {
         if isPopoverShown {
             NotificationCenter.default.post(name: .dismissPopover, object: nil)
         }
@@ -629,7 +631,8 @@ final class AppState {
         attemptPasteTrusted(
             text: text,
             target: target,
-            attemptsRemaining: Self.pasteRetryInitialAttempts
+            attemptsRemaining: Self.pasteRetryInitialAttempts,
+            onGaveUp: onGaveUp
         )
     }
 
@@ -943,8 +946,22 @@ final class AppState {
                 }
             }
             guard let self else { return }
-            self.pasteAtCursor(output, target: target)
-            if let transcript, let type, transcript != output, target != nil {
+            self.pasteAtCursor(output, target: target) { [weak self] in
+                // The app did not come to the front: not "Fertig", the text waits on the
+                // clipboard, and there is nothing to replace with the word-for-word text.
+                guard let self else { return }
+                self.lastInsertion = nil
+                if self.activeWorkflow === finishing {
+                    self.menuBarStatus = .copied(type)
+                    self.scheduleWorkflowCleanup(for: finishing, after: 2.8)
+                } else if self.activeWorkflow == nil {
+                    // A busy main thread let the cleanup come first; the notice still shows.
+                    self.menuBarStatus = .copied(type)
+                    self.scheduleMenuBarStatusReset(after: 2.8)
+                }
+            }
+            // Without Accessibility nothing was inserted either (`pasteAtCursor`).
+            if let transcript, let type, transcript != output, target != nil, self.accessibilityPermissionGranted {
                 self.lastInsertion = LastInsertion(inserted: output, transcript: transcript, mode: type, target: target, at: Date())
                 self.lastInsertionNotice = nil
             } else {
@@ -1153,7 +1170,8 @@ final class AppState {
     private func attemptPasteTrusted(
         text: String,
         target: PasteTarget?,
-        attemptsRemaining: Int
+        attemptsRemaining: Int,
+        onGaveUp: (() -> Void)? = nil
     ) {
         let ownPid = NSRunningApplication.current.processIdentifier
         let frontmostPid = NSWorkspace.shared.frontmostApplication?.processIdentifier
@@ -1173,6 +1191,7 @@ final class AppState {
         guard attemptsRemaining > 0 else {
             // Target never came to the front: keep the text available for a manual paste.
             copyToClipboard(text)
+            onGaveUp?()
             return
         }
 
@@ -1190,7 +1209,8 @@ final class AppState {
             self?.attemptPasteTrusted(
                 text: text,
                 target: target,
-                attemptsRemaining: attemptsRemaining - 1
+                attemptsRemaining: attemptsRemaining - 1,
+                onGaveUp: onGaveUp
             )
         }
     }

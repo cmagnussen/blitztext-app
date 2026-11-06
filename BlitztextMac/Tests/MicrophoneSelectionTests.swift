@@ -1,3 +1,4 @@
+import CoreAudio
 import XCTest
 
 /// The chosen microphone is the macOS input only while a dictation records.
@@ -28,6 +29,30 @@ final class MicrophoneSelectionTests: XCTestCase {
     func testLeavesAnInputChosenMeanwhile() {
         XCTAssertFalse(MicrophoneSelection.shouldRestore(currentUID: "Webcam", after: change))
         XCTAssertFalse(MicrophoneSelection.shouldRestore(currentUID: nil, after: change))
+    }
+
+    /// The microphone check looks at what the next dictation records from: with a USB headset
+    /// chosen, a quiet built-in microphone is no reason to warn, and "Lauter stellen" must not
+    /// change it.
+    func testCheckLooksAtTheChosenMicrophone() {
+        let builtIn: AudioObjectID = 41
+        let headset: AudioObjectID = 77
+        XCTAssertEqual(MicrophoneSelection.dictationInput(preferredUID: "USB-Headset", meetingIsRecording: false,
+                                                          chosen: headset, defaultInput: builtIn), headset)
+    }
+
+    /// Unplugged, nothing chosen, or a meeting recording: the dictation uses the macOS default.
+    func testCheckFallsBackToTheMacOSDefault() {
+        let builtIn: AudioObjectID = 41
+        let headset: AudioObjectID = 77
+        XCTAssertEqual(MicrophoneSelection.dictationInput(preferredUID: "USB-Headset", meetingIsRecording: false,
+                                                          chosen: nil, defaultInput: builtIn), builtIn)
+        XCTAssertEqual(MicrophoneSelection.dictationInput(preferredUID: "", meetingIsRecording: false,
+                                                          chosen: headset, defaultInput: builtIn), builtIn)
+        XCTAssertEqual(MicrophoneSelection.dictationInput(preferredUID: "USB-Headset", meetingIsRecording: true,
+                                                          chosen: headset, defaultInput: builtIn), builtIn)
+        XCTAssertNil(MicrophoneSelection.dictationInput(preferredUID: "", meetingIsRecording: false,
+                                                        chosen: nil, defaultInput: nil))
     }
 
     /// Kept in the defaults until undone, so the next launch repairs a crash mid-recording.

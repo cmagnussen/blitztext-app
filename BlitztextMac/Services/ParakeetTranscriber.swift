@@ -108,10 +108,21 @@ actor ParakeetTranscriber {
         }
         let files = Self.files
         let task = Task<Void, Error> {
-            try FileManager.default.createDirectory(at: files.parent, withIntermediateDirectories: true)
-            _ = try await AsrModels.download(to: files.ultraDirectory, version: .ultra) { progress in
+            // Into the staging folder first, then into place in one step: a download cut short
+            // straight in place left folders without weights, which FluidAudio counts as there,
+            // so every further download ended at once and Ultra never became usable.
+            guard files.installed != .ultra else { return }
+            let staged = files.stagedUltraDirectory
+            try FileManager.default.createDirectory(at: staged.deletingLastPathComponent(), withIntermediateDirectories: true)
+            _ = try await AsrModels.download(to: staged, force: files.stagedUltraIsCutShort, version: .ultra) { progress in
                 let fraction = progress.fractionCompleted
                 progressHandler(fraction.isFinite ? min(max(fraction, 0), 1) : 0)
+            }
+            try? files.installStagedUltra()
+            // Still incomplete: said so, also while v3 is there and keeps working. The next
+            // download starts over (`stagedUltraIsCutShort`).
+            guard files.installed == .ultra else {
+                throw LocalTranscriptionError.downloadedModelInvalid(ParakeetTranscriber.modelName)
             }
         }
         downloadTask = task

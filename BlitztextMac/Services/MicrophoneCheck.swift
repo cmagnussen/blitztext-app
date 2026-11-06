@@ -1,8 +1,9 @@
 import AppKit
 import CoreAudio
 
-/// What the default microphone looks like: whether there is one, and how loud macOS records
-/// it. The input volume belongs to the user: Blitztext changes it only when they click
+/// What the microphone a dictation records from looks like (the chosen one, otherwise the
+/// macOS default; `MicrophoneSelection.dictationInput`): whether there is one, and how loud
+/// macOS records it. The input volume belongs to the user: Blitztext changes it only when they click
 /// "Lauter stellen", never on its own (call apps adjust it too, and a call running at the same
 /// time would suddenly hear the user louder).
 enum MicrophoneCheck {
@@ -20,18 +21,18 @@ enum MicrophoneCheck {
     static let raisedVolume: Float = 0.7
 
     static var issue: Issue? {
-        guard let device = defaultInput else { return .noInput }
+        guard let device = MicrophoneSelection.dictationInput else { return .noInput }
         if let volume = inputVolume(of: device), volume < quietBelow {
             return .quiet(percent: Int((volume * 100).rounded()))
         }
         return nil
     }
 
-    /// Raises a quiet default microphone to `raisedVolume`. False when the device has no
+    /// Raises a quiet dictation microphone to `raisedVolume`. False when the device has no
     /// volume Blitztext may set; then only the System Settings help.
     @discardableResult
     static func raiseInputVolume() -> Bool {
-        guard let device = defaultInput, let volume = inputVolume(of: device), volume < raisedVolume else { return false }
+        guard let device = MicrophoneSelection.dictationInput, let volume = inputVolume(of: device), volume < raisedVolume else { return false }
         // The main volume covers every channel; devices without one have a volume per channel.
         if setInputVolume(raisedVolume, of: device, element: kAudioObjectPropertyElementMain) { return true }
         let channels = [1, 2].map { setInputVolume(raisedVolume, of: device, element: AudioObjectPropertyElement($0)) }
@@ -50,18 +51,6 @@ enum MicrophoneCheck {
     static func openSoundSettings() {
         guard let url = URL(string: "x-apple.systempreferences:com.apple.Sound-Settings.extension") else { return }
         NSWorkspace.shared.open(url)
-    }
-
-    private static var defaultInput: AudioObjectID? {
-        var device = AudioObjectID(kAudioObjectUnknown)
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultInputDevice,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        var size = UInt32(MemoryLayout<AudioObjectID>.size)
-        let status = AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &device)
-        return status == noErr && device != kAudioObjectUnknown ? device : nil
     }
 
     /// The input volume 0...1, from the main element or, on devices without one, channel 1.

@@ -88,6 +88,28 @@ enum MicrophoneSelection {
         !preferredUID.isEmpty && !meetingIsRecording
     }
 
+    /// The input the next dictation records from, for the microphone check: the chosen
+    /// microphone, which is the macOS input only while a dictation records.
+    static var dictationInput: AudioObjectID? {
+        let uid = preferredUID
+        return dictationInput(
+            preferredUID: uid,
+            meetingIsRecording: meetingIsRecording,
+            chosen: uid.isEmpty ? nil : device(uid: uid).flatMap { hasInput($0) ? $0 : nil },
+            defaultInput: defaultInput
+        )
+    }
+
+    /// Like `applyForRecording`: the chosen microphone (`chosen`, nil while unplugged) unless
+    /// none is chosen or a meeting records, otherwise the macOS default.
+    static func dictationInput(preferredUID: String, meetingIsRecording: Bool,
+                               chosen: AudioObjectID?, defaultInput: AudioObjectID?) -> AudioObjectID? {
+        guard shouldSwitch(preferredUID: preferredUID, meetingIsRecording: meetingIsRecording), let chosen else {
+            return defaultInput
+        }
+        return chosen
+    }
+
     /// Puts the previous input back after a recording, and at launch after a crash. Not while
     /// a meeting records (started during the dictation): it keeps its input until it ends.
     static func restore() {
