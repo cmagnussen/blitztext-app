@@ -105,6 +105,7 @@ targets:
       - path: Tests
       # Pure logic is compiled directly into the test bundle, so tests need no host app.
       - path: Services/TranscriptPostProcessor.swift
+      - path: ../BlitztextShared/Support/SwissSpelling.swift
       - path: Services/InsertionFitter.swift
       - path: Services/WebsiteHost.swift
       - path: Services/TranscriptParagraphService.swift

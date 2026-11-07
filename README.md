@@ -70,6 +70,7 @@ Keyboards without `fn`: set your own shortcut per mode in the settings.
 - **Text lands in the right place:** if you click into another field while a writing mode still works, the text goes to the clipboard instead of the wrong field. After a writing mode, "Wortgenau statt ..." in the menu swaps in what you actually said.
 - **Voice memos and WhatsApp voice messages:** drop an audio file on Blitztext and get the text, optionally with paragraphs.
 - **Dictionary:** names and terms spelled your way, fixed replacements ("n acht n" becomes "n8n").
+- **Swiss spelling:** on a Mac set to Switzerland or Liechtenstein, Blitztext writes "ss" instead of "ß", 12’500, CHF 23.50 and «…», also in the writing modes and meeting summaries, which keep Swiss words such as "Velo". Choose under Allgemein > Schreibweise.
 - **History:** recent results, encrypted and stored only on your Mac.
 - **Updates in the app:** Blitztext offers new versions from this repository's releases, signed and notarized by Apple.
 - **Feedback:** "Feedback senden" in the settings prepares a mail to the team with version and setup. You see everything before it goes out.

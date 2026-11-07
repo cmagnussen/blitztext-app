@@ -649,6 +649,8 @@ struct CustomizeSettingsView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
+                GermanVariantPicker(selection: $appState.appSettings.germanVariant)
+
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Verlauf aufbewahren")
                         .font(.ui(12))

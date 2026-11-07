@@ -92,6 +92,8 @@ struct AppSettings: Codable {
     var customModes: [CustomMode] = []
     /// E-Mail and Stichpunkte were added once, as on iOS; deleting them later sticks.
     var hasSeededCustomModes: Bool = false
+    /// German as in Germany and Austria, or as in Switzerland and Liechtenstein.
+    var germanVariant: GermanVariant = .automatic
 
     init(
         hotkeyMode: HotkeyMode = .hold,
@@ -129,6 +131,7 @@ struct AppSettings: Codable {
         case summarizesMeetings
         case customModes
         case hasSeededCustomModes
+        case germanVariant
     }
 
     init(from decoder: Decoder) throws {
@@ -162,6 +165,7 @@ struct AppSettings: Codable {
         summarizesMeetings = try container.decodeIfPresent(Bool.self, forKey: .summarizesMeetings) ?? true
         customModes = (try? container.decodeIfPresent([CustomMode].self, forKey: .customModes)) ?? []
         hasSeededCustomModes = try container.decodeIfPresent(Bool.self, forKey: .hasSeededCustomModes) ?? false
+        germanVariant = (try? container.decodeIfPresent(GermanVariant.self, forKey: .germanVariant)) ?? .automatic
     }
 
     func customHotkey(for type: WorkflowType) -> KeyCombo? {
