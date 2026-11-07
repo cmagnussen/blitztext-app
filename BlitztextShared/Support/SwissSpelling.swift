@@ -72,7 +72,7 @@ enum SwissSpelling {
     Schweizer Rechtschreibung, wie in der Schweiz und in Liechtenstein. Sie regelt nur, wie deutscher Text geschrieben wird: Die Sprache bleibt, und die Wortwahl des Sprechers auch. Es ist Hochdeutsch, keine Mundart.
     - Immer «ss» statt «ß»: Strasse, gross, heisst.
     - Zahlen ab fünf Stellen mit Apostroph ’ gliedern, vierstellige nicht: 12’500 und 1’250’000, aber 1000. Das gilt nur für Mengen und Beträge: Postleitzahlen, Jahreszahlen, Daten, Uhrzeiten sowie Telefon-, Konto-, AHV-, IBAN- und Versionsnummern bleiben, wie sie sind (80331 München).
-    - Geldbeträge in jeder Währung mit Dezimalpunkt zwischen Franken und Rappen, Euro und Cent usw. Betrag und Währung bleiben, wie gesprochen: Euro bleibt Euro, Franken bleibt Franken; rechne nichts um. So wird es geschrieben:
+    - Geldbeträge in jeder Währung mit Dezimalpunkt zwischen Franken und Rappen, Euro und Cent usw. Betrag und Währung bleiben, wie gesprochen: Euro bleibt Euro, Franken bleibt Franken, auch wenn es um die Schweiz geht; rechne nichts um und tausch keine Währung aus. So wird es geschrieben:
       CHF 23,50 → CHF 23.50
       23,50 Franken → 23.50 Franken
       Fr. 20,– → Fr. 20.–

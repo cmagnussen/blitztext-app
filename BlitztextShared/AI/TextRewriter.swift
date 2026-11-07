@@ -112,14 +112,12 @@ enum TextRewriter {
         purpose: Purpose = .generate,
         swissSpelling: Bool = true
     ) async throws -> String {
+        var instruction = dictationRules ? instruction + "\n\n" + ModePrompts.spokenTranscriptRules : instruction
         // Swiss spelling: the model is asked for it, and its answer gets the same step as a
-        // transcript, so no "ß" slips through. The Swiss rules come before the dictation rules
-        // and the framing rule, so "only the finished text" stays at the end.
+        // transcript, so no "ß" slips through. The rules sit right before the framing rule:
+        // further up, Haiku turned a framed "23,50 Euro" into "Franken" in 6 of 22 runs.
         let swiss = swissSpelling && GermanVariant.current.isSwiss()
-        var instruction = SwissSpelling.addingRules(to: instruction, isSwiss: swiss)
-        if dictationRules {
-            instruction += "\n\n" + ModePrompts.spokenTranscriptRules
-        }
+        instruction = SwissSpelling.addingRules(to: instruction, isSwiss: swiss)
         var prompt = text
         if purpose == .editTranscript {
             instruction += "\n\n" + RewriteGuard.framingRule
