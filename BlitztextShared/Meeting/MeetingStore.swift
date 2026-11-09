@@ -106,11 +106,18 @@ final class MeetingStore {
         )
     }
 
+    /// Audio of a meeting that was never evaluated is kept this long for a later evaluation,
+    /// then deleted. Transcripts and summaries are not affected.
+    nonisolated static let pendingAudioRetention: TimeInterval = 30 * 24 * 60 * 60
+
     /// - Parameter files: Where the meetings live; tests pass a folder of their own.
     init(persistent: Bool = true, files: SealedStoreFiles = MeetingStore.files) {
         isPersistent = persistent
         self.files = files
         guard persistent else { return }
+        // The folder the records live in: Application Support, or a test's own folder.
+        let directory = files.mainURL.deletingLastPathComponent()
+        Self.excludeFromBackup(directory)
         switch files.readMain([MeetingRecord].self) {
         case .value(let stored):
             meetings = stored
@@ -135,6 +142,44 @@ final class MeetingStore {
         // with the next change.
         if !isLockedOut {
             files.migrateLegacy(files.mainURL)
+            // With the records unreadable, every recording would look orphaned: keep them.
+            removeStaleAudio(in: directory)
+        }
+    }
+
+    /// Recordings and transcripts of other people do not belong in Time Machine or iCloud
+    /// backups; the folder is recreated from scratch on a new Mac anyway.
+    nonisolated private static func excludeFromBackup(_ directory: URL) {
+        var url = directory
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try? url.setResourceValues(values)
+    }
+
+    /// Deletes audio that no meeting needs any more: files without a record (a recording cut
+    /// off by a crash before the record was written) and the audio of meetings that have been
+    /// waiting for an evaluation longer than `pendingAudioRetention`. Evaluated meetings had
+    /// their audio deleted right after the transcript was saved.
+    private func removeStaleAudio(in directory: URL) {
+        let fileManager = FileManager.default
+        guard let urls = try? fileManager.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else { return }
+        let cutoff = Date().addingTimeInterval(-Self.pendingAudioRetention)
+        let known = Dictionary(meetings.map { ($0.id.uuidString, $0) }, uniquingKeysWith: { first, _ in first })
+        for file in urls where ["wav", "caf"].contains(file.pathExtension.lowercased()) {
+            var name = file.deletingPathExtension().lastPathComponent
+            if name.hasSuffix("-system") { name.removeLast("-system".count) }
+            guard let record = known[name] else {
+                try? fileManager.removeItem(at: file)
+                continue
+            }
+            if record.status != .done, record.createdAt < cutoff {
+                try? fileManager.removeItem(at: file)
+            }
         }
     }
     #else
