@@ -30,6 +30,8 @@ struct TranscriptPostProcessor {
     var correctionThreshold = 0.74
     /// Returns true when a single word is a correctly spelled dictionary word.
     var isDictionaryWord: (String) -> Bool = { _ in false }
+    /// Swiss spelling ("ss", 12’500, CHF 23.50, «…») as the very last step.
+    var swissSpelling = false
 
     func process(_ text: String) -> String {
         var result = text
@@ -49,7 +51,8 @@ struct TranscriptPostProcessor {
                 isDictionaryWord: isDictionaryWord
             )
         }
-        return Self.normalize(result, capitalizeFirstLetterLike: text)
+        let normalized = Self.normalize(result, capitalizeFirstLetterLike: text)
+        return swissSpelling ? SwissSpelling.apply(normalized) : normalized
     }
 
     // MARK: - Replacements

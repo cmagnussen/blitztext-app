@@ -70,6 +70,7 @@ final class AppState {
     // Persisted settings
     var appSettings: AppSettings {
         didSet {
+            GermanVariant.current = appSettings.germanVariant
             let modesChanged = oldValue.customModes != appSettings.customModes
             if modesChanged {
                 CustomModeCatalog.modes = appSettings.customModes
@@ -189,6 +190,7 @@ final class AppState {
     init() {
         let loadedAppSettings = Self.loadAppSettings()
         self.appSettings = loadedAppSettings
+        GermanVariant.current = loadedAppSettings.germanVariant
         self.transcriptionSettings = Self.loadTranscriptionSettings()
         self.textImprovementSettings = Self.loadTextImprovementSettings()
         self.dampfAblassenSettings = Self.loadDampfAblassenSettings()
@@ -352,7 +354,8 @@ final class AppState {
             correctCustomTerms: appSettings.correctCustomTermsEnabled,
             removeFillerWords: appSettings.removeFillerWordsEnabled,
             language: transcriptionSettings.language,
-            isDictionaryWord: DictionaryWordChecker.isKnownWord
+            isDictionaryWord: DictionaryWordChecker.isKnownWord,
+            swissSpelling: appSettings.germanVariant.isSwiss()
         )
     }
 

@@ -65,26 +65,37 @@ enum MeetingSummarizer {
 
     static func summarize(_ transcript: String, engine: TextRewriter.Engine, backend: Backend? = nil) async throws -> String {
         let local = TextRewriter.runsLocally(engine: engine)
-        // Characters per request: what fits the on-device model, generous for providers.
-        let limit = backend?.characterLimit ?? (local ? localCharacterLimit : 60_000)
+        let isGerman = isGermanMeeting(transcript)
+        let swiss = writesSwiss(isGerman: isGerman)
+        // Characters per request: what fits the on-device model, generous for providers. The
+        // Swiss rules take their room from the transcript.
+        let limit = (backend?.characterLimit ?? (local ? localCharacterLimit : 60_000)) - (swiss ? SwissSpelling.modelInstruction.count : 0)
         func rewrite(_ text: String, instruction: String) async throws -> String {
             if let backend { return try await backend.complete(instruction, text) }
             return try await Self.rewrite(text, instruction: instruction, engine: engine)
         }
 
-        let isGerman = isGermanMeeting(transcript)
+        let partRules = isGerman ? SwissSpelling.addingRules(to: partInstruction, isSwiss: swiss) : englishPartInstruction
+        let finalRules = isGerman ? SwissSpelling.addingRules(to: finalInstruction, isSwiss: swiss) : englishFinalInstruction
         var material = transcript
         var round = 0
         while material.count > limit, round < 3 {
             var notes: [String] = []
             for part in chunks(of: material, limit: limit) {
-                notes.append(try await rewrite(part, instruction: isGerman ? partInstruction : englishPartInstruction))
+                notes.append(try await rewrite(part, instruction: partRules))
             }
             material = notes.joined(separator: "\n\n")
             round += 1
         }
-        let summary = try await rewrite(material, instruction: isGerman ? finalInstruction : englishFinalInstruction)
-        return InventedDeadlineFilter.filtered(cleaned(summary), transcript: transcript, transcriptIsGerman: isGerman)
+        let summary = try await rewrite(material, instruction: finalRules)
+        let filtered = InventedDeadlineFilter.filtered(cleaned(summary), transcript: transcript, transcriptIsGerman: isGerman)
+        return swiss ? SwissSpelling.apply(filtered) : filtered
+    }
+
+    /// A German meeting on a Mac set to Swiss spelling: summary and notes are written the
+    /// Swiss way, on every model. English meetings stay as they are.
+    static func writesSwiss(isGerman: Bool) -> Bool {
+        isGerman && GermanVariant.current.isSwiss()
     }
 
     /// Characters the on-device model reads at once. From iOS and macOS 27 it reports its
@@ -101,9 +112,10 @@ enum MeetingSummarizer {
 
     /// A summary reads a conversation, not a dictation: no dictation rules (their examples name
     /// weekdays the model copied into to-dos; the self-correction rule is in the instructions
-    /// above, without examples), and the same transcript gives the same summary.
+    /// above, without examples), and the same transcript gives the same summary. Swiss
+    /// spelling is added in `summarize`, the same for every model.
     private static func rewrite(_ text: String, instruction: String, engine: TextRewriter.Engine) async throws -> String {
-        try await TextRewriter.rewrite(text, instruction: instruction, engine: engine, dictationRules: false, deterministic: true)
+        try await TextRewriter.rewrite(text, instruction: instruction, engine: engine, dictationRules: false, deterministic: true, swissSpelling: false)
     }
 
     /// German unless the transcript is clearly in another language. Too little text to tell

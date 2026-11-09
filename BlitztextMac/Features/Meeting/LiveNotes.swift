@@ -120,19 +120,21 @@ final class LiveNotesController {
     /// happened.
     private func writeNotes(with backend: LiveNotesBackend) async throws -> Bool {
         let german = MeetingSummarizer.isGermanMeeting(stretches.map(\.text).joined(separator: "\n"))
-        let instruction = german ? Self.instruction : Self.englishInstruction
+        let swiss = MeetingSummarizer.writesSwiss(isGerman: german)
+        let instruction = german ? SwissSpelling.addingRules(to: Self.instruction, isSwiss: swiss) : Self.englishInstruction
+        let rulesRoom = swiss ? SwissSpelling.modelInstruction.count : 0
         let heading = german ? "Neuer Abschnitt:\n" : "New section:\n"
         var leftOut = false
         while !pendingText.isEmpty {
             let earlier = notes.isEmpty ? "" : (german ? "Bisherige Notizen:\n" : "Notes so far:\n") + notes + "\n\n"
-            let room = backend.characterLimit - earlier.count - heading.count
+            let room = backend.characterLimit - earlier.count - heading.count - rulesRoom
             guard room >= 1_000 else { throw LiveNotesFailure.notesTooLong }
             var end = TextParts.endOfLeadingPart(of: pendingText, limit: room)
             let part = String(pendingText[..<end])
             do {
                 let result = try await backend.complete(instruction, earlier + heading + part)
                 try Task.checkCancellation()
-                notes = MeetingSummarizer.cleaned(result)
+                notes = swiss ? SwissSpelling.apply(MeetingSummarizer.cleaned(result)) : MeetingSummarizer.cleaned(result)
                 failedText = nil
             } catch is CancellationError {
                 throw CancellationError()
@@ -177,11 +179,15 @@ final class LiveNotesController {
             do {
                 let backend = try await loadedBackend()
                 // In a busy meeting ten minutes can be more than the model reads; the newest part counts.
-                let text = String(recent[TextParts.startOfTrailingPart(of: recent, limit: backend.characterLimit)...])
+                // The Swiss rules take their room from the text.
+                let rulesRoom = GermanVariant.current.isSwiss() ? SwissSpelling.modelInstruction.count : 0
+                let text = String(recent[TextParts.startOfTrailingPart(of: recent, limit: backend.characterLimit - rulesRoom)...])
                 let german = MeetingSummarizer.isGermanMeeting(text)
-                let answer = try await backend.complete(german ? Self.catchUpInstruction : Self.englishCatchUpInstruction, text)
+                let swiss = MeetingSummarizer.writesSwiss(isGerman: german)
+                let instruction = german ? SwissSpelling.addingRules(to: Self.catchUpInstruction, isSwiss: swiss) : Self.englishCatchUpInstruction
+                let answer = try await backend.complete(instruction, text)
                 try Task.checkCancellation()
-                catchUp = answer
+                catchUp = swiss ? SwissSpelling.apply(answer) : answer
             } catch is CancellationError {
             } catch {
                 catchUp = "Gerade nicht m\u{00F6}glich: \(error.localizedDescription)"
