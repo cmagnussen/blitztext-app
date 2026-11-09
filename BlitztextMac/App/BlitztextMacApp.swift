@@ -189,6 +189,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         // A meeting being recorded stays readable and can be evaluated after the next launch.
         appState.meeting.finishBeforeQuit()
         appState.restoreAudioOutput()
+        // A dictation recording right now gives the chosen microphone back too, instead of
+        // leaving it as the macOS input until Blitztext starts again.
+        MicrophoneSelection.restore()
         // Quitting right after a dictation still gives the previous clipboard back.
         ClipboardPasteService.shared.settleNow()
     }

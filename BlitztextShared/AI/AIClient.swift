@@ -7,11 +7,15 @@ enum AIClientError: LocalizedError {
     case http(Int, String?)
     case refused
     case emptyResponse
+    /// A key would travel unencrypted: plain http to a host other than this device.
+    case insecureAddress
 
     var errorDescription: String? {
         switch self {
         case .notConfigured:
             return "Kein Modell-Anbieter eingerichtet. Bitte in den Einstellungen einen API-Key hinterlegen."
+        case .insecureAddress:
+            return "Die Adresse beginnt mit http:// und zeigt nicht auf dieses Gerät. Der API-Key würde unverschlüsselt gesendet. Bitte https:// verwenden oder den Key entfernen."
         case .missingKey(let provider):
             return "Für \(provider.displayName) fehlt der API-Key."
         case .invalidAddress:
@@ -33,10 +37,30 @@ enum AIClientError: LocalizedError {
 /// One instruction plus one text in, one text out. Talks directly to the provider,
 /// so the text never passes through a Blitztext server.
 enum AIClient {
+    /// True for a plain-http address that does not point at this Mac. A key sent there would
+    /// cross the network in the clear; ATS lets such requests through for local names and IPs.
+    static func isInsecureAddress(_ baseURL: String) -> Bool {
+        guard let url = URL(string: baseURL.trimmingCharacters(in: .whitespacesAndNewlines)),
+              url.scheme?.lowercased() == "http",
+              let host = url.host?.lowercased(), !host.isEmpty // empty: still being typed
+        else { return false }
+        return !isLoopbackHost(host)
+    }
+
+    static func isLoopbackHost(_ host: String) -> Bool {
+        if ["localhost", "::1", "[::1]", "0.0.0.0"].contains(host) || host.hasSuffix(".localhost") { return true }
+        // 127.x.x.x, exactly four numeric octets, so "127.0.0.1.example.com" does not pass.
+        let octets = host.split(separator: ".", omittingEmptySubsequences: false)
+        return octets.count == 4 && octets.allSatisfy({ UInt8($0) != nil }) && octets[0] == "127"
+    }
+
     static func complete(instruction: String, text: String, config: AIProviderConfig) async throws -> String {
         let key = APIKeyStore.key(for: config.provider)
         if config.provider.requiresAPIKey, key == nil {
             throw AIClientError.missingKey(config.provider)
+        }
+        if key != nil, isInsecureAddress(config.baseURL) {
+            throw AIClientError.insecureAddress
         }
         switch config.provider.apiStyle {
         case .openAICompatible:

@@ -188,6 +188,15 @@ final class CustomModeTests: XCTestCase {
         XCTAssertEqual(encoded?.first.map { Set($0.keys) }, ["id", "name", "icon", "prompt"])
     }
 
+    /// A mode made from a template shows its symbol as chosen in the editor ("Antworten" had
+    /// none) and gets it back after trying another one.
+    func testEveryTemplateSymbolCanBeChosen() {
+        for template in CustomModeTemplate.all {
+            XCTAssertTrue(CustomMode.symbols.contains(template.icon), "\(template.id): \(template.icon)")
+        }
+        XCTAssertEqual(Set(CustomMode.symbols).count, CustomMode.symbols.count, "no symbol twice")
+    }
+
     func testCatalogNamesOwnModes() {
         var mode = CustomMode.new(name: "  Antworten ", icon: "arrowshape.turn.up.left.fill", prompt: "Antworte kurz.")
         mode.colorChoice = .day

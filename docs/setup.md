@@ -6,6 +6,7 @@ Either download the signed app from the [releases page](https://github.com/cmagn
 
 ```bash
 brew install xcodegen
+xcodebuild -downloadComponent MetalToolchain   # once; the local language model (MLX) needs it
 git clone https://github.com/cmagnussen/blitztext-app.git
 cd blitztext-app
 ./build.sh --install --run

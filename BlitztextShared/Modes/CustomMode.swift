@@ -35,9 +35,10 @@ struct CustomMode: Codable, Identifiable, Equatable {
         set { color = newValue.rawValue }
     }
 
-    /// Symbols to choose from in the editors.
+    /// Symbols to choose from in the editors. Every template's symbol is among them, so a mode
+    /// made from a template shows its symbol as chosen and can get it back.
     static let symbols = [
-        "wand.and.stars", "envelope.fill", "number", "list.bullet", "globe",
+        "wand.and.stars", "envelope.fill", "arrowshape.turn.up.left.fill", "number", "list.bullet", "globe",
         "text.append", "briefcase.fill", "person.2.fill", "checklist", "quote.bubble.fill",
         "doc.text.fill", "lightbulb.fill",
     ]

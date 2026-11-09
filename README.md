@@ -65,11 +65,12 @@ Keyboards without `fn`: set your own shortcut per mode in the settings.
 - **See that it listens:** a small lilac pill at the bottom of the screen moves with your voice while Blitztext records. Click it to stop, drag it out of the way, or right-click to hide it for the current dictation. It never takes the focus, so the text still lands where you type. You can turn it off in the settings.
 - **Last text at hand:** the menu bar window shows your last text as a message. One click copies it.
 - **Sound off while recording:** a podcast or music is muted while you speak and back right after.
-- **Meetings in the room and online:** record a conversation through the microphone, get the transcript by person (Person 1, Person 2, rename them, or give a single part to another person) and, if you like, a summary with decisions and to-dos that pastes into mail and documents with headings and lists. For calls, "Online-Meeting" (beta) also records what your Mac plays, for example from Teams, Zoom or Meet: you are "Ich", the others are told apart by voice, and what your microphone picks up from the speakers is filtered out of your part. Live notes (beta) show topics, decisions and to-dos while the meeting runs. Everything runs on your Mac and the recordings are deleted afterwards. Apple Silicon only. Please ask everyone before you record.
+- **Meetings in the room and online:** record a conversation through the microphone, get the transcript by person (Person 1, Person 2, rename them, or give a single part to another person; click the title to rename the meeting) and, if you like, a summary with decisions and to-dos that pastes into mail and documents with headings and lists. For calls, "Online-Meeting" (beta) also records what your Mac plays, for example from Teams, Zoom or Meet: you are "Ich", the others are told apart by voice, and what your microphone picks up from the speakers is filtered out of your part. Live notes (beta) show topics, decisions and to-dos while the meeting runs. Everything runs on your Mac and the recordings are deleted afterwards. Apple Silicon only. Please ask everyone before you record.
 - **Local language model for meetings (beta):** download Gemma 4 in the settings (E4B from 16 GB of memory, 12B from 24 GB). It summarizes long meetings more exactly than Apple Intelligence, on your Mac.
 - **Text lands in the right place:** if you click into another field while a writing mode still works, the text goes to the clipboard instead of the wrong field. After a writing mode, "Wortgenau statt ..." in the menu swaps in what you actually said.
 - **Voice memos and WhatsApp voice messages:** drop an audio file on Blitztext and get the text, optionally with paragraphs.
 - **Dictionary:** names and terms spelled your way, fixed replacements ("n acht n" becomes "n8n").
+- **Times as times:** a spoken "sechzehn Uhr fünfundvierzig bis siebzehn Uhr fünf" is written "16:45 bis 17:05 Uhr".
 - **Swiss spelling:** on a Mac set to Switzerland or Liechtenstein, Blitztext writes "ss" instead of "ß", 12’500, CHF 23.50 and «…», also in the writing modes and meeting summaries, which keep Swiss words such as "Velo". Choose under Allgemein > Schreibweise.
 - **History:** recent results, encrypted and stored only on your Mac.
 - **Updates in the app:** Blitztext offers new versions from this repository's releases, signed and notarized by Apple.
@@ -125,7 +126,7 @@ More in [docs/setup.md](docs/setup.md) and [docs/local-models.md](docs/local-mod
 
 ## Build It Yourself
 
-You need Xcode 26 or newer (for the Apple Intelligence APIs) and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`).
+You need Xcode 26 or newer (for the Apple Intelligence APIs) and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`). The local language model (MLX) also needs Xcode's Metal Toolchain, a separate download since Xcode 26. If the build stops with "missing Metal Toolchain", run `xcodebuild -downloadComponent MetalToolchain` once (about 840 MB).
 
 ```bash
 git clone https://github.com/cmagnussen/blitztext-app.git

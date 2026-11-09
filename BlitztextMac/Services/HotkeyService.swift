@@ -73,15 +73,9 @@ final class HotkeyService {
             }
             return event
         }
-        // Escape stops a recording: in other apps through the global monitor, and while the
-        // popover makes Blitztext frontmost (Drücken mode) through the local one.
-        keyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            Task { @MainActor in
-                if event.keyCode == 53 { // Escape
-                    self?.handleEscape()
-                }
-            }
-        }
+        // Escape stops a recording: in other apps through the global monitor, which runs only
+        // while a dictation is active (see `setDictationActive`), and while the popover makes
+        // Blitztext frontmost (Drücken mode) through the local one.
         localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard event.keyCode == 53 else { return event }
             let handled: Bool = MainActor.assumeIsolated {
@@ -90,6 +84,25 @@ final class HotkeyService {
                 return true
             }
             return handled ? nil : event
+        }
+    }
+
+    /// Installs the global Escape monitor while a dictation records or is processed, and
+    /// removes it afterwards. Outside a dictation the app then receives no key events from
+    /// other apps at all; only fn/modifier changes and the registered shortcuts reach it.
+    func setDictationActive(_ active: Bool) {
+        if active {
+            guard keyMonitor == nil else { return }
+            keyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                Task { @MainActor in
+                    if event.keyCode == 53 { // Escape
+                        self?.handleEscape()
+                    }
+                }
+            }
+        } else if let keyMonitor {
+            NSEvent.removeMonitor(keyMonitor)
+            self.keyMonitor = nil
         }
     }
 
