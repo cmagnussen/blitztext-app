@@ -8,6 +8,8 @@ struct MeetingView: View {
     var height: CGFloat = 560
 
     @State private var renaming: Int?
+    @State private var renamingMeeting = false
+    @State private var meetingName = ""
     @State private var newName = ""
     @State private var isResummarizing = false
     @State private var copied: CopyTarget?
@@ -382,8 +384,29 @@ struct MeetingView: View {
     private func result(_ record: MeetingRecord) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(record.title)
-                    .font(.ui(15, .semibold))
+                Button {
+                    meetingName = record.title
+                    renamingMeeting = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(record.title)
+                            .font(.ui(15, .semibold))
+                            .multilineTextAlignment(.leading)
+                        Image(systemName: "pencil")
+                            .font(.ui(10, .semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Meeting umbenennen")
+                .alert("Meeting umbenennen", isPresented: $renamingMeeting) {
+                    TextField("Name", text: $meetingName)
+                    Button("Sichern") { meeting.rename(meeting: record.id, to: meetingName) }
+                    Button("Abbrechen", role: .cancel) {}
+                } message: {
+                    Text("Leer lassen, um wieder Datum und Uhrzeit zu zeigen.")
+                }
                 Text(summaryLine(record))
                     .font(.ui(11.5))
                     .foregroundStyle(.secondary)

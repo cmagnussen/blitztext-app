@@ -49,6 +49,8 @@ final class CustomModeWorkflow: Workflow {
         dictation.onKeptTranscript = { [weak self] text in self?.onKeptTranscript?(text) }
     }
 
+    static let emptyAnswerReason = "Die KI hat keinen Text geliefert."
+
     /// The mode's instruction plus the dictionary terms. Unlike the built-in modes there is no
     /// `ModePrompts.transcriptIsNotARequest`: own modes such as "Antworten" are meant to write
     /// new text from what was said (as on iOS).
@@ -122,6 +124,11 @@ final class CustomModeWorkflow: Workflow {
         }
         let cleaned = TranscriptionQualityService.cleanedTranscript(written)
         guard cleaned != ModePrompts.nothingRecognizedMarker else { return nil }
+        // An empty answer (the device model can give one without an error) is a failed AI
+        // step, not "no speech": what was said is kept.
+        guard !cleaned.isEmpty else {
+            throw AIStepFailed(transcript: processedRawText, reason: Self.emptyAnswerReason)
+        }
         return cleaned
     }
 }

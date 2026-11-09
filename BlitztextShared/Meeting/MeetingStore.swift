@@ -36,6 +36,17 @@ struct MeetingRecord: Codable, Equatable, Identifiable {
         Array(Set(turns.map(\.speaker))).sorted()
     }
 
+    /// Gives one part to another person (`[MeetingTurn].reassign`). A name nobody speaks under
+    /// any more goes with the last part, so "Neue Person", which may get that number again,
+    /// starts without a stranger's name.
+    @discardableResult
+    mutating func reassign(turn id: UUID, to speaker: Int) -> Bool {
+        guard turns.reassign(turn: id, to: speaker) else { return false }
+        let speaking = Set(turns.map(\.speaker))
+        speakerNames = speakerNames.filter { speaking.contains($0.key) }
+        return true
+    }
+
     /// "Name: text" per turn, the form used for the summary and for copying.
     var transcriptText: String {
         transcriptText(ownName: nil)
@@ -92,6 +103,16 @@ final class MeetingStore {
         #endif
     }
 
+    /// Keeps a recording out of Time Machine and iCloud backups: it is unencrypted and goes
+    /// once the meeting is evaluated, a copy in a backup would not. Only the audio files; the
+    /// encrypted meetings in the same folder stay in the backup.
+    nonisolated static func excludeFromBackup(_ url: URL) {
+        var url = url
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try? url.setResourceValues(values)
+    }
+
     #if os(macOS)
     private let files: SealedStoreFiles
     /// The stored meetings did not open because the Keychain did not give the file key: the
@@ -106,11 +127,17 @@ final class MeetingStore {
         )
     }
 
+    /// Audio of a meeting that was never evaluated is kept this long for a later evaluation,
+    /// then deleted. Transcripts and summaries are not affected.
+    nonisolated static let pendingAudioRetention: TimeInterval = 30 * 24 * 60 * 60
+
     /// - Parameter files: Where the meetings live; tests pass a folder of their own.
     init(persistent: Bool = true, files: SealedStoreFiles = MeetingStore.files) {
         isPersistent = persistent
         self.files = files
         guard persistent else { return }
+        // The folder the records live in: Application Support, or a test's own folder.
+        let directory = files.mainURL.deletingLastPathComponent()
         switch files.readMain([MeetingRecord].self) {
         case .value(let stored):
             meetings = stored
@@ -135,6 +162,34 @@ final class MeetingStore {
         // with the next change.
         if !isLockedOut {
             files.migrateLegacy(files.mainURL)
+            // With the records unreadable, every recording would look orphaned: keep them.
+            removeStaleAudio(in: directory)
+        }
+    }
+
+    /// Deletes audio that no meeting needs any more: files without a record (a recording cut
+    /// off by a crash before the record was written) and the audio of meetings that have been
+    /// waiting for an evaluation longer than `pendingAudioRetention`. Evaluated meetings had
+    /// their audio deleted right after the transcript was saved.
+    private func removeStaleAudio(in directory: URL) {
+        let fileManager = FileManager.default
+        guard let urls = try? fileManager.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else { return }
+        let cutoff = Date().addingTimeInterval(-Self.pendingAudioRetention)
+        let known = Dictionary(meetings.map { ($0.id.uuidString, $0) }, uniquingKeysWith: { first, _ in first })
+        for file in urls where ["wav", "caf"].contains(file.pathExtension.lowercased()) {
+            var name = file.deletingPathExtension().lastPathComponent
+            if name.hasSuffix("-system") { name.removeLast("-system".count) }
+            guard let record = known[name] else {
+                try? fileManager.removeItem(at: file)
+                continue
+            }
+            if record.status != .done, record.createdAt < cutoff {
+                try? fileManager.removeItem(at: file)
+            }
         }
     }
     #else
@@ -206,6 +261,15 @@ final class MeetingStore {
         guard let index = meetings.firstIndex(where: { $0.id == id }) else { return }
         meetings[index].summary = summary
         meetings[index].summaryNote = note
+        save()
+    }
+
+    /// Gives a meeting its own name, e.g. „Kick-off Kunde X“ (public issue #49). An empty
+    /// name brings back the date title.
+    func rename(id: UUID, to name: String) {
+        guard let index = meetings.firstIndex(where: { $0.id == id }) else { return }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        meetings[index].title = trimmed.isEmpty ? MeetingRecord.title(startedAt: meetings[index].createdAt) : trimmed
         save()
     }
 

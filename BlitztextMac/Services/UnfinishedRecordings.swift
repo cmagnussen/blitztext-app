@@ -31,11 +31,16 @@ enum UnfinishedRecordings {
     /// Moves a finished recording here before it is transcribed. Nil when that failed; the
     /// dictation then goes on with the temporary file.
     @MainActor static func secure(_ recording: URL) -> URL? {
-        let folder = directoryURL
+        var folder = directoryURL
         let target = folder.appendingPathComponent("dictation-\(UUID().uuidString).wav")
         do {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            // A kept recording is plain audio of the user's voice: keep it out of backups.
+            var values = URLResourceValues()
+            values.isExcludedFromBackup = true
+            try? folder.setResourceValues(values)
             try FileManager.default.moveItem(at: recording, to: target)
+            try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: target.path)
         } catch {
             return nil
         }

@@ -17,18 +17,32 @@ actor SpeakerDiarizer {
     }
 
     private var manager: OfflineDiarizerManager?
+    /// The load in flight. Actor methods are reentrant at `await`: the early load at the start
+    /// of a meeting and the evaluation of a short one otherwise both downloaded the models into
+    /// the same folder.
+    private var loadTask: Task<Void, Error>?
 
     /// Loads the models, downloading them the first time.
     func prepare() async throws {
         guard manager == nil else { return }
-        try FileManager.default.createDirectory(at: Self.modelsDirectoryURL, withIntermediateDirectories: true)
-        let manager = OfflineDiarizerManager()
-        try await manager.prepareModels(directory: Self.modelsDirectoryURL)
-        var url = Self.modelsDirectoryURL
-        var values = URLResourceValues()
-        values.isExcludedFromBackup = true
-        try? url.setResourceValues(values)
-        self.manager = manager
+        if let loadTask {
+            return try await loadTask.value
+        }
+        // Runs on this actor and sets `manager` itself, before any waiting caller resumes.
+        let task = Task {
+            try FileManager.default.createDirectory(at: Self.modelsDirectoryURL, withIntermediateDirectories: true)
+            let manager = OfflineDiarizerManager()
+            try await manager.prepareModels(directory: Self.modelsDirectoryURL)
+            var url = Self.modelsDirectoryURL
+            var values = URLResourceValues()
+            values.isExcludedFromBackup = true
+            try? url.setResourceValues(values)
+            self.manager = manager
+        }
+        loadTask = task
+        // Also after a failure, so the next meeting tries again.
+        defer { loadTask = nil }
+        try await task.value
     }
 
     /// Speaker turns in time order. Consecutive segments of the same speaker are

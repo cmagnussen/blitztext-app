@@ -197,8 +197,10 @@ final class TranscriptPostProcessorTests: XCTestCase {
         }
         XCTAssertTrue(result.hasPrefix(corrected), String(result.prefix(300)))
         #if DEBUG
-        // Unoptimized test build; an optimized build needs about 5 ms on Apple silicon.
-        let budget = Duration.seconds(1)
+        // Unoptimized test build: 1.9 to 2.8 s on an M1 Pro, so `xcodebuild test` failed there
+        // every time. Quadratic matching would take far longer. An optimized build needs about
+        // 5 ms on Apple silicon.
+        let budget = Duration.seconds(5)
         #else
         let budget = Duration.milliseconds(50)
         #endif

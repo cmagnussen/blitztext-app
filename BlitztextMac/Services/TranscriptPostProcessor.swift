@@ -43,6 +43,8 @@ struct TranscriptPostProcessor {
         // Addresses before the fuzzy matcher, which then leaves them alone: an address is
         // exact, a similar-sounding term would send the mail somewhere else.
         result = SpokenEmailAddress.format(result)
+        // "16 Uhr 45" -> "16:45 Uhr", German only.
+        result = SpokenTime.format(result, language: language)
         if correctCustomTerms {
             result = Self.applyCustomTerms(
                 to: result,

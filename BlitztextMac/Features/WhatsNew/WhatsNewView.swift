@@ -4,7 +4,7 @@ import SwiftUI
 /// or right after the first dictation for people who only use the shortcuts.
 enum WhatsNew {
     /// Bump together with the items when a release deserves a note.
-    static let version = "1.16"
+    static let version = "1.17"
 
     struct Item: Identifiable {
         let icon: String
@@ -15,19 +15,19 @@ enum WhatsNew {
 
     static let items: [Item] = [
         Item(
-            icon: "wand.and.stars",
-            title: "Eigene Modi",
-            detail: "Unter Einstellungen > Modi legst du eigene Schreibmodi an, etwa f\u{00FC}r Konzepte, Antworten oder eine \u{00DC}bersetzung, mit eigenem K\u{00FC}rzel und unter \u{201E}Modus je App\u{201C}. E-Mail und Stichpunkte sind schon da."
+            icon: "person.2.wave.2",
+            title: "Meetings",
+            detail: "Ein Klick auf den Titel benennt ein Meeting um. Nach langen Online-Meetings bleibt der Mac fl\u{00FC}ssig, und die Aufnahmen landen nicht mehr im Backup."
         ),
         Item(
-            icon: "lifepreserver",
-            title: "Nichts geht verloren",
-            detail: "Scheitert ein Diktat, sagt die Aufnahmeanzeige warum. Klappt nur der KI-Schritt nicht, liegt der wortgenaue Text in der Zwischenablage. Scheitert die Transkription, bleibt die Aufnahme 24 Stunden und l\u{00E4}sst sich im Men\u{00FC} neu transkribieren."
+            icon: "textformat",
+            title: "Schreibweise",
+            detail: "Uhrzeiten stehen als 16:45 Uhr da. Unter Allgemein gibt es Deutsch (Schweiz) mit ss, 12\u{2019}500 und \u{00AB}\u{2026}\u{00BB}, auf Macs in der Schweiz automatisch."
         ),
         Item(
-            icon: "mic.fill",
-            title: "Mikrofon und Meetings",
-            detail: "Unter Allgemein w\u{00E4}hlst du das Mikrofon f\u{00FC}r Diktate, etwa ein Headset. Im Meeting ordnet ein Klick auf den Namen einen Abschnitt einer anderen Person zu."
+            icon: "lock.shield",
+            title: "Datenschutz",
+            detail: "Tastendr\u{00FC}cke anderer Apps sieht Blitztext nur noch w\u{00E4}hrend eines Diktats, f\u{00FC}r Escape. Ein API-Key geht nie unverschl\u{00FC}sselt per http an einen anderen Rechner."
         ),
     ]
 }
