@@ -8,6 +8,12 @@ RUN_AFTER=false
 INSTALL_APP=false
 BUILD_CONFIGURATION="Release"
 UNIVERSAL_ARCHS="arm64 x86_64"
+# Signing identity for the finished app. Default "-" is ad hoc: works on this Mac, but
+# macOS treats every rebuild as a new app and asks for the Accessibility permission again.
+# Set CODESIGN_IDENTITY to a certificate from `security find-identity -v -p codesigning`,
+# e.g. "Apple Development: Name (TEAMID)" from a free Apple ID in Xcode, and the
+# permission survives rebuilds. The app needs no provisioning profile for that.
+CODESIGN_IDENTITY="${CODESIGN_IDENTITY:--}"
 
 for arg in "$@"; do
     case "$arg" in
@@ -137,7 +143,21 @@ rm -rf "$DEST"
 cp -R "$APP_PATH" "$DEST"
 # iCloud or the file provider may have added xattrs again; codesign refuses them.
 xattr -cr "$DEST" 2>/dev/null || true
-codesign --force --deep --sign - "$DEST" 2>&1
+if [ "$CODESIGN_IDENTITY" = "-" ]; then
+    echo "🔏 Signiere ad hoc (CODESIGN_IDENTITY nicht gesetzt) ..."
+    codesign --force --deep --sign - "$DEST" 2>&1
+else
+    echo "🔏 Signiere mit: $CODESIGN_IDENTITY ..."
+    # Keep the entitlements Xcode gave each binary (microphone, network); the
+    # app entitlements must not be pushed onto Sparkle's XPC services.
+    codesign --force --deep --timestamp=none --preserve-metadata=entitlements,runtime \
+        --sign "$CODESIGN_IDENTITY" "$DEST" 2>&1
+fi
+if ! codesign --verify --deep --strict "$DEST" 2>&1; then
+    echo "❌ Signatur ungültig: $DEST"
+    exit 1
+fi
+echo "✅ Signatur geprüft"
 verify_universal_app "$DEST"
 
 RUN_TARGET="$DEST"
@@ -147,6 +167,7 @@ echo "✅ Fertig! App liegt unter:"
 echo "   $DEST"
 echo ""
 echo "Build-Typ: $BUILD_CONFIGURATION"
+echo "Signatur: $([ "$CODESIGN_IDENTITY" = "-" ] && echo "ad hoc" || echo "$CODESIGN_IDENTITY")"
 echo "Architekturen: $UNIVERSAL_ARCHS"
 echo "Kompatibel: Apple Silicon + Intel (macOS 14+)"
 echo ""
