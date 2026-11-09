@@ -1,4 +1,5 @@
 import Foundation
+import NaturalLanguage
 
 /// Local cleanup of a raw transcript before it is pasted or handed to a language model.
 ///
@@ -522,10 +523,19 @@ struct TranscriptPostProcessor {
         "en": ["uh", "um", "erm"],
     ]
 
+    /// The language setting that means "detect per transcript"; the app exposes it as
+    /// `TranscriptionSettings.automaticLanguage`. Defined here so the tests, which compile
+    /// this file alone, do not need the settings.
+    static let automaticLanguage = "auto"
+
     /// Removes whole-word hesitation sounds, ignoring case and stretched letters ("Ähhm",
     /// "HMMM"), together with a comma right after them. `normalize` tidies the rest.
     static func removeFillerWords(from text: String, language: String) -> String {
-        let languageCode = String(language.lowercased().prefix(while: \.isLetter))
+        var languageCode = String(language.lowercased().prefix(while: \.isLetter))
+        if languageCode == Self.automaticLanguage {
+            // No language setting: take the language of this transcript, German when unsure.
+            languageCode = NLLanguageRecognizer.dominantLanguage(for: text)?.rawValue ?? "de"
+        }
         let fillers = fillerSounds.union(fillerWordsByLanguage[languageCode] ?? [])
 
         var result = ""

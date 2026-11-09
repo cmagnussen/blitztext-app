@@ -84,11 +84,19 @@ actor ParakeetTranscriber {
         _ = try await loadedManager()
     }
 
+    /// The hint given to the model. A code such as "de" nudges Parakeet towards that language,
+    /// which helps on very short or quiet recordings. `TranscriptionSettings.automaticLanguage`
+    /// or an empty value means no hint: the model detects the language of each dictation.
+    static func languageHint(_ language: String) -> Language? {
+        let code = language.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !code.isEmpty, code != TranscriptionSettings.automaticLanguage else { return nil }
+        return Language(rawValue: code)
+    }
+
     func transcribe(audioURL: URL, language: String) async throws -> String {
         let manager = try await loadedManager()
         var decoderState = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)
-        let languageHint = Language(rawValue: language.lowercased())
-        let result = try await manager.transcribe(audioURL, decoderState: &decoderState, language: languageHint)
+        let result = try await manager.transcribe(audioURL, decoderState: &decoderState, language: Self.languageHint(language))
         return result.text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
@@ -97,7 +105,7 @@ actor ParakeetTranscriber {
     func transcribeWords(audioURL: URL, language: String) async throws -> [TimedWord] {
         let manager = try await loadedManager()
         var decoderState = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)
-        let result = try await manager.transcribe(audioURL, decoderState: &decoderState, language: Language(rawValue: language.lowercased()))
+        let result = try await manager.transcribe(audioURL, decoderState: &decoderState, language: Self.languageHint(language))
         return TimedWord.words(from: (result.tokenTimings ?? []).map { ($0.token, $0.startTime, $0.endTime) })
     }
 

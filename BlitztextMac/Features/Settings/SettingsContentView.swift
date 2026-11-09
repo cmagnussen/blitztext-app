@@ -694,6 +694,30 @@ struct CustomizeSettingsView: View {
                 }
 
                 HStack(spacing: 8) {
+                    Text("Sprache")
+                        .font(.ui(12))
+                        .foregroundStyle(.secondary)
+
+                    Picker("", selection: Binding(
+                        get: { appState.transcriptionSettings.language },
+                        set: { appState.transcriptionSettings.language = $0 }
+                    )) {
+                        ForEach(TranscriptionSettings.languageOptions, id: \.code) { option in
+                            Text(option.label).tag(option.code)
+                        }
+                    }
+                    .labelsHidden()
+                    .controlSize(.small)
+                }
+
+                Text(appState.transcriptionSettings.usesAutomaticLanguage
+                     ? "Das Modell erkennt die Sprache jedes Diktats selbst. Gut, wenn du in mehreren Sprachen diktierst; bei sehr kurzen Diktaten kann es daneben liegen."
+                     : "Die gewählte Sprache hilft dem Modell bei kurzen oder leisen Diktaten. Zum Diktieren in mehreren Sprachen „Automatisch erkennen“ wählen.")
+                    .font(.ui(12))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 8) {
                     Text("Lokales Modell")
                         .font(.ui(12))
                         .foregroundStyle(.secondary)
