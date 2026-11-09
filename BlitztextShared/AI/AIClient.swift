@@ -9,6 +9,9 @@ enum AIClientError: LocalizedError {
     case emptyResponse
     /// A key would travel unencrypted: plain http to a host other than this device.
     case insecureAddress
+    /// The model spent its whole token budget before writing the answer (a thinking model
+    /// on a server with a small default limit).
+    case cutOff
 
     var errorDescription: String? {
         switch self {
@@ -30,6 +33,8 @@ enum AIClientError: LocalizedError {
             return "Der Modell-Anbieter hat die Anfrage abgelehnt."
         case .emptyResponse:
             return "Keine Antwort vom Modell-Anbieter erhalten. Bitte nochmal versuchen."
+        case .cutOff:
+            return "Das Modell hat sein Token-Budget aufgebraucht, bevor es geantwortet hat. Bei einem Modell mit Thinking-Modus hilft, das Nachdenken im Server abzuschalten oder ein größeres Token-Limit zu setzen."
         }
     }
 }
@@ -83,19 +88,29 @@ enum AIClient {
         }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.timeoutInterval = 60
+        // A local model answers without streaming and, if it thinks first, needs minutes for
+        // a longer dictation on a laptop; a cloud provider answers in seconds.
+        request.timeoutInterval = config.provider == .custom ? 300 : 60
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let key {
             request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         }
         // No temperature: several current models only accept their default.
-        request.httpBody = try JSONSerialization.data(withJSONObject: [
+        var body: [String: Any] = [
             "model": config.model,
             "messages": [
                 ["role": "system", "content": instruction],
                 ["role": "user", "content": text],
             ],
-        ])
+        ]
+        // Local servers (mlx_lm, llama.cpp, LM Studio) stop after a small default number of
+        // tokens, often 512. A thinking model spends that on its reasoning and returns no
+        // answer at all. Only for "Eigene Adresse": the cloud providers have generous
+        // defaults, and some of their models reject `max_tokens`.
+        if config.provider == .custom {
+            body["max_tokens"] = 4096
+        }
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let json = try await send(request)
         let choice = (json["choices"] as? [[String: Any]])?.first
@@ -111,6 +126,10 @@ enum AIClient {
             let content = message?["content"] as? String,
             !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         else {
+            // "length" with nothing in content: the budget went into reasoning.
+            if (choice?["finish_reason"] as? String) == "length" {
+                throw AIClientError.cutOff
+            }
             throw AIClientError.emptyResponse
         }
         return content.trimmingCharacters(in: .whitespacesAndNewlines)
