@@ -30,6 +30,10 @@ final class AppState {
         didSet {
             guard oldValue != menuBarStatus else { return }
             publishMenuBarStatus()
+            switch menuBarStatus {
+            case .recording, .processing: hotkeyService.setDictationActive(true)
+            default: hotkeyService.setDictationActive(false)
+            }
         }
     }
 
