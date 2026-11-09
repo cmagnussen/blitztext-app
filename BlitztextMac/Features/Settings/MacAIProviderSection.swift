@@ -88,6 +88,15 @@ struct MacAIProviderSection: View {
             Text("OpenAI-kompatible Adresse, zum Beispiel Ollama oder LM Studio auf diesem Mac.")
                 .font(.ui(12))
                 .foregroundStyle(.secondary)
+            if AIClient.isInsecureAddress(appState.aiProvider?.baseURL ?? "") {
+                Label(
+                    "http:// zu einem anderen Rechner: Texte gehen unverschlüsselt durchs Netz. Mit API-Key lehnt Blitztext die Anfrage ab; ohne Key geht sie durch.",
+                    systemImage: "exclamationmark.triangle.fill"
+                )
+                .font(.ui(12))
+                .foregroundStyle(BlitztextTheme.danger)
+                .fixedSize(horizontal: false, vertical: true)
+            }
         }
 
         HStack(spacing: 8) {
