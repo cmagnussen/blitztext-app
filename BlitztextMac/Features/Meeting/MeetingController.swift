@@ -512,13 +512,30 @@ final class MeetingController {
             await model.unload()
         }
         #endif
+        // A model server on this Mac (Ollama, LM Studio, mlx_lm via "Eigene Adresse") keeps
+        // the meeting on the device just like Apple Intelligence; cloud providers never run.
+        if let config = AIClient.providerOnThisMac {
+            do {
+                let server = MeetingSummarizer.Backend(characterLimit: Self.localModelCharacterLimit) { instruction, text in
+                    try await AIClient.complete(instruction: instruction, text: text, config: config)
+                }
+                record.summary = try await MeetingSummarizer.summarize(transcript, engine: .automatic, backend: server)
+                // Always say so: the user should see that the server wrote the summary.
+                let used = "Zusammengefasst mit \(config.model) auf diesem Mac."
+                record.summaryNote = localFailure.map { "\($0) \(used)" } ?? used
+                return
+            } catch {
+                localFailure = [localFailure, "\(config.model) auf diesem Mac konnte nicht zusammenfassen (\(error.localizedDescription))."]
+                    .compactMap { $0 }.joined(separator: " ")
+            }
+        }
         guard TextRewriter.isLocalAvailable else {
             if let localFailure {
                 // An earlier summary stays.
                 record.summaryNote = localFailure
             } else {
                 record.summary = nil
-                record.summaryNote = "F\u{00FC}r die Zusammenfassung braucht Blitztext Apple Intelligence oder ein lokales Sprachmodell (Einstellungen, Modelle). Meetings gehen nie an einen Modell-Anbieter."
+                record.summaryNote = "F\u{00FC}r die Zusammenfassung braucht Blitztext Apple Intelligence, ein lokales Sprachmodell (Einstellungen, Modelle) oder einen Modell-Server auf diesem Mac (Eigene Adresse mit localhost). Meetings gehen nie an einen Anbieter im Internet."
             }
             return
         }

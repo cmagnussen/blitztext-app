@@ -104,8 +104,8 @@ Speech recognition:  your Mac (Parakeet or Whisper, Core ML / Neural Engine)
 Writing modes:       your Mac (Apple Intelligence)
                      or, if you add one, your own model provider with your own API key
 Meetings:            your Mac (transcript, speakers, live notes, summary with
-                     Apple Intelligence or the optional local model), never a
-                     model provider
+                     Apple Intelligence, the optional local model or a model
+                     server on this Mac), never a provider on the internet
 Model download:      Hugging Face, once per model
 Update check:        GitHub releases of this repository (can be turned off)
 ```
