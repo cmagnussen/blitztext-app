@@ -52,6 +52,25 @@ enum AIClient {
         return !isLoopbackHost(host)
     }
 
+    /// True when the address points at this Mac (localhost, 127.x.x.x, ::1): a model server
+    /// such as Ollama, LM Studio or mlx_lm. Text sent there never leaves the device.
+    static func isAddressOnThisMac(_ baseURL: String) -> Bool {
+        guard let url = URL(string: baseURL.trimmingCharacters(in: .whitespacesAndNewlines)),
+              let host = url.host?.lowercased(), !host.isEmpty
+        else { return false }
+        return isLoopbackHost(host)
+    }
+
+    /// The configured provider when it runs on this Mac; nil for cloud providers or none.
+    /// Meetings may use it: the promise is that their text never leaves the device, and a
+    /// local server keeps that promise.
+    static var providerOnThisMac: AIProviderConfig? {
+        guard let config = AIProviderStore.config, AIProviderStore.isConfigured,
+              config.provider == .custom, isAddressOnThisMac(config.baseURL)
+        else { return nil }
+        return config
+    }
+
     static func isLoopbackHost(_ host: String) -> Bool {
         if ["localhost", "::1", "[::1]", "0.0.0.0"].contains(host) || host.hasSuffix(".localhost") { return true }
         // 127.x.x.x, exactly four numeric octets, so "127.0.0.1.example.com" does not pass.

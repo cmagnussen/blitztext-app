@@ -53,9 +53,10 @@ final class LiveNotesController {
         self.ownName = ownName
     }
 
-    /// Notes need a model on this Mac: a downloaded one or Apple Intelligence.
+    /// Notes need a model on this Mac: a downloaded one, a model server on localhost or
+    /// Apple Intelligence.
     static var isAvailable: Bool {
-        LocalModelStore.shared.preferredInstalled != nil || TextRewriter.isLocalAvailable
+        LocalModelStore.shared.preferredInstalled != nil || AIClient.providerOnThisMac != nil || TextRewriter.isLocalAvailable
     }
 
     func start() {
@@ -350,6 +351,17 @@ struct LiveNotesBackend {
             }
         }
         #endif
+        // A model server on this Mac keeps the notes on the device; cloud providers never run.
+        if let config = AIClient.providerOnThisMac {
+            return LiveNotesBackend(
+                name: "\(config.model) auf diesem Mac",
+                characterLimit: MeetingController.localModelCharacterLimit,
+                complete: { instruction, text in
+                    try await AIClient.complete(instruction: instruction, text: text, config: config)
+                },
+                close: {}
+            )
+        }
         guard TextRewriter.isLocalAvailable else {
             throw localFailure ?? TextRewriter.RewriteError.noModel
         }
