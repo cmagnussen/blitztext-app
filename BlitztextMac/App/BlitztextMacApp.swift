@@ -169,6 +169,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             name: .chooseAudioFile,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(chooseMeetingAudioFile),
+            name: .chooseMeetingAudioFile,
+            object: nil
+        )
 
         didFinishLaunching = true
         DispatchQueue.main.async { [weak self] in
@@ -221,6 +227,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         panel.canChooseDirectories = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
         transcribeAudioFile(url)
+    }
+
+    /// A recording with several people, evaluated as a meeting. Like `chooseAudioFile`, but the
+    /// popover opens again on the meeting page either way, where the evaluation shows.
+    @objc private func chooseMeetingAudioFile() {
+        popover.performClose(nil)
+        appState.isPopoverShown = false
+        NSApp.activate(ignoringOtherApps: true)
+
+        let panel = NSOpenPanel()
+        panel.title = "Aufnahme als Meeting auswerten"
+        panel.message = "Aufnahme mit mehreren Personen w\u{00E4}hlen, zum Beispiel ein Interview"
+        panel.prompt = "Auswerten"
+        panel.allowedContentTypes = [.audio]
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+        panel.canChooseDirectories = false
+        if panel.runModal() == .OK, let url = panel.url {
+            appState.meeting.evaluate(fileAt: url)
+        }
+        appState.page = .meeting
+        showPopover()
     }
 
     private func transcribeAudioFile(_ url: URL) {

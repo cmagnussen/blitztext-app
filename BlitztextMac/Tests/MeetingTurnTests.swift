@@ -62,3 +62,16 @@ final class MeetingTurnTests: XCTestCase {
         XCTAssertEqual(turn.text, "Hallo")
     }
 }
+
+/// A meeting evaluated from an audio file is named after the file.
+final class MeetingFileTitleTests: XCTestCase {
+    func testTitleIsTheFileName() {
+        XCTAssertEqual(MeetingRecord.title(forFile: URL(fileURLWithPath: "/tmp/Interview Müller.m4a")), "Interview Müller")
+        XCTAssertEqual(MeetingRecord.title(forFile: URL(fileURLWithPath: "/tmp/2026-11-04 Team.mp3")), "2026-11-04 Team")
+    }
+
+    func testNamelessFileGetsTheDateTitle() {
+        let now = Date(timeIntervalSince1970: 1_793_000_000)
+        XCTAssertEqual(MeetingRecord.title(forFile: URL(fileURLWithPath: "/tmp/ .m4a"), now: now), MeetingRecord.title(startedAt: now))
+    }
+}

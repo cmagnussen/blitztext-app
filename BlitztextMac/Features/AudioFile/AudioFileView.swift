@@ -46,6 +46,16 @@ struct AudioFileView: View {
                     Text("Die Datei wird auf diesem Mac transkribiert und nicht ver\u{00E4}ndert.")
                         .font(.ui(11))
                         .foregroundStyle(.tertiary)
+
+                    // An interview here becomes one block of text; the meeting evaluation
+                    // separates the people.
+                    Button {
+                        NotificationCenter.default.post(name: .chooseMeetingAudioFile, object: nil)
+                    } label: {
+                        Label("Mehrere Personen? Als Meeting auswerten ...", systemImage: "person.2.wave.2")
+                    }
+                    .buttonStyle(.subtle)
+                    .disabled(controller.isWorking || MeetingController.blocker != nil)
                 }
                 .padding(16)
             }

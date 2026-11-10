@@ -456,7 +456,7 @@ struct MenuBarView: View {
                     .fixedSize()
             }
             .buttonStyle(.glassAction)
-            .help("Sprachmemo oder WhatsApp-Sprachnachricht transkribieren. Du kannst Dateien auch auf das Blitztext-Symbol im Finder ziehen.")
+            .help("Sprachmemo oder WhatsApp-Sprachnachricht transkribieren. Du kannst Dateien auch auf das Blitztext-Symbol im Finder ziehen. Aufnahmen mit mehreren Personen wertet \u{201E}Meeting\u{201C} aus.")
 
             Button {
                 appState.page = .history

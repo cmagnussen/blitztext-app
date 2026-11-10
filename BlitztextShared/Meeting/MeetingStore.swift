@@ -25,6 +25,13 @@ struct MeetingRecord: Codable, Equatable, Identifiable {
         "Meeting am " + date.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened, locale: Locale(identifier: "de_DE")))
     }
 
+    /// "Interview Müller" for "Interview Müller.m4a", for a meeting evaluated from a file;
+    /// the date title when the name is empty.
+    static func title(forFile url: URL, now: Date = Date()) -> String {
+        let name = url.deletingPathExtension().lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? title(startedAt: now) : name
+    }
+
     /// Speaker 0 is the microphone in an online meeting, the person at this Mac.
     func name(for speaker: Int) -> String {
         let custom = speakerNames[speaker]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
