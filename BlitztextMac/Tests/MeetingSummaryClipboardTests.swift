@@ -73,4 +73,64 @@ final class MeetingSummaryPasteboardTests: XCTestCase {
         XCTAssertEqual(item?.string(forType: .html), MeetingSummaryClipboard.html(text))
         XCTAssertEqual(Set(item?.types ?? []), Set([.string, .html]))
     }
+
+    func testTranscriptCopyPutsPlainTextAndTheGivenHTMLIntoOneItem() {
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
+        pasteboard.setString("Previous content", forType: .string)
+        let parts = [MeetingSummaryClipboard.Part(name: "Ich", time: "0:00", text: "Hallo.")]
+        let text = "Meeting\n\nIch: Hallo."
+        let html = MeetingSummaryClipboard.transcriptHTML(title: "Meeting", parts: parts)
+
+        MeetingSummaryClipboard.copy(text, html: html, to: pasteboard)
+
+        XCTAssertEqual(pasteboard.pasteboardItems?.count, 1)
+        let item = pasteboard.pasteboardItems?.first
+        XCTAssertEqual(item?.string(forType: .string), text)
+        XCTAssertEqual(item?.string(forType: .html), html)
+        XCTAssertEqual(Set(item?.types ?? []), Set([.string, .html]))
+    }
+}
+
+/// "Transkript kopieren" and "Alles kopieren" keep one paragraph per part in rich text editors.
+final class MeetingTranscriptHTMLTests: XCTestCase {
+    private let parts = [
+        MeetingSummaryClipboard.Part(name: "Ich", time: "0:00", text: "Hallo zusammen."),
+        MeetingSummaryClipboard.Part(name: "Person 1", time: "4:05", text: "Gern, zuerst der Termin."),
+    ]
+
+    func testOneParagraphPerPartWithNameAndTime() {
+        let html = MeetingSummaryClipboard.transcriptHTML(title: "Meeting am 4. Nov. 2026, 14:07", parts: parts)
+        XCTAssertTrue(html.contains("<p><strong>Meeting am 4. Nov. 2026, 14:07</strong></p>"))
+        XCTAssertTrue(html.contains("<p><strong>Ich</strong> · 0:00<br>Hallo zusammen.</p><p><strong>Person 1</strong> · 4:05<br>Gern, zuerst der Termin.</p>"))
+    }
+
+    func testEscapesNamesAndText() {
+        let html = MeetingSummaryClipboard.transcriptHTML(title: "A & B", parts: [.init(name: "<b>Anna</b>", time: "0:01", text: "1 < 2 & 3 > 2")])
+        XCTAssertTrue(html.contains("<strong>A &amp; B</strong>"))
+        XCTAssertTrue(html.contains("<strong>&lt;b&gt;Anna&lt;/b&gt;</strong>"))
+        XCTAssertTrue(html.contains("1 &lt; 2 &amp; 3 &gt; 2"))
+    }
+
+    func testEverythingHasSummaryThenTranscript() {
+        let html = MeetingSummaryClipboard.everythingHTML(title: "Meeting", summary: "Entscheidungen\n- Online", parts: parts)
+        let summary = html.range(of: "<p><strong>Entscheidungen</strong></p><ul><li>Online</li></ul>")
+        let transcript = html.range(of: "<p><strong>Transkript</strong></p><p><strong>Ich</strong>")
+        XCTAssertNotNil(summary)
+        XCTAssertNotNil(transcript)
+        XCTAssertLessThan(summary!.lowerBound, transcript!.lowerBound)
+        XCTAssertEqual(html.components(separatedBy: "<html>").count, 2, "one document, not two")
+    }
+
+    func testPlainTextStaysWithoutTimes() {
+        var record = MeetingRecord(id: UUID(), createdAt: Date(), title: "Meeting", duration: 60, status: .done)
+        record.turns = [MeetingTurn(speaker: 1, start: 0, text: "Hallo."), MeetingTurn(speaker: 2, start: 245, text: "Gern.")]
+        XCTAssertEqual(record.transcriptShareText, "Meeting\n\nPerson 1: Hallo.\n\nPerson 2: Gern.")
+        XCTAssertFalse(record.shareText.contains("4:05"))
+    }
+
+    func testEverythingWithoutSummary() {
+        let html = MeetingSummaryClipboard.everythingHTML(title: "Meeting", summary: nil, parts: parts)
+        XCTAssertTrue(html.contains("<p><strong>Meeting</strong></p><p><strong>Transkript</strong></p>"))
+    }
 }
