@@ -1,4 +1,5 @@
 import Foundation
+import NaturalLanguage
 
 /// Local cleanup of a raw transcript before it is pasted or handed to a language model.
 ///
@@ -34,6 +35,9 @@ struct TranscriptPostProcessor {
     var swissSpelling = false
 
     func process(_ text: String) -> String {
+        // One language for every step below: the setting, or with "Automatisch erkennen"
+        // the language of this transcript. Resolved once, so no step can miss it.
+        let language = Self.resolvedLanguage(language, for: text)
         var result = text
         if removeFillerWords {
             result = Self.removeFillerWords(from: result, language: language)
@@ -522,10 +526,27 @@ struct TranscriptPostProcessor {
         "en": ["uh", "um", "erm"],
     ]
 
+    /// The language setting that means "detect per transcript"; the app exposes it as
+    /// `TranscriptionSettings.automaticLanguage`. Defined here so the tests, which compile
+    /// this file alone, do not need the settings.
+    static let automaticLanguage = "auto"
+
+    /// The language code the language-dependent steps work with: the setting as given, or
+    /// for `automaticLanguage` "en" when the recognizer sees English, "de" otherwise. Only
+    /// these two have rules of their own, and on a short dictation the recognizer guesses
+    /// freely ("ok" comes back Polish), so everything else counts as German, like
+    /// `PromptLanguage` does for the mode instructions.
+    static func resolvedLanguage(_ language: String, for text: String) -> String {
+        let code = String(language.lowercased().prefix(while: \.isLetter))
+        guard code == automaticLanguage else { return language }
+        return NLLanguageRecognizer.dominantLanguage(for: text) == .english ? "en" : "de"
+    }
+
     /// Removes whole-word hesitation sounds, ignoring case and stretched letters ("Ähhm",
     /// "HMMM"), together with a comma right after them. `normalize` tidies the rest.
     static func removeFillerWords(from text: String, language: String) -> String {
-        let languageCode = String(language.lowercased().prefix(while: \.isLetter))
+        // Callers resolve "auto" via `resolvedLanguage`; this handles a direct call as well.
+        let languageCode = String(resolvedLanguage(language, for: text).lowercased().prefix(while: \.isLetter))
         let fillers = fillerSounds.union(fillerWordsByLanguage[languageCode] ?? [])
 
         var result = ""

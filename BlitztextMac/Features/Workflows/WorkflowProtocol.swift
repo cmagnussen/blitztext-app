@@ -209,6 +209,27 @@ struct AppSettings: Codable {
 // MARK: - Workflow Settings
 
 struct TranscriptionSettings: Codable {
+    /// What the user dictates: a language code that Parakeet gets as a hint, or
+    /// `automaticLanguage`. "de" stays the default: most dictations are German, and on very
+    /// short or quiet German recordings the hint keeps Parakeet from switching languages.
     var language: String = "de"
+
+    /// No hint: Parakeet detects the language of each dictation. For people who dictate in
+    /// several languages; an English dictation is then not pulled towards German.
+    static let automaticLanguage = TranscriptPostProcessor.automaticLanguage
+
+    /// The choices offered in the settings. Parakeet Ultra covers 25 European languages;
+    /// the list names the common ones, the automatic option covers the rest.
+    static let languageOptions: [(code: String, label: String)] = [
+        ("de", "Deutsch"),
+        ("en", "Englisch"),
+        ("fr", "Französisch"),
+        ("es", "Spanisch"),
+        ("it", "Italienisch"),
+        ("nl", "Niederländisch"),
+        (automaticLanguage, "Automatisch erkennen"),
+    ]
+
+    var usesAutomaticLanguage: Bool { language == Self.automaticLanguage }
 }
 

@@ -386,6 +386,9 @@ actor LocalTranscriptionService {
 
     /// - Parameter requireSpeech: On for live dictations only. Audio files, including a kept
     ///   recording (`UnfinishedRecordings`), always reach the model.
+    /// - Parameter language: The language setting. A code such as "de" goes to Parakeet as a
+    ///   hint; `TranscriptionSettings.automaticLanguage` sends none, and the model decides per
+    ///   dictation.
     func transcribe(audioURL: URL, language: String, modelName: String, requireSpeech: Bool = true) async throws -> String {
         // Every model invents text on a recording without speech, so none of them runs on an
         // accidental shortcut. Longer dictations always reach the model, as on iOS: they may
