@@ -1,14 +1,50 @@
 import AppKit
 
-/// Rich text for explicit summary copying; dictation and transcript copying stay plain.
+/// Rich text for explicit summary and transcript copying; dictation copying stays plain.
+/// The plain text goes along unchanged, so plain text fields get what they got before.
 enum MeetingSummaryClipboard {
     @MainActor
     static func copy(_ text: String, to pasteboard: NSPasteboard = .general) {
+        copy(text, html: html(text), to: pasteboard)
+    }
+
+    @MainActor
+    static func copy(_ text: String, html: String, to pasteboard: NSPasteboard = .general) {
         let item = NSPasteboardItem()
         item.setString(text, forType: .string)
-        item.setString(html(text), forType: .html)
+        item.setString(html, forType: .html)
         pasteboard.clearContents()
         pasteboard.writeObjects([item])
+    }
+
+    /// One part of the transcript as the result page shows it: name, time ("4:05"), text.
+    struct Part: Equatable {
+        let name: String
+        let time: String
+        let text: String
+    }
+
+    /// "Transkript kopieren": the title, then one paragraph per part with the name bold and the
+    /// time as on the result page. Rich text editors join the plain text's parts into one
+    /// block, since they read its blank lines as line breaks at most.
+    static func transcriptHTML(title: String, parts: [Part]) -> String {
+        document(heading(title) + transcriptBlocks(parts))
+    }
+
+    /// "Alles kopieren": title, summary as `html(_:)` sets it, then the transcript.
+    static func everythingHTML(title: String, summary: String?, parts: [Part]) -> String {
+        document(heading(title) + (summary.map(blocks) ?? "") + heading("Transkript") + transcriptBlocks(parts))
+    }
+
+    private static func transcriptBlocks(_ parts: [Part]) -> String {
+        parts.map { part in
+            "<p><strong>" + escape(part.name) + "</strong> \u{00B7} " + escape(part.time)
+                + "<br>" + escape(part.text) + "</p>"
+        }.joined()
+    }
+
+    private static func heading(_ text: String) -> String {
+        "<p><strong>" + escape(text) + "</strong></p>"
     }
 
     /// The section titles the summary instruction asks for (`MeetingSummarizer`).
@@ -25,6 +61,10 @@ enum MeetingSummaryClipboard {
     /// bold and start a new block. A line after a bullet continues it: the summary cleanup
     /// removes indentation, so a wrapped bullet arrives as a plain next line.
     static func html(_ text: String) -> String {
+        document(blocks(text))
+    }
+
+    private static func blocks(_ text: String) -> String {
         var blocks: [String] = []
         var paragraph: [String] = []
         var bullets: [String] = []
@@ -64,8 +104,11 @@ enum MeetingSummaryClipboard {
         }
         flushParagraph()
         flushBullets()
-        return "<html><head><meta charset=\"utf-8\"></head><body style=\"white-space: pre-wrap\">"
-            + blocks.joined() + "</body></html>"
+        return blocks.joined()
+    }
+
+    private static func document(_ body: String) -> String {
+        "<html><head><meta charset=\"utf-8\"></head><body style=\"white-space: pre-wrap\">" + body + "</body></html>"
     }
 
     private static func escape(_ text: String) -> String {

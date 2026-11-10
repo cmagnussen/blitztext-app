@@ -415,9 +415,15 @@ struct MeetingView: View {
             // At the top: a long meeting would put them far below the transcript.
             HStack(spacing: 8) {
                 // The bare transcript by person, e.g. to continue in another AI app.
-                copyButton("Transkript kopieren", target: .transcript, text: record.transcriptShareText)
+                copyButton(
+                    "Transkript kopieren", target: .transcript, text: record.transcriptShareText,
+                    html: { MeetingSummaryClipboard.transcriptHTML(title: record.title, parts: transcriptParts(record)) }
+                )
                 if record.summary != nil {
-                    copyButton("Alles kopieren", target: .everything, text: record.shareText)
+                    copyButton(
+                        "Alles kopieren", target: .everything, text: record.shareText,
+                        html: { MeetingSummaryClipboard.everythingHTML(title: record.title, summary: record.summary, parts: transcriptParts(record)) }
+                    )
                 }
                 Spacer()
             }
@@ -562,10 +568,14 @@ struct MeetingView: View {
         .glassPanel()
     }
 
-    private func copyButton(_ title: String, target: CopyTarget, text: String) -> some View {
+    /// - Parameter html: Built on click only; a long transcript is not worth rebuilding on
+    ///   every redraw.
+    private func copyButton(_ title: String, target: CopyTarget, text: String, html: (() -> String)? = nil) -> some View {
         Button {
             if target == .summary {
                 MeetingSummaryClipboard.copy(text)
+            } else if let html {
+                MeetingSummaryClipboard.copy(text, html: html())
             } else {
                 appState.copyToClipboard(text)
             }
@@ -600,6 +610,11 @@ struct MeetingView: View {
         let duration = minutes < 1 ? "unter 1 Min." : "\(minutes) Min."
         let people = record.speakers.count == 1 ? "1 Person" : "\(record.speakers.count) Personen"
         return "\(duration), \(people)"
+    }
+
+    /// The transcript for rich text copying: names and times as the page shows them.
+    private func transcriptParts(_ record: MeetingRecord) -> [MeetingSummaryClipboard.Part] {
+        record.turns.map { .init(name: record.name(for: $0.speaker), time: Self.clock($0.start), text: $0.text) }
     }
 
     private func color(for speaker: Int) -> Color {
