@@ -35,6 +35,9 @@ struct TranscriptPostProcessor {
     var swissSpelling = false
 
     func process(_ text: String) -> String {
+        // One language for every step below: the setting, or with "Automatisch erkennen"
+        // the language of this transcript. Resolved once, so no step can miss it.
+        let language = Self.resolvedLanguage(language, for: text)
         var result = text
         if removeFillerWords {
             result = Self.removeFillerWords(from: result, language: language)
@@ -528,14 +531,20 @@ struct TranscriptPostProcessor {
     /// this file alone, do not need the settings.
     static let automaticLanguage = "auto"
 
+    /// The language code the language-dependent steps work with: the setting as given, or
+    /// for `automaticLanguage` the dominant language of the text, German when unsure (short
+    /// or mixed dictations), because most dictations are German.
+    static func resolvedLanguage(_ language: String, for text: String) -> String {
+        let code = String(language.lowercased().prefix(while: \.isLetter))
+        guard code == automaticLanguage else { return language }
+        return NLLanguageRecognizer.dominantLanguage(for: text)?.rawValue ?? "de"
+    }
+
     /// Removes whole-word hesitation sounds, ignoring case and stretched letters ("Ähhm",
     /// "HMMM"), together with a comma right after them. `normalize` tidies the rest.
     static func removeFillerWords(from text: String, language: String) -> String {
-        var languageCode = String(language.lowercased().prefix(while: \.isLetter))
-        if languageCode == Self.automaticLanguage {
-            // No language setting: take the language of this transcript, German when unsure.
-            languageCode = NLLanguageRecognizer.dominantLanguage(for: text)?.rawValue ?? "de"
-        }
+        // Callers resolve "auto" via `resolvedLanguage`; this handles a direct call as well.
+        let languageCode = String(resolvedLanguage(language, for: text).lowercased().prefix(while: \.isLetter))
         let fillers = fillerSounds.union(fillerWordsByLanguage[languageCode] ?? [])
 
         var result = ""

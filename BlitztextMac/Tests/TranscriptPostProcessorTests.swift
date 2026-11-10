@@ -18,6 +18,39 @@ final class TranscriptPostProcessorTests: XCTestCase {
         )
     }
 
+    // MARK: Automatic language
+
+    func testAutomaticLanguageResolvesGermanForTimesAndFillers() {
+        var p = processor()
+        p.language = TranscriptPostProcessor.automaticLanguage
+        // German dictation: "16 Uhr 45" becomes a time, the German filler "ähm" goes.
+        XCTAssertEqual(
+            p.process("Der Slot ist ähm von 16 Uhr 45 bis 17 Uhr 5."),
+            "Der Slot ist von 16:45 bis 17:05 Uhr."
+        )
+    }
+
+    func testAutomaticLanguageKeepsEnglishUntouchedByGermanSteps() {
+        var p = processor()
+        p.language = TranscriptPostProcessor.automaticLanguage
+        // English dictation: the English filler "um" goes, which the German setting keeps.
+        XCTAssertEqual(
+            p.process("Okay um let us meet tomorrow at the office."),
+            "Okay let us meet tomorrow at the office."
+        )
+        XCTAssertEqual(
+            processor().process("Okay um let us meet tomorrow at the office."),
+            "Okay um let us meet tomorrow at the office."
+        )
+    }
+
+    func testResolvedLanguagePassesSettingsThrough() {
+        XCTAssertEqual(TranscriptPostProcessor.resolvedLanguage("de", for: "hello world"), "de")
+        XCTAssertEqual(TranscriptPostProcessor.resolvedLanguage("auto", for: "Wir treffen uns morgen im Büro."), "de")
+        XCTAssertEqual(TranscriptPostProcessor.resolvedLanguage("auto", for: "Let us meet tomorrow at the office."), "en")
+        XCTAssertEqual(TranscriptPostProcessor.resolvedLanguage("auto", for: "ok"), "de")
+    }
+
     // MARK: Custom terms
 
     func testMergesMultiWordArtifacts() {
