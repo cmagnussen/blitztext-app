@@ -169,6 +169,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             name: .chooseAudioFile,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(saveMeetingMarkdown(_:)),
+            name: .saveMeetingMarkdown,
+            object: nil
+        )
 
         didFinishLaunching = true
         DispatchQueue.main.async { [weak self] in
@@ -221,6 +227,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         panel.canChooseDirectories = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
         transcribeAudioFile(url)
+    }
+
+    /// The meeting result as a Markdown file. As with an audio file, the transient popover would
+    /// close under the panel anyway; it opens again on the meeting page afterwards, since
+    /// closing it showed the main page.
+    @objc private func saveMeetingMarkdown(_ notification: Notification) {
+        guard let markdown = notification.userInfo?["markdown"] as? String,
+              let fileName = notification.userInfo?["fileName"] as? String,
+              let meetingID = notification.userInfo?["meetingID"] as? UUID else { return }
+        popover.performClose(nil)
+        appState.isPopoverShown = false
+        NSApp.activate(ignoringOtherApps: true)
+
+        let panel = NSSavePanel()
+        panel.title = "Meeting als Markdown sichern"
+        panel.prompt = "Sichern"
+        panel.nameFieldStringValue = fileName
+        // No start folder: the panel opens where the last file went, e.g. a notes vault.
+        panel.allowedContentTypes = [UTType(filenameExtension: "md") ?? .plainText]
+        panel.canCreateDirectories = true
+        defer {
+            appState.page = .meeting
+            showPopover()
+        }
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        do {
+            try markdown.write(to: url, atomically: true, encoding: .utf8)
+            appState.meeting.savedMarkdownID = meetingID
+        } catch {
+            let alert = NSAlert()
+            alert.messageText = "Die Datei lie\u{00DF} sich nicht sichern."
+            alert.informativeText = error.localizedDescription
+            alert.runModal()
+        }
     }
 
     private func transcribeAudioFile(_ url: URL) {

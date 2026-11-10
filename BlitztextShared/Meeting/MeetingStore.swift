@@ -18,11 +18,19 @@ struct MeetingRecord: Codable, Equatable, Identifiable {
     var summary: String?
     /// Why the summary is missing, e.g. no language model available.
     var summaryNote: String?
+    /// The live notes as they stood when the recording ended, for the Markdown file.
+    /// Optional, so meetings stored before keep loading.
+    var liveNotes: String?
 
     /// "Meeting am 17. Okt. 2026, 11:58": German like the rest of the app, whatever the
     /// system language.
     static func title(startedAt date: Date) -> String {
-        "Meeting am " + date.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened, locale: Locale(identifier: "de_DE")))
+        "Meeting am " + dateText(date)
+    }
+
+    /// "27. Okt. 2026, 14:07".
+    static func dateText(_ date: Date) -> String {
+        date.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened, locale: Locale(identifier: "de_DE")))
     }
 
     /// Speaker 0 is the microphone in an online meeting, the person at this Mac.
@@ -72,6 +80,25 @@ struct MeetingRecord: Codable, Equatable, Identifiable {
         if let summary { parts.append(summary) }
         parts.append("Transkript\n\n" + transcriptText)
         return parts.joined(separator: "\n\n")
+    }
+
+    /// "42 Min., 2 Personen".
+    var overview: String {
+        MeetingMarkdown.overview(duration: duration, people: speakers.count)
+    }
+
+    /// The result as a Markdown file, with the time of every turn. The copied texts and the
+    /// transcript for the summary stay as they are. A renamed meeting has no date in its title
+    /// any more; the file keeps it in front of the overview.
+    var markdown: String {
+        let dated = title == Self.title(startedAt: createdAt) ? overview : Self.dateText(createdAt) + " \u{00B7} " + overview
+        return MeetingMarkdown.Document(
+            title: title,
+            overview: dated,
+            summary: summary,
+            liveNotes: liveNotes,
+            turns: turns.map { MeetingMarkdown.Turn(start: $0.start, name: name(for: $0.speaker), text: $0.text) }
+        ).markdown
     }
 
     var audioURL: URL {

@@ -148,6 +148,7 @@ targets:
       - path: Services/KeychainService.swift
       - path: Services/SealedStoreFiles.swift
       - path: ../BlitztextShared/Meeting/MeetingStore.swift
+      - path: ../BlitztextShared/Meeting/MeetingMarkdown.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.blitztext.mac.tests

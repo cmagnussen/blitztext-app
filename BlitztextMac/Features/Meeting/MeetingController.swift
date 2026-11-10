@@ -36,6 +36,9 @@ final class MeetingController {
     private(set) var liveNotes: LiveNotesController?
     /// Something the user should know about the current meeting, e.g. an interrupted recording.
     private(set) var notice: String?
+    /// The meeting whose Markdown file was saved last: its button shows a checkmark. Set by the
+    /// save panel, which runs while the popover, and with it the page's state, is closed.
+    var savedMarkdownID: UUID?
     /// The meeting being recorded. It is stored as pending from the start, so a quit or crash
     /// keeps the audio for a later evaluation.
     private(set) var recordingID: UUID? {
@@ -268,9 +271,12 @@ final class MeetingController {
         let duration = recorder.currentTime
         recorder.stop()
         if let record = store.meeting(id: id) { stopSystemAudio(for: record) }
+        // `endRecording` lets the live notes go; keep their last state for the Markdown file.
+        let notes = liveNotes?.notes
         endRecording()
         if var record = store.meeting(id: id) {
             record.duration = max(duration, Self.duration(of: record.audioURL) ?? 0)
+            if let notes, !notes.isEmpty { record.liveNotes = notes }
             store.upsert(record)
         }
         return id
