@@ -49,6 +49,8 @@ final class TranscriptPostProcessorTests: XCTestCase {
         XCTAssertEqual(TranscriptPostProcessor.resolvedLanguage("auto", for: "Wir treffen uns morgen im Büro."), "de")
         XCTAssertEqual(TranscriptPostProcessor.resolvedLanguage("auto", for: "Let us meet tomorrow at the office."), "en")
         XCTAssertEqual(TranscriptPostProcessor.resolvedLanguage("auto", for: "ok"), "de")
+        // Other languages have no rules of their own and count as German.
+        XCTAssertEqual(TranscriptPostProcessor.resolvedLanguage("auto", for: "Nous nous voyons demain au bureau."), "de")
     }
 
     // MARK: Custom terms

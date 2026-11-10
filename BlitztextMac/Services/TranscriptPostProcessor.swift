@@ -532,12 +532,14 @@ struct TranscriptPostProcessor {
     static let automaticLanguage = "auto"
 
     /// The language code the language-dependent steps work with: the setting as given, or
-    /// for `automaticLanguage` the dominant language of the text, German when unsure (short
-    /// or mixed dictations), because most dictations are German.
+    /// for `automaticLanguage` "en" when the recognizer sees English, "de" otherwise. Only
+    /// these two have rules of their own, and on a short dictation the recognizer guesses
+    /// freely ("ok" comes back Polish), so everything else counts as German, like
+    /// `PromptLanguage` does for the mode instructions.
     static func resolvedLanguage(_ language: String, for text: String) -> String {
         let code = String(language.lowercased().prefix(while: \.isLetter))
         guard code == automaticLanguage else { return language }
-        return NLLanguageRecognizer.dominantLanguage(for: text)?.rawValue ?? "de"
+        return NLLanguageRecognizer.dominantLanguage(for: text) == .english ? "en" : "de"
     }
 
     /// Removes whole-word hesitation sounds, ignoring case and stretched letters ("Ähhm",
