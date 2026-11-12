@@ -4,7 +4,7 @@ import SwiftUI
 /// or right after the first dictation for people who only use the shortcuts.
 enum WhatsNew {
     /// Bump together with the items when a release deserves a note.
-    static let version = "1.17"
+    static let version = "1.18"
 
     struct Item: Identifiable {
         let icon: String
@@ -15,19 +15,24 @@ enum WhatsNew {
 
     static let items: [Item] = [
         Item(
+            icon: "gearshape",
+            title: "Einstellungen",
+            detail: "Die Einstellungen haben ein eigenes Fenster mit Seitenleiste: Allgemein, Diktat, Modi, Modelle, Meeting und W\u{00F6}rterbuch."
+        ),
+        Item(
             icon: "person.2.wave.2",
             title: "Meetings",
-            detail: "Ein Klick auf den Titel benennt ein Meeting um. Nach langen Online-Meetings bleibt der Mac fl\u{00FC}ssig, und die Aufnahmen landen nicht mehr im Backup."
+            detail: "Ein Meeting startest du direkt auf der Hauptseite, im Raum oder online. F\u{00FC}r Zusammenfassung und Live-Notizen reicht auch ein Modell-Server auf diesem Mac."
         ),
         Item(
-            icon: "textformat",
-            title: "Schreibweise",
-            detail: "Uhrzeiten stehen als 16:45 Uhr da. Unter Allgemein gibt es Deutsch (Schweiz) mit ss, 12\u{2019}500 und \u{00AB}\u{2026}\u{00BB}, auf Macs in der Schweiz automatisch."
+            icon: "rectangle.grid.1x2",
+            title: "Hauptseite",
+            detail: "Der letzte Text steht weiter oben und l\u{00E4}sst sich mit einem Klick kopieren. Die Modi sind kompakter, auch wenn du viele hast."
         ),
         Item(
-            icon: "lock.shield",
-            title: "Datenschutz",
-            detail: "Tastendr\u{00FC}cke anderer Apps sieht Blitztext nur noch w\u{00E4}hrend eines Diktats, f\u{00FC}r Escape. Ein API-Key geht nie unverschl\u{00FC}sselt per http an einen anderen Rechner."
+            icon: "globe",
+            title: "Sprache",
+            detail: "Parakeet erkennt auf Wunsch die Sprache jedes Diktats selbst. Die Wahl steht unter Modelle, Spracherkennung."
         ),
     ]
 }
@@ -77,7 +82,7 @@ struct WhatsNewView: View {
                     NoticeRow(
                         icon: "arrow.down.circle",
                         title: "Noch ein Schritt",
-                        detail: "Lade einmal ein lokales Sprachmodell, sonst kann Blitztext nicht transkribieren."
+                        detail: "Lade einmal ein Modell f\u{00FC}r die Spracherkennung, sonst kann Blitztext nicht transkribieren."
                     )
                 } else if !appState.canRewrite {
                     NoticeRow(
@@ -96,7 +101,7 @@ struct WhatsNewView: View {
                 if needsSetup {
                     Button {
                         appState.markWhatsNewSeen()
-                        appState.page = .settings
+                        appState.openSettings()
                     } label: {
                         Text("Einrichten")
                             .font(.ui(12, .medium))

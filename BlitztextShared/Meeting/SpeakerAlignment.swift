@@ -7,13 +7,20 @@ struct TimedWord: Sendable, Equatable {
     let end: TimeInterval
 
     /// Joins SentencePiece tokens into words: a token starting with a space or "▁" begins a new word.
+    /// The marker can also come as a token of its own, before a number for instance ("▁" then
+    /// "10"): the next token then begins a word. Dropped, "nach 10 %" became "nach10%".
     static func words(from tokens: [(text: String, start: TimeInterval, end: TimeInterval)]) -> [TimedWord] {
         var words: [TimedWord] = []
+        var boundaryPending = false
         for token in tokens {
             let piece = token.text.replacingOccurrences(of: "\u{2581}", with: " ")
-            let startsWord = piece.hasPrefix(" ") || words.isEmpty
             let trimmed = piece.trimmingCharacters(in: .whitespaces)
-            guard !trimmed.isEmpty else { continue }
+            guard !trimmed.isEmpty else {
+                if !piece.isEmpty { boundaryPending = true }
+                continue
+            }
+            let startsWord = piece.hasPrefix(" ") || boundaryPending || words.isEmpty
+            boundaryPending = false
             if startsWord {
                 words.append(TimedWord(text: trimmed, start: token.start, end: token.end))
             } else if let last = words.popLast() {

@@ -3,10 +3,15 @@ import Observation
 import AppKit
 import ApplicationServices
 
+/// The two ways into the meeting page: "Starten" on the main page and "Meetings" in its header.
+enum MeetingEntry {
+    case start
+    case archive
+}
+
 enum PopoverPage: Equatable {
     case main
     case onboarding
-    case settings
     case workflow
     case history
     case audioFile
@@ -25,6 +30,10 @@ final class AppState {
     }
     @ObservationIgnored var onActiveWorkflowChange: (() -> Void)?
     var page: PopoverPage = .main
+    /// The area the settings window shows.
+    var settingsPane: SettingsPane = .general
+    /// What the meeting page shows while no meeting runs: the start or the earlier meetings.
+    var meetingEntry: MeetingEntry = .archive
     var isPopoverShown = false
     var menuBarStatus: MenuBarStatus = .idle {
         didSet {
@@ -256,7 +265,7 @@ final class AppState {
             let modelName = selectedLocalModelName
             return LocalTranscriptionService.isModelInstalled(modelName)
                 ? "Lokal: \(LocalTranscriptionModel.displayName(for: modelName))."
-                : "Lokales Sprachmodell fehlt."
+                : "Spracherkennung noch nicht geladen."
         case .textImprover, .dampfAblassen, .emojiText:
             guard canRewrite else {
                 return "Braucht Apple Intelligence oder einen API-Key."
@@ -392,12 +401,22 @@ final class AppState {
             : "\(LocalTranscriptionModel.displayName(for: selectedLocalModelName)) installieren"
     }
 
+    // MARK: - Settings
+
+    /// The settings live in a window of their own: they outgrew the popover. The popover
+    /// closes, since a transient popover loses the focus to the window anyway.
+    /// - Parameter pane: The area to show; nil keeps the one shown last.
+    func openSettings(_ pane: SettingsPane? = nil) {
+        if let pane { settingsPane = pane }
+        NotificationCenter.default.post(name: .openSettings, object: nil)
+    }
+
     // MARK: - Workflow Management
 
     func startWorkflow(_ type: WorkflowType, source: WorkflowLaunchSource = .manual) {
         guard isWorkflowAvailable(type) else {
             if source == .manual {
-                page = .settings
+                openSettings(.models)
             }
             return
         }
@@ -683,6 +702,7 @@ final class AppState {
     func openMeeting() {
         NotificationCenter.default.post(name: .showPopover, object: nil)
         if activeWorkflow?.phase.isActive != true {
+            meetingEntry = .start
             page = .meeting
         }
     }
@@ -1038,8 +1058,12 @@ final class AppState {
             refreshUnfinishedRecordings()
             return
         }
-        audioFile.transcribe(item.url, appState: self, title: UnfinishedRecordings.label(for: item), deleteAfterSuccess: true)
         page = .audioFile
+        guard let copy = UnfinishedRecordings.openedCopy(of: item) else {
+            audioFile.showFailure(UnfinishedRecordings.cannotOpenMessage, title: UnfinishedRecordings.label(for: item))
+            return
+        }
+        audioFile.transcribe(copy, appState: self, title: UnfinishedRecordings.label(for: item), kept: item.url)
     }
 
     func deleteUnfinished(_ item: UnfinishedRecordings.Item) {
@@ -1272,6 +1296,7 @@ extension Notification.Name {
     static let chooseAudioFile = Notification.Name("chooseAudioFile")
     static let showWhatsNew = Notification.Name("showWhatsNew")
     static let showPopover = Notification.Name("showPopover")
+    static let openSettings = Notification.Name("openSettings")
 }
 
 struct LastInsertion {

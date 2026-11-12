@@ -1,13 +1,13 @@
 import SwiftUI
 
-/// "Lokales Sprachmodell für Meetings": which Gemma variants this Mac can run, how large
+/// "Lokales KI-Modell für Meetings": which Gemma variants this Mac can run, how large
 /// they are, and download, cancel or remove.
 struct LocalLanguageModelSection: View {
     private var store: LocalModelStore { .shared }
     private let memoryGB = LocalModelVariant.installedMemoryGB
 
     var body: some View {
-        SettingsSection(title: "Lokales Sprachmodell f\u{00FC}r Meetings", isBeta: true) {
+        SettingsSection(title: "Lokales KI-Modell f\u{00FC}r Meetings", isBeta: true) {
             Text("Optional. Fasst Meetings auf diesem Mac genauer zusammen als Apple Intelligence, vor allem lange. Der Text verl\u{00E4}sst den Mac nicht. Das Modell wird einmal heruntergeladen und belegt nur w\u{00E4}hrend der Zusammenfassung Arbeitsspeicher.")
                 .font(.ui(12))
                 .foregroundStyle(.secondary)

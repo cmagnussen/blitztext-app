@@ -156,7 +156,8 @@ final class DictationRunTests: XCTestCase {
 
     // MARK: Safekeeping (public issue #45)
 
-    /// Stand-in for `UnfinishedRecordings`: a folder of its own, never Application Support.
+    /// Stand-in for `UnfinishedRecordings`: a copy in a folder of its own, never Application
+    /// Support; the model reads the recording itself.
     @MainActor
     private final class Keeper {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("blitztext-test-kept-\(UUID().uuidString)")
@@ -168,7 +169,7 @@ final class DictationRunTests: XCTestCase {
                 secure: { [unowned self] url in
                     try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
                     let target = folder.appendingPathComponent(url.lastPathComponent)
-                    return (try? FileManager.default.moveItem(at: url, to: target)) == nil ? nil : target
+                    return (try? FileManager.default.copyItem(at: url, to: target)) == nil ? nil : target
                 },
                 release: { [unowned self] url in released.append(url) },
                 sweep: { [unowned self] in sweeps += 1 }
@@ -199,7 +200,9 @@ final class DictationRunTests: XCTestCase {
             transcribed = url
             throw URLError(.cannotOpenFile)
         }?.value
-        XCTAssertEqual(transcribed?.deletingLastPathComponent().lastPathComponent, keeper.folder.lastPathComponent)
+        // The model reads the recording; only the copy stays, the recording goes.
+        XCTAssertNotEqual(transcribed?.deletingLastPathComponent().lastPathComponent, keeper.folder.lastPathComponent)
+        XCTAssertEqual(transcribed.map { FileManager.default.fileExists(atPath: $0.path) }, false)
         XCTAssertEqual(keeper.kept.count, 1)
         XCTAssertEqual(keeper.released.count, 1)
         XCTAssertEqual(releasedAtError, 1)

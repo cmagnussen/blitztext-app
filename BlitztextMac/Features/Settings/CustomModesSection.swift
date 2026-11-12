@@ -22,7 +22,7 @@ struct CustomModesSection: View {
 
     var body: some View {
         SettingsSection(title: "Eigene Modi") {
-            Text("Deine eigenen Modi mit einer Anweisung für das Sprachmodell, etwa eine E-Mail oder Stichpunkte. Sie stehen im Menü neben den anderen Modi und lassen sich unter „Modus je App“ wählen.")
+            Text("Deine eigenen Modi mit einer Anweisung für das KI-Modell, etwa eine E-Mail oder Stichpunkte. Sie stehen im Menü neben den anderen Modi und lassen sich unter „Modus je App“ wählen.")
                 .font(.ui(12))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -183,7 +183,7 @@ private struct CustomModeEditor: View {
                     placeholder: "z. B. „Formuliere den Text als kurze, freundliche Antwort an einen Kunden.“",
                     height: 96
                 )
-                Text("Geht mit deinem gesprochenen Text an das Sprachmodell. Ohne Anweisung bleibt der Text wortgenau.")
+                Text("Geht mit deinem gesprochenen Text an das KI-Modell. Ohne Anweisung bleibt der Text wortgenau.")
                     .font(.ui(11))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

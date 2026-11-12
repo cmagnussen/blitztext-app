@@ -455,7 +455,7 @@ actor LocalTranscriptionService {
         return try await shared.transcribe(audioURL: audioURL, language: language, modelName: modelName, requireSpeech: requireSpeech)
     }
 
-    static let slowPreparationMessage = "Sprachmodell wird vorbereitet. Nach einem macOS-Update dauert das einmalig einige Minuten, bitte Blitztext nicht beenden."
+    static let slowPreparationMessage = "Spracherkennung wird vorbereitet. Nach einem macOS-Update dauert das einmalig einige Minuten, bitte Blitztext nicht beenden."
 
     private func pipeline(modelName: String) async throws -> WhisperKit {
         let resolvedModelName = Self.resolvedModelName(modelName)

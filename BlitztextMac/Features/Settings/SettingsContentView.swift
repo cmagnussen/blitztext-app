@@ -1,53 +1,72 @@
 import SwiftUI
 import AppKit
 
+/// The settings window: the areas in a sidebar on the left, the chosen one on the right.
 struct SettingsContentView: View {
     @Bindable var appState: AppState
-    @State private var activePane: SettingsPane = Self.initialPane
 
-    #if DEBUG
-    /// Pane the snapshot renderer opens; nil in normal use.
-    static var debugInitialPane: SettingsPane?
-    private static var debugPaneOverride: SettingsPane? { debugInitialPane }
-    #else
-    private static var debugPaneOverride: SettingsPane? { nil }
-    #endif
-    private static var initialPane: SettingsPane { debugPaneOverride ?? .general }
+    static let windowSize = CGSize(width: 780, height: 640)
+    /// The sections were made for the popover; wider than this, their text lines get too long.
+    private static let contentWidth: CGFloat = 520
 
     var body: some View {
-        VStack(spacing: 0) {
-            SegmentedToggle(
-                options: SettingsPane.allCases,
-                selection: $activePane,
-                label: { $0.title }
-            )
-            .padding(.horizontal, 16)
-            .padding(.bottom, 10)
+        HStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(SettingsPane.allCases) { pane in
+                    Button {
+                        appState.settingsPane = pane
+                    } label: {
+                        Label(pane.title, systemImage: pane.symbol)
+                            .font(.ui(13, appState.settingsPane == pane ? .semibold : .regular))
+                            .foregroundStyle(appState.settingsPane == pane ? BlitztextTheme.onAccent : Color.primary)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .fill(appState.settingsPane == pane ? BlitztextTheme.accent : Color.clear)
+                            )
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(appState.settingsPane == pane ? .isSelected : [])
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(12)
+            .frame(width: 190)
+            .frame(maxHeight: .infinity, alignment: .top)
+
+            Divider()
 
             ScrollView {
-                CustomizeSettingsView(appState: appState, pane: activePane)
-                    .id(activePane)
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 16)
+                VStack(alignment: .leading, spacing: 16) {
+                    Text(appState.settingsPane.title)
+                        .font(.ui(20, .bold))
+                    CustomizeSettingsView(appState: appState, pane: appState.settingsPane)
+                }
+                .id(appState.settingsPane)
+                .frame(maxWidth: Self.contentWidth, alignment: .leading)
+                .padding(24)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
+        .frame(minWidth: Self.windowSize.width, minHeight: 480)
+        .background(BlitztextTheme.page)
         .onAppear {
             appState.refreshAccessibilityPermission()
-            activePane = Self.debugPaneOverride ?? defaultPane
+            // Without a speech model nothing works, so that area comes first then.
+            if !appState.isConfigured { appState.settingsPane = .models }
         }
-    }
-
-    /// Without a speech model nothing works, so the models tab comes first then.
-    /// Missing permissions show up at the top of "Allgemein".
-    private var defaultPane: SettingsPane {
-        appState.isConfigured ? .general : .models
     }
 }
 
 enum SettingsPane: Int, CaseIterable, Identifiable {
     case general
-    case models
+    case dictation
     case workflows
+    case models
+    case meeting
     case dictionary
 
     var id: Int { rawValue }
@@ -55,9 +74,34 @@ enum SettingsPane: Int, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .general: return "Allgemein"
-        case .models: return "Modelle"
+        case .dictation: return "Diktat"
         case .workflows: return "Modi"
+        case .models: return "Modelle"
+        case .meeting: return "Meeting"
         case .dictionary: return "W\u{00F6}rterbuch"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .general: return "gearshape"
+        case .dictation: return "mic"
+        case .workflows: return "text.bubble"
+        case .models: return "cpu"
+        case .meeting: return "person.2.wave.2"
+        case .dictionary: return "character.book.closed"
+        }
+    }
+
+    /// For file names of the design snapshots.
+    var slug: String {
+        switch self {
+        case .general: return "general"
+        case .dictation: return "dictation"
+        case .workflows: return "modes"
+        case .models: return "models"
+        case .meeting: return "meeting"
+        case .dictionary: return "dictionary"
         }
     }
 }
@@ -397,7 +441,7 @@ struct AboutBlitztextSection: View {
             Divider().opacity(0.3)
 
             if showCleanupOptions {
-                Toggle("Einstellungen, API-Keys und Sprachmodelle l\u{00F6}schen", isOn: $deleteLocalDataOnCleanup)
+                Toggle("Einstellungen, API-Keys und Modelle l\u{00F6}schen", isOn: $deleteLocalDataOnCleanup)
                     .toggleStyle(.trailingSwitch)
 
                 Text("Entfernt auch den Anmeldestart. Danach Blitztext beenden und die App aus /Applications l\u{00F6}schen.")
@@ -443,7 +487,7 @@ struct AboutBlitztextSection: View {
     /// A prepared mail in the mail app; without one the address lands on the clipboard.
     private func sendFeedback() {
         let details = [
-            "Sprachmodell: \(LocalTranscriptionModel.displayName(for: appState.selectedLocalModelName))",
+            "Spracherkennung: \(LocalTranscriptionModel.displayName(for: appState.selectedLocalModelName))",
             "K\u{00FC}rzel: \(appState.appSettings.hotkeyMode == .hold ? "Halten" : "Dr\u{00FC}cken")",
             "KI-Modi: \(appState.appSettings.rewriteEngine.displayName)",
             "Updates: \(appState.appUpdateService.isManagedByDeviceManagement ? "Ger\u{00E4}teverwaltung" : "in der App")",
@@ -500,6 +544,24 @@ struct AboutBlitztextSection: View {
     }
 }
 
+// MARK: - Meeting
+
+/// The switches for a meeting are on its start page, which remembers the last choice; a
+/// second copy here would change the same values from two places.
+struct MeetingNotesSection: View {
+    var body: some View {
+        SettingsSection(title: "Aufnahmen") {
+            Text("Online-Meeting, Live-Notizen und Zusammenfassung w\u{00E4}hlst du beim Start eines Meetings. Blitztext merkt sich die letzte Wahl.")
+                .font(.ui(12))
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Die Aufnahme wird nach der Auswertung gel\u{00F6}scht. Ein Meeting ohne Auswertung beh\u{00E4}lt sie 30 Tage. Transkript und Zusammenfassung liegen verschl\u{00FC}sselt auf diesem Mac.")
+                .font(.ui(12))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
 // MARK: - Settings panes
 
 struct CustomizeSettingsView: View {
@@ -521,7 +583,7 @@ struct CustomizeSettingsView: View {
 
     private var installedModelsText: String {
         let count = installedLocalModels.count
-        return count == 1 ? "1 lokales Sprachmodell installiert." : "\(count) lokale Sprachmodelle installiert."
+        return count == 1 ? "1 Modell f\u{00FC}r die Spracherkennung installiert." : "\(count) Modelle f\u{00FC}r die Spracherkennung installiert."
     }
 
     private var aiEngineStatusText: String {
@@ -550,6 +612,12 @@ struct CustomizeSettingsView: View {
 
             PipelineOverviewSection(appState: appState)
 
+            LaunchAtLoginSection()
+
+            AboutBlitztextSection(appState: appState)
+            }
+
+            if pane == .dictation {
             // MARK: Tastenkuerzel
             SettingsSection(title: "Tastenk\u{00FC}rzel") {
 
@@ -669,9 +737,6 @@ struct CustomizeSettingsView: View {
                 }
             }
 
-            LaunchAtLoginSection()
-
-            AboutBlitztextSection(appState: appState)
             }
 
             if pane == .models {
@@ -793,9 +858,22 @@ struct CustomizeSettingsView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            MacAIProviderSection(appState: appState)
+
+            HStack(spacing: 8) {
+                Text("Das lokale KI-Modell f\u{00FC}r Meetings steht unter Meeting.")
+                    .font(.ui(12))
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 4)
+                Button("Zu Meeting") { appState.settingsPane = .meeting }
+                    .buttonStyle(.subtle)
+            }
+            }
+
+            if pane == .meeting {
             LocalLanguageModelSection()
 
-            MacAIProviderSection(appState: appState)
+            MeetingNotesSection()
             }
 
             if pane == .workflows {
@@ -1301,7 +1379,9 @@ struct MicrophonePickerRow: View {
                 .buttonStyle(.borderless)
                 .help("Mikrofone neu suchen")
             }
-            Text("Gilt f\u{00FC}r Diktate. W\u{00E4}hrend der Aufnahme stellt Blitztext es auch in macOS ein, danach wieder zur\u{00FC}ck. Meetings bleiben beim macOS-Standard, damit ein laufender Call sein Mikrofon beh\u{00E4}lt.")
+            // Public issue #55: the switch is system-wide until dictation records on the device
+            // itself; say so, since a call using the default follows it.
+            Text("Gilt f\u{00FC}r Diktate. W\u{00E4}hrend der Aufnahme stellt Blitztext es auch in macOS ein, danach wieder zur\u{00FC}ck. Apps, die gerade mit dem macOS-Standard aufnehmen, etwa ein Call, wechseln so lange mit. Meetings bleiben beim macOS-Standard, damit ein laufender Call sein Mikrofon beh\u{00E4}lt.")
                 .font(.ui(12))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

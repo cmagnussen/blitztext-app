@@ -12,8 +12,6 @@ struct MenuBarView: View {
                 mainPage
             case .onboarding:
                 SetupAssistantView(appState: appState)
-            case .settings:
-                settingsPage
             case .workflow:
                 workflowPage
             case .history:
@@ -56,7 +54,7 @@ struct MenuBarView: View {
                         title: "Nach /Applications verschieben",
                         detail: "So startet Blitztext zuverl\u{00E4}ssig mit dem Mac und bekommt Updates.",
                         actionTitle: "Pr\u{00FC}fen",
-                        action: { appState.page = .settings }
+                        action: { appState.openSettings(.general) }
                     )
                 }
 
@@ -140,26 +138,19 @@ struct MenuBarView: View {
                     EmptyView()
                 }
 
-                if appState.meeting.isRecording || appState.meeting.isProcessing {
-                    NoticeRow(
-                        icon: "person.2.wave.2.fill",
-                        title: appState.meeting.isRecording ? "Meeting wird aufgenommen" : "Meeting wird ausgewertet",
-                        actionTitle: "\u{00D6}ffnen",
-                        action: { appState.page = .meeting }
-                    )
-                }
-
-                dictationCard
-
-                VStack(alignment: .leading, spacing: 8) {
-                    SectionHeader(title: "Modi")
-
-                    modeList
-                        .glassPanel()
-                }
+                // One shape for everything: a title and a card. The modes come last, their
+                // number varies.
+                section("Diktieren") { dictationCard }
 
                 if let entry = appState.history.entries.first {
-                    lastMessage(entry)
+                    section("Letzter Text") { lastMessage(entry) }
+                }
+
+                section("Meeting") { meetingCard }
+
+                section("Modi") {
+                    modeList
+                        .glassPanel()
                 }
             }
             .padding(.horizontal, 16)
@@ -171,7 +162,15 @@ struct MenuBarView: View {
 
     /// Up to this many modes show at once; with more own modes the list scrolls, so the
     /// window stays on the screen.
-    private static let visibleModeRows = 7
+    private static let visibleModeRows = 8
+    private static let modeRowHeight: CGFloat = 37
+
+    private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionHeader(title: title)
+            content()
+        }
+    }
 
     @ViewBuilder
     private var modeList: some View {
@@ -179,14 +178,15 @@ struct MenuBarView: View {
         let list = VStack(spacing: 0) {
             ForEach(Array(modes.enumerated()), id: \.element) { index, type in
                 if index > 0 {
-                    Divider().opacity(0.5).padding(.leading, 62).padding(.trailing, 12)
+                    Divider().opacity(0.5).padding(.leading, 54).padding(.trailing, 12)
                 }
                 WorkflowRowView(
                     type: type,
                     enabled: appState.isWorkflowAvailable(type),
                     customName: appState.displayName(for: type),
                     subtitle: appState.workflowSubtitle(for: type),
-                    hotkeyLabel: appState.hotkeyLabel(for: type)
+                    hotkeyLabel: appState.hotkeyLabel(for: type),
+                    compact: true
                 ) {
                     appState.startWorkflow(type)
                 }
@@ -199,7 +199,7 @@ struct MenuBarView: View {
             ScrollView {
                 list
             }
-            .frame(height: (CGFloat(Self.visibleModeRows) + 0.5) * 53)
+            .frame(height: (CGFloat(Self.visibleModeRows) + 0.5) * Self.modeRowHeight)
         } else {
             list
         }
@@ -212,17 +212,18 @@ struct MenuBarView: View {
             Spacer(minLength: 0)
 
             Button {
+                appState.meetingEntry = .archive
                 appState.page = .meeting
             } label: {
-                Label("Meeting", systemImage: "person.2.wave.2.fill")
+                Label("Meetings", systemImage: "list.bullet")
                     .lineLimit(1)
                     .fixedSize()
             }
             .buttonStyle(.glassAction)
-            .help("Ein Meeting im Raum aufnehmen: Transkript mit Personen und auf Wunsch Zusammenfassung")
+            .help("Fr\u{00FC}here Meetings mit Transkript und Zusammenfassung")
 
             Button {
-                appState.page = .settings
+                appState.openSettings()
             } label: {
                 Image(systemName: "gearshape")
                     .font(.ui(13))
@@ -243,7 +244,7 @@ struct MenuBarView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Einrichtung n\u{00F6}tig")
                 .font(.ui(17, .bold))
-            Text("Der Assistent f\u{00FC}hrt durch Mikrofon, Einf\u{00FC}gen und Sprachmodell. Blitztext transkribiert direkt auf diesem Mac.")
+            Text("Der Assistent f\u{00FC}hrt durch Mikrofon, Einf\u{00FC}gen und Spracherkennung. Blitztext transkribiert direkt auf diesem Mac.")
                 .font(.ui(12.5))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -262,6 +263,69 @@ struct MenuBarView: View {
 
     /// The speech bubble of the iOS app, the shortcut to use, the model and where the
     /// text is processed.
+    /// A meeting starts from the main page, as a dictation does, and the first choice is where
+    /// it takes place: in the room (microphone) or online (microphone and the Mac's sound).
+    /// While one is recorded or evaluated, the card says so and leads there.
+    private var meetingCard: some View {
+        let meeting = appState.meeting
+        let isBusy = meeting.isRecording || meeting.isProcessing
+        return VStack(alignment: .leading, spacing: 10) {
+            if isBusy {
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(meeting.isRecording ? "Meeting wird aufgenommen" : "Meeting wird ausgewertet")
+                            .font(.ui(13, .semibold))
+                        Text("L\u{00E4}uft weiter, auch wenn das Men\u{00FC} zu ist.")
+                            .font(.ui(11.5))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 4)
+                    Button("\u{00D6}ffnen") {
+                        appState.meetingEntry = .start
+                        appState.page = .meeting
+                    }
+                    .buttonStyle(.filledAction)
+                    .fixedSize()
+                }
+            } else {
+                Text("Transkript mit Personen und Zusammenfassung.")
+                    .font(.ui(11.5))
+                    .foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    Button {
+                        prepareMeeting(online: false)
+                    } label: {
+                        Label(MeetingController.canRecordSystemAudio ? "Im Raum" : "Aufnehmen", systemImage: "person.3.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.filledAction)
+                    .help("Ein Gespr\u{00E4}ch vor Ort: Blitztext nimmt das Mikrofon auf.")
+
+                    if MeetingController.canRecordSystemAudio {
+                        Button {
+                            prepareMeeting(online: true)
+                        } label: {
+                            Label("Online", systemImage: "video.fill")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.filledAction)
+                        .help("Ein Call: Blitztext nimmt dein Mikrofon und den Ton des Macs auf.")
+                    }
+                }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassPanel()
+    }
+
+    /// Opens "Neues Meeting" for a meeting in the room or online; nothing is recorded yet.
+    private func prepareMeeting(online: Bool) {
+        UserDefaults.standard.set(online, forKey: "BlitztextMeetingSystemAudio")
+        appState.meetingEntry = .start
+        appState.page = .meeting
+    }
+
     private var dictationCard: some View {
         let modelOptions = LocalTranscriptionService.modelOptions(selected: appState.selectedLocalModelName)
         let selectedModelInstalled = appState.selectedLocalModelIsInstalled
@@ -387,45 +451,44 @@ struct MenuBarView: View {
     }
 
     /// The last result as a sent message, like on iOS. A click copies it.
+    /// The last text as a card like the others; a click copies it.
     private func lastMessage(_ entry: TranscriptHistoryEntry) -> some View {
-        VStack(alignment: .trailing, spacing: 5) {
-            Button {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(entry.text, forType: .string)
-                withAnimation(.easeOut(duration: 0.15)) { copiedLast = true }
-                Task {
-                    try? await Task.sleep(for: .seconds(1.6))
-                    withAnimation(.easeOut(duration: 0.15)) { copiedLast = false }
-                }
-            } label: {
-                Text(entry.text)
-                    .font(.ui(12.5))
-                    .foregroundStyle(.primary)
-                    .lineLimit(3)
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(MessageBubbleShape(radius: 16).fill(entry.workflow.tint.opacity(0.14)))
+        Button {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(entry.text, forType: .string)
+            withAnimation(.easeOut(duration: 0.15)) { copiedLast = true }
+            Task {
+                try? await Task.sleep(for: .seconds(1.6))
+                withAnimation(.easeOut(duration: 0.15)) { copiedLast = false }
             }
-            .buttonStyle(.plain)
-            .help("Kopieren")
-            .accessibilityLabel("Letzter Text: \(entry.text)")
-
-            Group {
-                if copiedLast {
-                    Label("Kopiert", systemImage: "checkmark")
-                        .foregroundStyle(BlitztextTheme.ready)
-                } else {
-                    Label("\(appState.displayName(for: entry.workflow)), \(Self.relativeTime(entry.createdAt))", systemImage: "doc.on.doc")
-                        .foregroundStyle(.secondary)
+        } label: {
+            HStack(alignment: .top, spacing: 10) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(entry.text)
+                        .font(.ui(12.5))
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(copiedLast ? "Kopiert" : "\(appState.displayName(for: entry.workflow)), \(Self.relativeTime(entry.createdAt))")
+                        .font(.ui(11))
+                        .foregroundStyle(copiedLast ? BlitztextTheme.ready : Color.secondary)
                 }
+                Spacer(minLength: 4)
+                Image(systemName: copiedLast ? "checkmark" : "doc.on.doc")
+                    .font(.ui(12))
+                    .foregroundStyle(copiedLast ? BlitztextTheme.ready : Color.secondary)
+                    .accessibilityHidden(true)
             }
-            .font(.ui(11))
-            .padding(.trailing, 6)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
         }
-        .frame(maxWidth: .infinity, alignment: .trailing)
-        .padding(.leading, 40)
+        .buttonStyle(.plain)
+        .glassPanel()
+        .help("Kopieren")
+        .accessibilityLabel("Letzter Text: \(entry.text)")
     }
 
     private static let relativeFormatter: RelativeDateTimeFormatter = {
@@ -497,44 +560,6 @@ struct MenuBarView: View {
     }
 
     // MARK: - Onboarding
-
-    // MARK: - Settings Page
-
-    private var settingsPage: some View {
-        VStack(spacing: 0) {
-            PageHeader(title: "Einstellungen", onBack: { appState.page = .main }) {
-                settingsQuickAction
-            }
-
-            SettingsContentView(appState: appState)
-        }
-        .frame(height: 640)
-    }
-
-    @ViewBuilder
-    private var settingsQuickAction: some View {
-        if !appState.accessibilityPermissionGranted {
-            Button {
-                appState.requestAccessibilityPermission()
-            } label: {
-                Label("Rechte", systemImage: "hand.raised")
-                    .font(.ui(12))
-                    .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.subtle)
-        } else if BlitztextInstallLocationService.currentInstallLocation.isCanonicalInstall &&
-            appState.appUpdateService.updatesInApp {
-            Button {
-                appState.appUpdateService.checkForUpdates()
-            } label: {
-                Label("Updates", systemImage: "arrow.trianglehead.clockwise")
-                    .font(.ui(12))
-                    .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.subtle)
-            .disabled(!appState.appUpdateService.canCheckForUpdates)
-        }
-    }
 
     // MARK: - History Page
 

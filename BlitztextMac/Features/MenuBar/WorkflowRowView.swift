@@ -6,6 +6,9 @@ struct WorkflowRowView: View {
     var customName: String? = nil
     var subtitle: String? = nil
     var hotkeyLabel: String? = nil
+    /// One line per mode for the main page: the name and its shortcut, the description is
+    /// the tooltip. Seven modes then fit without a list that scrolls inside the page.
+    var compact = false
     let action: () -> Void
 
     @State private var isHovered = false
@@ -15,7 +18,7 @@ struct WorkflowRowView: View {
     var body: some View {
         Button(action: action) {
             HStack(alignment: .center, spacing: 12) {
-                ModeIcon(type: type, size: 34)
+                ModeIcon(type: type, size: compact ? 26 : 34)
                     .opacity(enabled ? 1 : 0.45)
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -24,11 +27,13 @@ struct WorkflowRowView: View {
                         .foregroundStyle(enabled ? .primary : .tertiary)
                         .lineLimit(1)
 
-                    Text(subtitle ?? type.subtitle)
-                        .font(.ui(11.5))
-                        .foregroundStyle(enabled ? .secondary : .quaternary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                    if !compact {
+                        Text(subtitle ?? type.subtitle)
+                            .font(.ui(11.5))
+                            .foregroundStyle(enabled ? .secondary : .quaternary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
                 }
 
                 Spacer(minLength: 6)
@@ -40,7 +45,7 @@ struct WorkflowRowView: View {
                 }
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 9)
+            .padding(.vertical, compact ? 5 : 9)
             .background(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(isHovered && enabled ? Color.primary.opacity(0.05) : Color.clear)
@@ -50,7 +55,7 @@ struct WorkflowRowView: View {
         }
         .buttonStyle(.plain)
         .disabled(!enabled)
-        .help("Startet \(customName ?? type.displayName)")
+        .help(compact ? (subtitle ?? type.subtitle) : "Startet \(customName ?? type.displayName)")
         .onHover { hovering in
             withAnimation(.easeOut(duration: 0.12)) {
                 isHovered = hovering
