@@ -52,6 +52,33 @@ enum KeychainService {
         return combined
     }
 
+    /// Seals with the file key only when this session already has it, otherwise with the
+    /// machine key. Never asks the Keychain: no prompt, no new key, also not in a session the
+    /// Jamf restart started. For files whose write must not be the first Keychain question of
+    /// a session, like a recording kept during a dictation (`UnfinishedRecordings`).
+    static func sealDataWithoutAsking(_ data: Data) throws -> Data {
+        let key = lock.withLock { fileKeyCache.knownKey } ?? machineKey
+        guard let combined = try AES.GCM.seal(data, using: key).combined else {
+            throw KeychainError.saveFailed(-1)
+        }
+        return combined
+    }
+
+    /// Opens with the file key this session already has, or with a machine-derived key.
+    /// Never asks the Keychain (see `sealDataWithoutAsking`).
+    static func openDataWithoutAsking(_ encrypted: Data) -> Data? {
+        guard let box = try? AES.GCM.SealedBox(combined: encrypted) else { return nil }
+        let known = lock.withLock { fileKeyCache.knownKey }
+        // The keys this file was sealed with first; the older ones need the host name, which
+        // can take a moment to look up.
+        for key in [known, machineKey].compactMap({ $0 }) {
+            if let data = try? AES.GCM.open(box, using: key) {
+                return data
+            }
+        }
+        return nil
+    }
+
     static func openData(_ encrypted: Data) -> Data? {
         guard let box = try? AES.GCM.SealedBox(combined: encrypted) else { return nil }
         for key in decryptionKeys {
@@ -123,6 +150,13 @@ enum KeychainService {
         static let retryInterval: TimeInterval = 5 * 60
 
         private var state = State.unknown
+
+        /// The key once the Keychain gave it this session; nil before the first question and
+        /// while it is unavailable. Reading it never asks.
+        var knownKey: SymmetricKey? {
+            if case .available(let key) = state { return key }
+            return nil
+        }
 
         /// - Parameter resolve: Gets `true` for the first question of the session, the only one
         ///   that may show UI (see `readMayShowUI`).

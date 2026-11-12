@@ -52,9 +52,10 @@ final class DictationRun {
     typealias RecordingCheck = (_ recording: URL, _ seconds: TimeInterval) async throws -> Void
     private let recordingCheck: RecordingCheck
 
-    /// Where a recording waits while it is transcribed, so an error or a crash keeps it
-    /// (`UnfinishedRecordings`). `secure` moves it there and returns the new place, nil when
-    /// it stays where it is; `release` ends the transcription. Tests keep it in place.
+    /// A copy of the recording kept while it is transcribed, so an error or a crash keeps
+    /// what was said (`UnfinishedRecordings`, sealed). `secure` writes the copy and returns
+    /// it, nil when there is none; the model reads the recording itself. `release` ends the
+    /// transcription. Tests keep no copy.
     struct Safekeeping {
         var secure: @MainActor (URL) -> URL?
         var release: @MainActor (URL) -> Void
@@ -113,23 +114,22 @@ final class DictationRun {
         let run = currentRun
         let seconds = recorder.lastRecordingDuration
         let task = Task(priority: .userInitiated) {
-            var recording = url
-            var secured = false
-            var keepRecording = false
+            var kept: URL?
+            var keepCopy = false
             // The recording is not kept once it is transcribed (docs/privacy.md); only a failed
-            // transcription keeps it for a while, to be transcribed again.
+            // transcription keeps its sealed copy for a while, to be transcribed again.
             defer {
-                if secured { safekeeping.release(recording) }
-                if !keepRecording { try? FileManager.default.removeItem(at: recording) }
+                try? FileManager.default.removeItem(at: url)
+                if let kept {
+                    safekeeping.release(kept)
+                    if !keepCopy { try? FileManager.default.removeItem(at: kept) }
+                }
                 safekeeping.sweep()
             }
             do {
                 try await recordingCheck(url, seconds)
-                if let safe = safekeeping.secure(url) {
-                    recording = safe
-                    secured = true
-                }
-                let text = try await work(recording, seconds) { message in
+                kept = safekeeping.secure(url)
+                let text = try await work(url, seconds) { message in
                     self.report(.running(message), of: run)
                 }
                 // Cancelled meanwhile: an engine may still return its text; it is not pasted.
@@ -154,15 +154,15 @@ final class DictationRun {
                 // spoken too quietly, so it is kept like a failure.
                 let accidental = (error as? NoSpeechVerdict)?.meansNoSpeech == true
                     && seconds < Self.minimumSecondsKeptWithoutSpeech
-                guard secured, !(error is CancellationError), !accidental else {
+                guard let copy = kept, !(error is CancellationError), !accidental else {
                     onPhase?(.error(error.localizedDescription))
                     return
                 }
-                keepRecording = true
+                keepCopy = true
                 // Released before the error phase, which refreshes the menu: the recording is
                 // listed there at once, also while the menu is open.
-                safekeeping.release(recording)
-                secured = false
+                safekeeping.release(copy)
+                kept = nil
                 onPhase?(.error(error.localizedDescription.appendingSentence(UnfinishedRecordings.notice)))
             }
         }

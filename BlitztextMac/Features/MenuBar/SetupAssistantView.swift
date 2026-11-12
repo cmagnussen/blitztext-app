@@ -81,7 +81,7 @@ struct SetupAssistantView: View {
                 step(2, title: "Einf\u{00FC}gen erlauben", done: accessibilityReady, detail: accessibilityDetail) {
                     accessibilityAction
                 }
-                step(3, title: "Sprachmodell laden", done: modelReady, detail: modelDetail) {
+                step(3, title: "Spracherkennung laden", done: modelReady, detail: modelDetail) {
                     modelAction
                 }
 

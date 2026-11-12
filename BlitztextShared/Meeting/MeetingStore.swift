@@ -210,6 +210,11 @@ final class MeetingStore {
             try? FileManager.default.moveItem(at: Self.fileURL, to: aside)
         }
         migrateSpeakerLabels()
+        // Recordings from 1.2.0 that still wait for their evaluation: new ones are excluded
+        // when they are stored. A missing file is fine.
+        for record in meetings where record.status != .done {
+            Self.excludeFromBackup(record.audioURL)
+        }
     }
     #endif
 

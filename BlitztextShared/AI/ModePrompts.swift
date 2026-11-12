@@ -144,7 +144,7 @@ enum ModePrompts {
     /// Appended to every AI step, on the device and with a provider: how to read spoken input.
     static let spokenTranscriptRules = """
     Der Nutzer schickt dir ein gesprochenes Transkript.
-    - Korrigiert sich der Sprecher beim Sprechen, übernimm nur die korrigierte Fassung. Das gilt auch für weiche Korrekturen. Beispiele: „am Mittwoch, nein, Donnerstag“ wird zu „am Donnerstag“, „drei, äh, vier Leute“ zu „vier Leute“, „bis Freitag, also eigentlich reicht auch Montag“ zu „bis Montag“.
+    - Korrigiert sich der Sprecher beim Sprechen, übernimm nur die korrigierte Fassung. Das gilt auch für weiche Korrekturen. Beispiele: „am Mittwoch, nein, Donnerstag“ wird zu „am Donnerstag“, „drei, äh, vier Leute“ zu „vier Leute“.
     - Behalte die Anrede wie gesprochen: „du“ bleibt „du“, „Sie“ bleibt „Sie“.
     - Antworte ausschließlich mit dem fertigen Text, ohne Vorbemerkung.
     """

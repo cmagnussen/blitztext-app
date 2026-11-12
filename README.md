@@ -23,8 +23,8 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/menu-bar.png" width="400" alt="Blitztext in the menu bar: the speech bubble to dictate, the meeting button, four modes with their shortcuts and the last text as a message">
-  <img src="docs/screenshots/settings-modes.png" width="400" alt="Settings, Modi: writing style, instructions, emoji density and a mode per app or website">
+  <img src="docs/screenshots/menu-bar.png" width="400" alt="Blitztext in the menu bar: dictate, the last text to copy, start a meeting in the room or online, and the modes with their shortcuts">
+  <img src="docs/screenshots/settings-modes.png" width="400" alt="The settings window, Modi: writing style, instructions, emoji density and a mode per app or website">
 </p>
 
 Hold a shortcut, speak, let go. Blitztext turns your speech into text and pastes it where your cursor is. Speech recognition runs on your Mac, the writing modes use Apple Intelligence on your Mac. No account, no server, no audio leaving the device.
@@ -56,17 +56,18 @@ Keyboards without `fn`: set your own shortcut per mode in the settings.
 
 ## Features
 
-- **Local speech recognition:** Parakeet Ultra (fast, 25 European languages) or OpenAI Whisper via WhisperKit (about 100 languages). Both detect the spoken language. On Intel Macs Parakeet runs on the processor; Whisper is not offered there.
+- **Local speech recognition:** Parakeet Ultra (fast, 25 European languages) or OpenAI Whisper via WhisperKit (about 100 languages). Both detect the spoken language; with "Automatisch erkennen" Parakeet does so for every dictation. On Intel Macs Parakeet runs on the processor; Whisper is not offered there.
 - **Local writing modes:** Blitztext+, $%&! and :) run with Apple Intelligence on your Mac (macOS 26). Create your own modes too, with a name, symbol, colour and instruction, for example a concept, a reply or a translation, each with its own shortcut. Optionally bring your own model provider: OpenAI, Anthropic, Google Gemini, Mistral, OpenRouter, or a local server such as Ollama or LM Studio.
 - **Fits where you type:** spaces and capitals follow the text around your cursor, also mid-sentence. Password fields are never read.
 - **Mode per app or website:** Gmail always Blitztext+, Slack with emojis, everything else word for word.
 - **Choose the microphone:** dictations can use a headset or another input. Meetings keep the macOS default, so a running call keeps its microphone.
 - **Nothing gets lost:** if a dictation fails, the pill says why. If only the writing step fails, the word-for-word text is on the clipboard and in the history. If the transcription fails, the recording stays on your Mac for 24 hours and can be transcribed again from the menu.
 - **See that it listens:** a small lilac pill at the bottom of the screen moves with your voice while Blitztext records. Click it to stop, drag it out of the way, or right-click to hide it for the current dictation. It never takes the focus, so the text still lands where you type. You can turn it off in the settings.
-- **Last text at hand:** the menu bar window shows your last text as a message. One click copies it.
+- **Last text at hand:** the menu bar window shows your last text near the top. One click copies it.
+- **Settings in their own window:** Allgemein, Diktat, Modi, Modelle, Meeting and Wörterbuch in a sidebar. Blitztext stays a menu bar app without a Dock icon.
 - **Sound off while recording:** a podcast or music is muted while you speak and back right after.
-- **Meetings in the room and online:** record a conversation through the microphone, get the transcript by person (Person 1, Person 2, rename them, or give a single part to another person; click the title to rename the meeting) and, if you like, a summary with decisions and to-dos that pastes into mail and documents with headings and lists. For calls, "Online-Meeting" (beta) also records what your Mac plays, for example from Teams, Zoom or Meet: you are "Ich", the others are told apart by voice, and what your microphone picks up from the speakers is filtered out of your part. Live notes (beta) show topics, decisions and to-dos while the meeting runs. Everything runs on your Mac and the recordings are deleted afterwards. Apple Silicon only. Please ask everyone before you record.
-- **Local language model for meetings (beta):** download Gemma 4 in the settings (E4B from 16 GB of memory, 12B from 24 GB). It summarizes long meetings more exactly than Apple Intelligence, on your Mac.
+- **Meetings in the room and online:** start a meeting from the main page with "Im Raum" or "Online", record a conversation through the microphone, get the transcript by person (Person 1, Person 2, rename them, or give a single part to another person; click the title to rename the meeting) and, if you like, a summary with decisions and to-dos that pastes into mail and documents with headings and lists. For calls, "Online-Meeting" (beta) also records what your Mac plays, for example from Teams, Zoom or Meet: you are "Ich", the others are told apart by voice, and what your microphone picks up from the speakers is filtered out of your part. Live notes (beta) show topics, decisions and to-dos while the meeting runs. Everything runs on your Mac and the recordings are deleted afterwards. Apple Silicon only. Please ask everyone before you record.
+- **Local language model for meetings (beta):** download Gemma 4 in the settings under Meeting (E4B from 16 GB of memory, 12B from 24 GB). It summarizes long meetings more exactly than Apple Intelligence, on your Mac. A model server on this Mac (a custom address on localhost, for example Ollama or LM Studio) can write summaries and live notes too; providers on the internet never get a meeting.
 - **Text lands in the right place:** if you click into another field while a writing mode still works, the text goes to the clipboard instead of the wrong field. After a writing mode, "Wortgenau statt ..." in the menu swaps in what you actually said.
 - **Voice memos and WhatsApp voice messages:** drop an audio file on Blitztext and get the text, optionally with paragraphs.
 - **Dictionary:** names and terms spelled your way, fixed replacements ("n acht n" becomes "n8n").
@@ -80,10 +81,12 @@ Keyboards without `fn`: set your own shortcut per mode in the settings.
 
 | | |
 |---|---|
-| <img src="docs/screenshots/meeting-start.png" width="400" alt="Meeting: consent reminder, switches for online meeting and live notes (beta) and for the summary"> | <img src="docs/screenshots/meeting-result.png" width="400" alt="Meeting result with sample data: summary with decisions and to-dos, people to rename and the transcript"> |
+| <img src="docs/screenshots/meeting-start.png" width="400" alt="New meeting: in the room or online, switches for live notes (beta) and the summary, and the consent reminder"> | <img src="docs/screenshots/meeting-result.png" width="400" alt="Meeting result with sample data: summary with decisions and to-dos, people to rename and the transcript"> |
 | Meetings in the room or online, with live notes | Summary with decisions and to-dos, transcript by person |
-| <img src="docs/screenshots/settings-models.png" width="400" alt="Settings, Modelle: the AI modes with Apple Intelligence and the local language model for meetings with Gemma 4 E4B and 12B"> | <img src="docs/screenshots/settings-general.png" width="400" alt="Settings, Allgemein: how Blitztext works, shortcuts, hold or press, and the recording pill"> |
-| AI modes and the optional local language model on your Mac | How Blitztext works, shortcuts and the lilac pill while you speak |
+| <img src="docs/screenshots/settings-models.png" width="400" alt="Settings, Modelle: speech recognition with language and model, the AI modes with Apple Intelligence and the optional model provider"> | <img src="docs/screenshots/settings-dictation.png" width="400" alt="Settings, Diktat: shortcuts per mode, hold or press, microphone, the recording pill and how the text is pasted"> |
+| Speech recognition, AI modes and the optional model provider | Shortcuts, microphone and the lilac pill while you speak |
+| <img src="docs/screenshots/settings-meeting.png" width="400" alt="Settings, Meeting: the local language model for meetings with Gemma 4 and the notes for meetings"> | |
+| The optional local language model for meetings | |
 
 The app is in German for now.
 

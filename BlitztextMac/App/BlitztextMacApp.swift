@@ -18,6 +18,7 @@ struct BlitztextMacApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var statusItem: NSStatusItem!
     private var popover: NSPopover!
+    private var settingsWindow: NSWindow?
     private let menuBarStatusController = MenuBarStatusController()
     let appState = AppState()
     private lazy var recordingIndicator = RecordingIndicatorController(appState: appState)
@@ -165,6 +166,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         )
         NotificationCenter.default.addObserver(
             self,
+            selector: #selector(openSettings),
+            name: .openSettings,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
             selector: #selector(chooseAudioFile),
             name: .chooseAudioFile,
             object: nil
@@ -221,6 +228,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         panel.canChooseDirectories = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
         transcribeAudioFile(url)
+    }
+
+    /// The settings in a window of their own. Blitztext stays a menu bar app: the window is
+    /// created on first use and only hidden when closed.
+    @objc private func openSettings() {
+        popover.performClose(nil)
+        appState.isPopoverShown = false
+
+        if settingsWindow == nil {
+            let window = NSWindow(
+                contentRect: NSRect(origin: .zero, size: SettingsContentView.windowSize),
+                styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                backing: .buffered,
+                defer: false
+            )
+            window.title = "Blitztext Einstellungen"
+            window.isReleasedWhenClosed = false
+            window.contentView = NSHostingView(rootView: SettingsContentView(appState: appState))
+            window.setContentSize(SettingsContentView.windowSize)
+            window.center()
+            settingsWindow = window
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        settingsWindow?.makeKeyAndOrderFront(nil)
     }
 
     private func transcribeAudioFile(_ url: URL) {
@@ -1023,7 +1054,7 @@ enum MacSnapshots {
         appState.accessibilityPermissionGranted = true
         // A dictation whose transcription failed, as the menu offers it again.
         appState.unfinishedRecordings = [UnfinishedRecordings.Item(
-            url: FileManager.default.temporaryDirectory.appendingPathComponent("snapshot.wav"),
+            url: FileManager.default.temporaryDirectory.appendingPathComponent("snapshot.sealed"),
             recordedAt: Date(timeIntervalSince1970: 1_793_610_660), seconds: 134
         )]
         // Two own modes, one with its own shortcut. Tool runs never save settings.
@@ -1048,15 +1079,13 @@ enum MacSnapshots {
             capture(MenuBarView(appState: appState), appearance: appearance, to: folder.appendingPathComponent("\(mode)-onboarding-fresh.png"))
             SetupAssistantView.debugShowsFreshMac = false
             renderMeetingPages(appState: appState, appearance: appearance, mode: mode, to: folder)
+            // The settings window, once per area. "Modi" holds the built-in modes, the own
+            // modes with one open, and the rules, so it gets more height.
             for pane in SettingsPane.allCases {
-                SettingsContentView.debugInitialPane = pane
-                appState.page = .settings
-                capture(MenuBarView(appState: appState), appearance: appearance, to: folder.appendingPathComponent("\(mode)-popover-settings-\(pane.rawValue).png"))
-                // "Modi" holds the built-in modes, the own modes with one open, and the rules.
+                appState.settingsPane = pane
                 let view = SettingsContentView(appState: appState)
-                    .frame(width: MenuBarView.width, height: pane == .workflows ? 1900 : 1400, alignment: .top)
-                    .background(BlitztextTheme.page)
-                capture(view, appearance: appearance, to: folder.appendingPathComponent("\(mode)-settings-\(pane.rawValue).png"))
+                    .frame(width: SettingsContentView.windowSize.width, height: pane == .workflows ? 1900 : 900, alignment: .top)
+                capture(view, appearance: appearance, to: folder.appendingPathComponent("\(mode)-settings-\(pane.slug).png"))
             }
             let customModes = CustomModesSection(appState: appState)
                 .padding(16)
@@ -1104,12 +1133,14 @@ enum MacSnapshots {
         }
         let phases: [(MeetingController.Phase, String)] = [
             (.idle, "start"),
+            (.idle, "list"),
             (.recording(startedAt: Date().addingTimeInterval(-754)), "recording"),
             (.processing("Stimmen werden erkannt ..."), "processing"),
             (.showing(sampleMeeting.id), "result"),
         ]
         appState.page = .meeting
         for (phase, label) in phases {
+            appState.meetingEntry = label == "list" ? .archive : .start
             meeting.preview(phase)
             capture(MenuBarView(appState: appState), appearance: appearance, to: folder.appendingPathComponent("\(mode)-meeting-\(label).png"))
             // The whole result, beyond the popover height.

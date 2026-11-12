@@ -2,6 +2,21 @@ import SwiftUI
 
 /// Popover page for meetings in the room: start with consent, record, evaluate, then read
 /// the result with people, summary and transcript. Earlier meetings are listed on the start.
+/// Where a meeting takes place: decides whether the Mac's sound is recorded too.
+enum MeetingKind: String, CaseIterable, Identifiable {
+    case room
+    case online
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .room: return "Im Raum"
+        case .online: return "Online"
+        }
+    }
+}
+
 struct MeetingView: View {
     @Bindable var appState: AppState
     /// The popover height; snapshots render the whole page.
@@ -14,6 +29,8 @@ struct MeetingView: View {
     @State private var isResummarizing = false
     @State private var copied: CopyTarget?
     @State private var confirmDelete = false
+    /// The meeting a right click in the list wants to delete, until confirmed.
+    @State private var deleteCandidate: UUID?
     @AppStorage("BlitztextMeetingSystemAudio") private var includesSystemAudio = false
     @AppStorage("BlitztextMeetingLiveNotes") private var wantsLiveNotes = true
     @State private var copiedChatNote = false
@@ -31,7 +48,7 @@ struct MeetingView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            PageHeader(title: "Meeting", onBack: {
+            PageHeader(title: headerTitle, onBack: {
                 meeting.close()
                 appState.page = .main
             })
@@ -44,6 +61,9 @@ struct MeetingView: View {
                         NoticeRow(icon: "info.circle.fill", title: notice)
                     }
 
+                    if showsArchive {
+                        archive
+                    } else {
                     switch meeting.phase {
                     case .idle:
                         start
@@ -55,22 +75,50 @@ struct MeetingView: View {
                         if let record = meeting.store.meeting(id: id) {
                             result(record)
                         } else {
-                            start
+                            archive
                         }
                     case .failed(let message, let id):
                         failure(message, meetingID: id)
+                    }
                     }
                 }
                 .padding(16)
             }
         }
         .frame(height: height)
+        .confirmationDialog(
+            "Meeting l\u{00F6}schen?",
+            isPresented: Binding(get: { deleteCandidate != nil }, set: { if !$0 { deleteCandidate = nil } })
+        ) {
+            Button("L\u{00F6}schen", role: .destructive) {
+                if let id = deleteCandidate { meeting.delete(id) }
+                deleteCandidate = nil
+            }
+            Button("Abbrechen", role: .cancel) { deleteCandidate = nil }
+        } message: {
+            Text("Transkript und Zusammenfassung werden gel\u{00F6}scht.")
+        }
         .alert("Person umbenennen", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
             TextField("Name", text: $newName)
             Button("Sichern") { saveName() }
             Button("Abbrechen", role: .cancel) { renaming = nil }
         } message: {
             Text("Der Name ersetzt \u{201E}Person \(renaming ?? 0)\u{201C} im Transkript.")
+        }
+    }
+
+    private var headerTitle: String {
+        if showsArchive { return "Meetings" }
+        return isIdle ? "Neues Meeting" : "Meeting"
+    }
+
+    /// "Meetings" always shows the earlier meetings, also while one is recorded or evaluated.
+    /// A result or a failure was opened from the list and shows itself.
+    private var showsArchive: Bool {
+        guard appState.meetingEntry == .archive else { return false }
+        switch meeting.phase {
+        case .idle, .recording, .processing: return true
+        case .showing, .failed: return false
         }
     }
 
@@ -81,63 +129,70 @@ struct MeetingView: View {
 
     // MARK: - Start
 
+    /// The main page leads here with the kind of meeting chosen. The switches stay on this
+    /// page: they change from meeting to meeting. One row each, the long explanation is the
+    /// tooltip.
     private var start: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
+            if MeetingController.canRecordSystemAudio {
+                SegmentedToggle(
+                    options: MeetingKind.allCases,
+                    selection: Binding(
+                        get: { includesSystemAudio ? .online : .room },
+                        set: { includesSystemAudio = $0 == .online }
+                    ),
+                    label: { $0.title }
+                )
+            }
+
             VStack(alignment: .leading, spacing: 8) {
-                Label("Meeting aufnehmen", systemImage: "person.2.wave.2.fill")
-                    .font(.ui(15, .semibold))
-                    .foregroundStyle(BlitztextTheme.accent)
-                Text("Blitztext nimmt das Gespr\u{00E4}ch im Raum \u{00FC}ber das Mikrofon auf, erkennt, wer spricht, und schreibt auf Wunsch eine Zusammenfassung mit To-dos. Alles l\u{00E4}uft auf diesem Mac, die Aufnahme wird nach der Auswertung gel\u{00F6}scht.")
-                    .font(.ui(12.5))
+                HStack(spacing: 6) {
+                    Text(recordsSystemAudio ? "Online-Meeting" : "Meeting im Raum")
+                        .font(.ui(12.5, .semibold))
+                    if recordsSystemAudio { BetaBadge() }
+                }
+                Text(recordsSystemAudio
+                     ? "Nimmt dein Mikrofon (Ich) und den Ton des Macs (die anderen) auf, zum Beispiel aus Teams, Zoom oder Meet. Mit Kopfh\u{00F6}rern wird das Transkript am saubersten."
+                     : "Nimmt das Mikrofon dieses Macs auf und erkennt, wer spricht. Gedacht f\u{00FC}r Gespr\u{00E4}che vor Ort.")
+                    .font(.ui(12))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                if recordsSystemAudio {
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(Self.chatNote, forType: .string)
+                        copiedChatNote = true
+                    } label: {
+                        Label(copiedChatNote ? "Kopiert, im Chat einf\u{00FC}gen" : "Frage f\u{00FC}r den Chat kopieren", systemImage: copiedChatNote ? "checkmark" : "doc.on.doc")
+                    }
+                    .buttonStyle(.subtle)
+                    .help("Beim ersten Mal fragt macOS nach der Freigabe f\u{00FC}r Systemaudio.")
+                }
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
             .glassPanel()
 
-            NoticeRow(
-                icon: "hand.raised.fill",
-                title: "Bitte vorher alle Anwesenden informieren und um ihr Einverst\u{00E4}ndnis bitten.",
-                tint: BlitztextTheme.danger
-            )
-
-            if MeetingController.canRecordSystemAudio {
-                onlineMeeting
+            VStack(alignment: .leading, spacing: 0) {
+                optionRow(
+                    "Live-Notizen", isBeta: true,
+                    caption: LiveNotesController.isAvailable
+                        ? "Schreibt w\u{00E4}hrend des Meetings mit"
+                        : "Braucht Apple Intelligence, ein lokales KI-Modell oder einen Modell-Server auf diesem Mac",
+                    help: LiveNotesController.isAvailable
+                        ? "Alle zweieinhalb Minuten schreibt Blitztext mit, was besprochen und entschieden wurde. Bleibt auf diesem Mac."
+                        : "Ein lokales KI-Modell l\u{00E4}dst du in den Einstellungen unter Meeting. Ein Modell-Server l\u{00E4}uft \u{00FC}ber Modelle, Eigene Adresse mit localhost.",
+                    isOn: $wantsLiveNotes
+                )
+                .disabled(!LiveNotesController.isAvailable)
+                Divider().opacity(0.5).padding(.horizontal, 14)
+                optionRow(
+                    "Danach zusammenfassen",
+                    caption: "Mit Entscheidungen und To-dos",
+                    help: "Aus: nur das Transkript mit Personen, schneller. Die Zusammenfassung geht auch sp\u{00E4}ter.",
+                    isOn: $appState.appSettings.summarizesMeetings
+                )
             }
-
-            Toggle(isOn: $wantsLiveNotes) {
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
-                        Text("Live-Notizen")
-                            .font(.ui(12.5, .medium))
-                        BetaBadge()
-                    }
-                    Text(LiveNotesController.isAvailable
-                         ? "Alle zweieinhalb Minuten schreibt Blitztext mit, was besprochen und entschieden wurde. Bleibt auf diesem Mac."
-                         : "Brauchen Apple Intelligence, ein lokales Sprachmodell (Einstellungen, Modelle) oder einen Modell-Server auf diesem Mac (Eigene Adresse mit localhost).")
-                        .font(.ui(11))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .toggleStyle(.trailingSwitch)
-            .disabled(!LiveNotesController.isAvailable)
-            .padding(14)
-            .glassPanel()
-
-            Toggle(isOn: $appState.appSettings.summarizesMeetings) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Danach zusammenfassen")
-                        .font(.ui(12.5, .medium))
-                    Text("Aus: nur das Transkript mit Personen, schneller. Die Zusammenfassung geht auch sp\u{00E4}ter.")
-                        .font(.ui(11))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .toggleStyle(.trailingSwitch)
-            .padding(14)
             .glassPanel()
 
             if let blocker = MeetingController.blocker {
@@ -146,9 +201,15 @@ struct MeetingView: View {
                     title: blocker,
                     tint: BlitztextTheme.danger,
                     actionTitle: "Einstellungen",
-                    action: { appState.page = .settings }
+                    action: { appState.openSettings(.models) }
                 )
             }
+
+            NoticeRow(
+                icon: "hand.raised.fill",
+                title: "Bitte vorher alle Anwesenden informieren und um ihr Einverst\u{00E4}ndnis bitten.",
+                tint: BlitztextTheme.danger
+            )
 
             Button {
                 meeting.start(includingSystemAudio: recordsSystemAudio, liveNotes: wantsLiveNotes)
@@ -158,18 +219,69 @@ struct MeetingView: View {
             }
             .buttonStyle(.filledAction)
             .disabled(MeetingController.blocker != nil)
+        }
+    }
 
-            Text(recordsSystemAudio
-                 ? "Nimmt dein Mikrofon (Ich) und den Ton des Macs (die anderen) auf. Mit Kopfh\u{00F6}rern wird das Transkript am saubersten."
-                 : "Nimmt nur das Mikrofon auf, gedacht f\u{00FC}r Meetings im Raum.")
-                .font(.ui(11))
-                .foregroundStyle(.tertiary)
-                .fixedSize(horizontal: false, vertical: true)
+    /// "Meetings" on the main page leads here: the earlier meetings, a new one, the settings.
+    private var archive: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if meeting.isRecording || meeting.isProcessing {
+                NoticeRow(
+                    icon: "person.2.wave.2.fill",
+                    title: meeting.isRecording ? "Meeting wird aufgenommen" : "Meeting wird ausgewertet",
+                    actionTitle: "\u{00D6}ffnen",
+                    action: { appState.meetingEntry = .start }
+                )
+            }
+            HStack(spacing: 8) {
+                Button {
+                    appState.meetingEntry = .start
+                } label: {
+                    Label("Neues Meeting", systemImage: "plus")
+                }
+                .buttonStyle(.filledAction)
+                .disabled(meeting.isRecording || meeting.isProcessing)
+                Button {
+                    appState.openSettings(.meeting)
+                } label: {
+                    Label("Einstellungen", systemImage: "gearshape")
+                }
+                .buttonStyle(.glassAction)
+                Spacer(minLength: 0)
+            }
 
-            if !storedMeetings.isEmpty {
+            if storedMeetings.isEmpty {
+                Text("Noch keine Meetings. Nach der Auswertung stehen sie hier mit Transkript und Zusammenfassung.")
+                    .font(.ui(12))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .glassPanel()
+            } else {
                 earlierMeetings
             }
         }
+    }
+
+    private func optionRow(_ title: String, isBeta: Bool = false, caption: String, help: String, isOn: Binding<Bool>) -> some View {
+        Toggle(isOn: isOn) {
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 6) {
+                    Text(title)
+                        .font(.ui(12.5, .medium))
+                    if isBeta { BetaBadge() }
+                }
+                Text(caption)
+                    .font(.ui(11))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .toggleStyle(.trailingSwitch)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 9)
+        .help(help)
     }
 
     private var recordingTitle: String {
@@ -184,45 +296,13 @@ struct MeetingView: View {
     /// Asked in the call's chat before starting, so everyone can agree in writing.
     static let chatNote = "Ich w\u{00FC}rde dieses Meeting gern mit Blitztext aufnehmen und auf meinem Mac transkribieren und zusammenfassen lassen. Ton und Text bleiben auf meinem Mac, die Aufnahme wird nach der Auswertung gel\u{00F6}scht. Ist das f\u{00FC}r alle in Ordnung?"
 
-    private var onlineMeeting: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Toggle(isOn: $includesSystemAudio) {
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
-                        Text("Online-Meeting")
-                            .font(.ui(12.5, .medium))
-                        BetaBadge()
-                    }
-                    Text("Nimmt auch den Ton des Macs auf, zum Beispiel aus Teams, Zoom oder Meet. Beim ersten Mal fragt macOS nach der Freigabe f\u{00FC}r Systemaudio.")
-                        .font(.ui(11))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .toggleStyle(.trailingSwitch)
-
-            if includesSystemAudio {
-                Button {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(Self.chatNote, forType: .string)
-                    copiedChatNote = true
-                } label: {
-                    Label(copiedChatNote ? "Kopiert, im Chat einf\u{00FC}gen" : "Frage f\u{00FC}r den Chat kopieren", systemImage: copiedChatNote ? "checkmark" : "doc.on.doc")
-                }
-                .buttonStyle(.subtle)
-            }
-        }
-        .padding(14)
-        .glassPanel()
-    }
-
     private var storedMeetings: [MeetingRecord] {
         meeting.store.meetings.filter { $0.id != meeting.recordingID }
     }
 
     private var earlierMeetings: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SectionHeader(title: "Meetings (Rechtsklick zum L\u{00F6}schen)")
+            SectionHeader(title: "Fr\u{00FC}here Meetings")
             VStack(spacing: 0) {
                 ForEach(Array(storedMeetings.enumerated()), id: \.element.id) { index, record in
                     if index > 0 {
@@ -256,8 +336,9 @@ struct MeetingView: View {
                     }
                     .buttonStyle(.plain)
                     .contextMenu {
-                        Button("L\u{00F6}schen", role: .destructive) { meeting.delete(record.id) }
+                        Button("L\u{00F6}schen", role: .destructive) { deleteCandidate = record.id }
                     }
+                    .help("Rechtsklick zum L\u{00F6}schen")
                 }
             }
             .padding(.vertical, 2)
@@ -521,7 +602,7 @@ struct MeetingView: View {
             }
 
             if let summary = record.summary {
-                Text(ListDisplay.bullets(summary))
+                Text(summaryText(summary))
                     .font(.ui(12.5))
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
@@ -560,6 +641,17 @@ struct MeetingView: View {
         }
         .padding(14)
         .glassPanel()
+    }
+
+    /// The summary with its section titles in semibold.
+    private func summaryText(_ summary: String) -> AttributedString {
+        var text = AttributedString()
+        for (index, line) in SummaryDisplay.lines(summary).enumerated() {
+            var part = AttributedString((index > 0 ? "\n" : "") + line.text)
+            if line.isTitle { part.font = .ui(12.5, .semibold) }
+            text += part
+        }
+        return text
     }
 
     private func copyButton(_ title: String, target: CopyTarget, text: String) -> some View {

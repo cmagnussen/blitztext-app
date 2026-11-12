@@ -32,8 +32,20 @@ final class AudioFileController {
 
     /// - Parameters:
     ///   - title: Shown instead of the file name, e.g. for a dictation kept after an error.
-    ///   - deleteAfterSuccess: The file goes once there is text (`UnfinishedRecordings`).
-    func transcribe(_ url: URL, appState: AppState, title: String? = nil, deleteAfterSuccess: Bool = false) {
+    ///   - kept: Set when `url` is an opened copy of a kept dictation (`UnfinishedRecordings`):
+    ///     the copy always goes when the work ends, the sealed recording once there is text.
+    /// Shows an error on the page without a file to work on, e.g. a kept dictation that
+    /// cannot be opened right now.
+    func showFailure(_ message: String, title: String) {
+        task?.cancel()
+        fileName = title
+        duration = 0
+        transcript = ""
+        text = ""
+        phase = .failed(message)
+    }
+
+    func transcribe(_ url: URL, appState: AppState, title: String? = nil, kept: URL? = nil) {
         task?.cancel()
         fileName = title ?? url.lastPathComponent
         duration = 0
@@ -43,7 +55,8 @@ final class AudioFileController {
         copied = false
 
         guard appState.selectedLocalModelIsInstalled else {
-            phase = .failed("Zuerst in den Einstellungen ein lokales Sprachmodell laden.")
+            if kept != nil { try? FileManager.default.removeItem(at: url) }
+            phase = .failed("Zuerst in den Einstellungen ein Modell f\u{00FC}r die Spracherkennung laden.")
             return
         }
 
@@ -54,6 +67,7 @@ final class AudioFileController {
         let paragraphs = appState.appSettings.automaticParagraphs
 
         task = Task {
+            defer { if kept != nil { try? FileManager.default.removeItem(at: url) } }
             do {
                 let wav = try await Task.detached(priority: .userInitiated) {
                     try AudioFileConverter.convertToWAV(url)
@@ -84,8 +98,8 @@ final class AudioFileController {
                 if Task.isCancelled { return }
 
                 transcript = processed
-                if deleteAfterSuccess {
-                    try? FileManager.default.removeItem(at: url)
+                if let kept {
+                    try? FileManager.default.removeItem(at: kept)
                     appState.refreshUnfinishedRecordings()
                 }
                 finish(processed, mode: .tapTalk, appState: appState)

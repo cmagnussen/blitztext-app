@@ -87,7 +87,7 @@ final class MeetingController {
     static var blocker: String? {
         ParakeetTranscriber.isInstalled
             ? nil
-            : "F\u{00FC}r Meetings braucht Blitztext Parakeet. Bitte in den Einstellungen unter Sprachmodell laden."
+            : "F\u{00FC}r Meetings braucht Blitztext Parakeet. Bitte in den Einstellungen unter Modelle laden."
     }
 
     /// Recording the Mac's sound needs Core Audio taps.
@@ -535,7 +535,7 @@ final class MeetingController {
                 record.summaryNote = localFailure
             } else {
                 record.summary = nil
-                record.summaryNote = "F\u{00FC}r die Zusammenfassung braucht Blitztext Apple Intelligence, ein lokales Sprachmodell (Einstellungen, Modelle) oder einen Modell-Server auf diesem Mac (Eigene Adresse mit localhost). Meetings gehen nie an einen Anbieter im Internet."
+                record.summaryNote = "F\u{00FC}r die Zusammenfassung braucht Blitztext Apple Intelligence, ein lokales KI-Modell (Einstellungen, Meeting) oder einen Modell-Server auf diesem Mac (Eigene Adresse mit localhost). Meetings gehen nie an einen Anbieter im Internet."
             }
             return
         }
