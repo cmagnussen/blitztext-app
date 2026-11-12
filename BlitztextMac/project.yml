@@ -119,6 +119,7 @@ targets:
       - path: ../BlitztextShared/AI/InventedDeadlineFilter.swift
       - path: ../BlitztextShared/AI/AIStepFailed.swift
       - path: ../BlitztextShared/AI/RewriteGuard.swift
+      - path: ../BlitztextShared/AI/PromptLanguage.swift
       - path: ../BlitztextShared/Meeting/SpeakerAlignment.swift
       - path: ../BlitztextShared/Meeting/EchoFilter.swift
       - path: Services/LocalLanguageModel/LocalModelCatalog.swift
