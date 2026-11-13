@@ -2,7 +2,7 @@
 
 ## 1. Install
 
-Either download the signed app from the [releases page](https://github.com/cmagnussen/blitztext-app/releases/latest), or build it:
+Either [download the signed app](https://blitztext.de/download) (on a Mac the link starts the download of the latest release; all files are on the [releases page](https://github.com/cmagnussen/blitztext-app/releases/latest)) and move it to Applications, or build it:
 
 ```bash
 brew install xcodegen

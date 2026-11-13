@@ -10,14 +10,14 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/cmagnussen/blitztext-app/releases/latest"><img src="https://img.shields.io/github/v/release/cmagnussen/blitztext-app?label=download&color=4F46E5" alt="Latest release"></a>
+  <a href="https://blitztext.de/download"><img src="https://img.shields.io/github/v/release/cmagnussen/blitztext-app?label=download&color=4F46E5" alt="Download the latest release"></a>
   <img src="https://img.shields.io/badge/macOS-14%2B-111111?logo=apple" alt="macOS 14 or newer">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2563EB" alt="MIT License"></a>
   <a href="https://github.com/cmagnussen/blitztext-app/actions/workflows/ci.yml"><img src="https://github.com/cmagnussen/blitztext-app/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/cmagnussen/blitztext-app/releases/latest"><b>Download for macOS</b></a> ·
+  <a href="https://blitztext.de/download"><b>Download for macOS</b></a> ·
   <a href="https://blitztext.de">blitztext.de</a> ·
   <a href="#build-it-yourself">Build it yourself</a>
 </p>
@@ -92,7 +92,7 @@ The app is in German for now.
 
 ## Install
 
-1. Open the [latest release](https://github.com/cmagnussen/blitztext-app/releases/latest), download the ZIP under "Assets", unpack it and move **Blitztext.app** to **Applications**.
+1. [Download Blitztext](https://blitztext.de/download) on your Mac: the link starts the download of the latest release. Open the downloaded file if your browser has not already unpacked it, and move **Blitztext.app** to **Applications** before you start it. All files and the release notes are on the [latest release](https://github.com/cmagnussen/blitztext-app/releases/latest).
 2. Open Blitztext. It lives in the menu bar.
 3. Allow **Microphone** and **Accessibility** (needed to paste into other apps).
 4. In the settings (**Modelle**), load a local speech model once. Parakeet Ultra is recommended on Apple silicon, about 630 MB.
