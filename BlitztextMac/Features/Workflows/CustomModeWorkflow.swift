@@ -54,8 +54,8 @@ final class CustomModeWorkflow: Workflow {
     /// The mode's instruction plus the dictionary terms. Unlike the built-in modes there is no
     /// `ModePrompts.transcriptIsNotARequest`: own modes such as "Antworten" are meant to write
     /// new text from what was said (as on iOS).
-    static func instruction(for mode: CustomMode, protectedTerms: [String]) -> String {
-        mode.prompt + ModePrompts.customTermsInstruction(protectedTerms)
+    static func instruction(for mode: CustomMode, protectedTerms: [String], language: PromptLanguage = .german) -> String {
+        mode.prompt + ModePrompts.customTermsInstruction(protectedTerms, language: language)
     }
 
     // MARK: - Recording State
@@ -114,8 +114,9 @@ final class CustomModeWorkflow: Workflow {
             written = try await TextRewriter.rewrite(
                 processedRawText,
                 instruction: ModePrompts.withFieldContext(
-                    Self.instruction(for: mode, protectedTerms: protectedTerms),
-                    context: fieldContext()
+                    Self.instruction(for: mode, protectedTerms: protectedTerms, language: PromptLanguage.of(processedRawText)),
+                    context: fieldContext(),
+                    language: PromptLanguage.of(processedRawText)
                 ),
                 engine: rewriteEngine
             )

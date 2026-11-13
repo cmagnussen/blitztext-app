@@ -97,7 +97,11 @@ final class DampfAblassenWorkflow: Workflow {
         do {
             answer = try await TextRewriter.rewrite(
                 processedRawText,
-                instruction: ModePrompts.withFieldContext(ModePrompts.dampfAblassen(settings), context: fieldContext()),
+                instruction: ModePrompts.withFieldContext(
+                    ModePrompts.dampfAblassen(settings, language: PromptLanguage.of(processedRawText)),
+                    context: fieldContext(),
+                    language: PromptLanguage.of(processedRawText)
+                ),
                 engine: rewriteEngine,
                 purpose: .editTranscript
             )

@@ -8,6 +8,7 @@ final class RewriteGuardTests: XCTestCase {
     func testFramedPutsTheTranscriptBetweenTheMarkers() {
         let prompt = RewriteGuard.framed("hallo anna")
         XCTAssertEqual(prompt, "Bearbeite diesen diktierten Text:\n⟦TEXT⟧\nhallo anna\n⟦/TEXT⟧")
+        XCTAssertEqual(RewriteGuard.framed("hello anna", language: .english), "Edit this dictated text:\n⟦TEXT⟧\nhello anna\n⟦/TEXT⟧")
     }
 
     func testFramedDropsMarkerCharactersFromTheTranscript() {
