@@ -10,12 +10,21 @@ enum RewriteGuard {
     static let start = "⟦TEXT⟧"
     static let end = "⟦/TEXT⟧"
 
-    /// Added to the instruction of a built-in mode.
-    static let framingRule = "Der zu bearbeitende Text steht in der Nachricht zwischen den Zeilen \(start) und \(end). Gib nur den bearbeiteten Text zurück, ohne diese Markierungen."
+    /// Added to the instruction of a built-in mode, in the language of the transcript like
+    /// the rest of the instruction (`PromptLanguage`).
+    static func framingRule(_ language: PromptLanguage) -> String {
+        switch language {
+        case .german: return "Der zu bearbeitende Text steht in der Nachricht zwischen den Zeilen \(start) und \(end). Gib nur den bearbeiteten Text zurück, ohne diese Markierungen."
+        case .english: return "The text to edit is in the message between the lines \(start) and \(end). Return only the edited text, without these markers."
+        }
+    }
+
+    static var framingRule: String { framingRule(.german) }
 
     /// The prompt for a built-in mode: the transcript as material, not as a message.
-    static func framed(_ transcript: String) -> String {
-        "Bearbeite diesen diktierten Text:\n\(start)\n\(withoutMarkerCharacters(transcript))\n\(end)"
+    static func framed(_ transcript: String, language: PromptLanguage = .german) -> String {
+        let lead = language == .german ? "Bearbeite diesen diktierten Text:" : "Edit this dictated text:"
+        return "\(lead)\n\(start)\n\(withoutMarkerCharacters(transcript))\n\(end)"
     }
 
     enum Problem: Equatable {

@@ -97,7 +97,11 @@ final class TextImprovementWorkflow: Workflow {
         do {
             improved = try await TextRewriter.rewrite(
                 processedRawText,
-                instruction: ModePrompts.withFieldContext(ModePrompts.textImprovement(settings), context: fieldContext()),
+                instruction: ModePrompts.withFieldContext(
+                    ModePrompts.textImprovement(settings, language: PromptLanguage.of(processedRawText)),
+                    context: fieldContext(),
+                    language: PromptLanguage.of(processedRawText)
+                ),
                 engine: rewriteEngine,
                 purpose: .editTranscript
             )
