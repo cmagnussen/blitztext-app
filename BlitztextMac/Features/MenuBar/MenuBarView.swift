@@ -36,13 +36,38 @@ struct MenuBarView: View {
 
     @State private var copiedLast = false
 
+    @State private var headerHeight: CGFloat = 0
+    @State private var footerHeight: CGFloat = 0
+
+    /// Room for the middle of the main page. The popover never grows past the screen:
+    /// taller, macOS cut off its top with the header and the settings, and nothing could
+    /// scroll there (several "Aufnahme ohne Text" plus many modes on a laptop screen).
+    private var mainContentMaxHeight: CGFloat {
+        let screen = NSApp.keyWindow?.screen ?? NSScreen.main
+        let visible = screen?.visibleFrame.height ?? 800
+        // The popover's arrow and its distance to the menu bar and to the bottom edge.
+        let popoverMargin: CGFloat = 40
+        return max(240, visible - headerHeight - footerHeight - popoverMargin)
+    }
+
     private var mainPage: some View {
         VStack(spacing: 0) {
             miniHeader
                 .padding(.horizontal, 16)
                 .padding(.top, 14)
                 .padding(.bottom, 12)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
 
+            FittingScrollView(maxHeight: mainContentMaxHeight) {
+                mainContent
+            }
+
+            footerBar
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { footerHeight = $0 }
+        }
+    }
+
+    private var mainContent: some View {
             VStack(alignment: .leading, spacing: 16) {
                 if !appState.isConfigured {
                     setupHero
@@ -155,9 +180,6 @@ struct MenuBarView: View {
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 16)
-
-            footerBar
-        }
     }
 
     /// Up to this many modes show at once; with more own modes the list scrolls, so the
@@ -738,5 +760,31 @@ private func errorView(message: String, onRetry: @escaping () -> Void) -> some V
         }
         .buttonStyle(.filledAction)
         .padding(.top, 4)
+    }
+}
+
+/// Shows its content at its own height and scrolls only when that is taller than
+/// `maxHeight`, so a popover sized by its content stays on the screen.
+private struct FittingScrollView<Content: View>: View {
+    let maxHeight: CGFloat
+    @ViewBuilder let content: Content
+
+    @State private var contentHeight: CGFloat = 0
+
+    var body: some View {
+        if contentHeight > maxHeight {
+            ScrollView(.vertical) {
+                measured
+            }
+            .frame(height: maxHeight)
+        } else {
+            measured
+        }
+    }
+
+    private var measured: some View {
+        content
+            .fixedSize(horizontal: false, vertical: true)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
     }
 }
