@@ -1073,6 +1073,18 @@ enum MacSnapshots {
                 appState.page = page
                 capture(MenuBarView(appState: appState), appearance: appearance, to: folder.appendingPathComponent("\(mode)-\(label).png"))
             }
+            // Many recordings without text: the page must stay on the screen and scroll,
+            // not grow past it and lose its header.
+            let unfinished = appState.unfinishedRecordings
+            appState.unfinishedRecordings = (0..<12).map { index in
+                UnfinishedRecordings.Item(
+                    url: FileManager.default.temporaryDirectory.appendingPathComponent("snapshot-\(index).sealed"),
+                    recordedAt: Date(timeIntervalSince1970: 1_793_610_660 + Double(index) * 600), seconds: TimeInterval(20 + index)
+                )
+            }
+            appState.page = .main
+            capture(MenuBarView(appState: appState), appearance: appearance, to: folder.appendingPathComponent("\(mode)-main-crowded.png"))
+            appState.unfinishedRecordings = unfinished
             // The setup assistant as on a Mac that has nothing set up yet.
             SetupAssistantView.debugShowsFreshMac = true
             appState.page = .onboarding
@@ -1208,6 +1220,14 @@ enum MacSnapshots {
         window.contentView = hosting
         hosting.layoutSubtreeIfNeeded()
         RunLoop.main.run(until: Date().addingTimeInterval(0.4))
+        // Views that measure themselves (the main page caps its height to the screen)
+        // settle only after the first pass.
+        if hosting.fittingSize != size {
+            hosting.frame = NSRect(origin: .zero, size: hosting.fittingSize)
+            window.setContentSize(hosting.fittingSize)
+            hosting.layoutSubtreeIfNeeded()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+        }
         if let bitmap = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) {
             hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
             try? bitmap.representation(using: .png, properties: [:])?.write(to: url)

@@ -24,12 +24,25 @@ enum WhisperDictation {
         }
     }
 
+    /// No fixed language: Whisper follows a given language strictly and turns English
+    /// speech into German. Detection keeps every dictation in its spoken language.
+    ///
+    /// No check of the first token: when the model is unsure of its first word, WhisperKit
+    /// stops the first pass and retries with rising temperature. With the streaming build of
+    /// Large v3 Turbo (the one on iOS and on Macs from M2) those retries returned nothing or a
+    /// lone "Vielen Dank." for dictations with speech: 8 of 55 Swiss German recordings and
+    /// 3 of 20 clips of two seconds. Without the check the first
+    /// pass runs to the end; the other fallback checks stay. Standard German, English, silence
+    /// and noise gave the same text with and without it, and so did the plain Turbo build.
+    static var decodingOptions: DecodingOptions {
+        var options = DecodingOptions(task: .transcribe, language: nil, detectLanguage: true)
+        options.firstTokenLogProbThreshold = nil
+        return options
+    }
+
     static func run(_ pipeline: WhisperKit, audioPath: String) async throws -> Outcome {
         let samples = try AudioProcessor.loadAudioAsFloatArray(fromPath: audioPath)
-        // No fixed language: Whisper follows a given language strictly and turns English
-        // speech into German. Detection keeps every dictation in its spoken language.
-        let options = DecodingOptions(task: .transcribe, language: nil, detectLanguage: true)
-        let results = try await pipeline.transcribe(audioArray: samples, decodeOptions: options)
+        let results = try await pipeline.transcribe(audioArray: samples, decodeOptions: decodingOptions)
         let text = results
             .map(\.text)
             .joined(separator: " ")

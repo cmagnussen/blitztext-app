@@ -4,7 +4,7 @@ import SwiftUI
 /// or right after the first dictation for people who only use the shortcuts.
 enum WhatsNew {
     /// Bump together with the items when a release deserves a note.
-    static let version = "1.18"
+    static let version = "1.18.1"
 
     struct Item: Identifiable {
         let icon: String
@@ -15,24 +15,19 @@ enum WhatsNew {
 
     static let items: [Item] = [
         Item(
-            icon: "gearshape",
-            title: "Einstellungen",
-            detail: "Die Einstellungen haben ein eigenes Fenster mit Seitenleiste: Allgemein, Diktat, Modi, Modelle, Meeting und W\u{00F6}rterbuch."
-        ),
-        Item(
-            icon: "person.2.wave.2",
-            title: "Meetings",
-            detail: "Ein Meeting startest du direkt auf der Hauptseite, im Raum oder online. F\u{00FC}r Zusammenfassung und Live-Notizen reicht auch ein Modell-Server auf diesem Mac."
-        ),
-        Item(
-            icon: "rectangle.grid.1x2",
-            title: "Hauptseite",
-            detail: "Der letzte Text steht weiter oben und l\u{00E4}sst sich mit einem Klick kopieren. Die Modi sind kompakter, auch wenn du viele hast."
-        ),
-        Item(
             icon: "globe",
-            title: "Sprache",
-            detail: "Parakeet erkennt auf Wunsch die Sprache jedes Diktats selbst. Die Wahl steht unter Modelle, Spracherkennung."
+            title: "Englisch",
+            detail: "Diktierst du auf Englisch, bleibt der Text in Blitztext+ und Blitztext :) englisch. Bisher kam er auf Deutsch heraus."
+        ),
+        Item(
+            icon: "waveform",
+            title: "Whisper",
+            detail: "Mit Whisper Large v3 Turbo gehen kurze Diktate und Schweizerdeutsch nicht mehr verloren."
+        ),
+        Item(
+            icon: "menubar.rectangle",
+            title: "Men\u{00FC}",
+            detail: "Mit vielen Aufnahmen ohne Text passt das Men\u{00FC} wieder auf den Bildschirm, die Mitte scrollt."
         ),
     ]
 }
