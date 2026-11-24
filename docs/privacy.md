@@ -47,12 +47,14 @@ The iPhone app needs no account and talks to no Blitztext or Blackboat server. I
 
 ### Keyboard
 
-Keyboards on iOS have no microphone, so the Blitztext app records and the keyboard only sends start and stop and inserts the result. For this exchange it needs Full Access. It does not record what you type. It reads the text around the cursor in two cases:
+By default the Blitztext app records and the keyboard only sends start and stop and inserts the result. For this exchange it needs Full Access. It does not record what you type. It reads the text around the cursor in two cases:
 
 - to insert the result into the field where you started; it keeps that text on your iPhone only for the running dictation.
 - when you turn on "Kontext": then the text around the cursor goes along to the writing mode. With Apple Intelligence it stays on your iPhone; with your own model provider it goes to that provider.
 
 Without a running dictation session, a tap on "Blitztext öffnen" in the keyboard opens the Blitztext app, which then records. "Tastatur jetzt starten" in the app's options gets the keyboard ready without that step.
+
+**Dictation inside the keyboard (Beta, off by default).** If you turn on "Direkt in der Tastatur diktieren" under Optionen > Tastatur, the Blitztext keyboard records itself after you tap "Diktat starten" and turns the speech into text on your iPhone. iOS asks for microphone access for this. The recording never leaves your iPhone and is deleted as soon as the text exists; if a dictation is interrupted, the keyboard or the app deletes the file at the next start. Only while this option is on, Blitztext puts your dictionary and replacements into the storage shared by the app and its keyboard, and removes them when you turn it off. The text goes into the field where you dictated and into the history if the history is on; with the history off, the keyboard stores nothing. Music that is playing pauses during a dictation in the keyboard. For troubleshooting, Blitztext keeps steps and timings without any text; they are only sent if you choose "Feedback senden".
 
 ### When Data Leaves Your iPhone
 
