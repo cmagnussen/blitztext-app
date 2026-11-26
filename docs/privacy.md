@@ -6,7 +6,7 @@ This page covers the Mac app and, further down, the [iPhone app](#iphone-app). B
 
 ## What Stays On Your Mac
 
-- **Audio:** recorded and transcribed on your Mac with a local model (Parakeet or Whisper). Temporary recordings are deleted after each workflow. A dictation whose transcription failed stays on your Mac for up to 24 hours, so it can be transcribed again from the menu; then it is deleted.
+- **Audio:** recorded and transcribed on your Mac with a local model (Parakeet or Whisper). Temporary recordings are deleted after each workflow. A dictation whose transcription failed stays on your Mac for up to 24 hours, encrypted with a key kept in the macOS Keychain, so it can be transcribed again from the menu; then it is deleted.
 - **Writing modes with Apple Intelligence:** run on your Mac.
 - **Settings, dictionary, prompts:** local app storage.
 - **History (optional):** encrypted on your Mac with a key kept in the macOS Keychain, kept as long as you choose (off, 24 hours, 7 days).
@@ -17,7 +17,7 @@ This page covers the Mac app and, further down, the [iPhone app](#iphone-app). B
 
 ## When Data Leaves Your Mac
 
-- **Model download:** loading a speech model, or the optional local language model for meetings, downloads it from Hugging Face (huggingface.co). Hugging Face sees the request, as with any download.
+- **Model download:** loading a speech model, or the optional local language model for meetings, downloads it from Hugging Face (huggingface.co). Hugging Face sees the request, as with any download. Blitztext does not sign in to Hugging Face, also not with a token you set up for other tools.
 - **Optional model provider:** if you add your own provider and API key, the *recognized text* of the writing modes goes directly from your Mac to that provider. Audio never does. Your contract and their privacy terms apply.
 - **Text around the cursor for the writing modes (off by default):** with "KI-Modi sehen den Text am Cursor" on, the text around your cursor goes along to the writing mode. With Apple Intelligence it stays on your Mac; with your own model provider it goes to that provider.
 - **Update check:** Blitztext asks the GitHub releases of this repository for a new version (Sparkle). GitHub sees the request, as with any download. Turn it off in Settings > Allgemein > Über Blitztext. On Macs where Blackboat's Jamf installed Blitztext, it does not check; updates come from Jamf.
@@ -39,8 +39,8 @@ The iPhone app needs no account and talks to no Blitztext or Blackboat server. I
 - **Audio:** recorded and transcribed on your iPhone with a local model (Parakeet, Whisper or the speech recognition built into iOS). The recording is deleted as soon as its text is done.
 - **Imported audio:** voice memos and voice messages you share with Blitztext are converted and transcribed on your iPhone; the copies are deleted afterwards.
 - **Writing modes with Apple Intelligence:** run on your iPhone.
-- **History (optional):** stored on your iPhone, protected by iOS data protection and shared only between the app and its keyboard, kept as long as you choose (off, 24 hours, 7 days or 30 days; 7 days by default).
-- **Meetings:** recorded, transcribed and split by speaker on your iPhone. The audio is deleted after the evaluation; transcript and summary stay on your iPhone until you delete them. With Apple Intelligence the summary is written on your iPhone; otherwise only through your own model provider, if you allowed it (see below).
+- **History (optional):** stored on your iPhone, protected by iOS data protection and shared only between the app and its keyboard, kept as long as you choose (off, 24 hours, 7 days or 30 days; 7 days by default). It is not included in iCloud or computer backups.
+- **Meetings:** recorded, transcribed and split by speaker on your iPhone. The audio is deleted after the evaluation; a meeting that was never evaluated keeps its audio for 30 days, then it is deleted too. Transcript and summary stay on your iPhone until you delete them and are not included in iCloud or computer backups. With Apple Intelligence the summary is written on your iPhone; otherwise only through your own model provider, if you allowed it (see below).
 - **Settings, dictionary and your own modes:** local app storage.
 - **API keys** for an optional model provider: in the iOS Keychain, on this device only.
 - **Clipboard:** every result is also copied to the clipboard. iOS may offer it on your other devices (Universal Clipboard).
