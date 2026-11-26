@@ -6,7 +6,7 @@ This page covers the Mac app and, further down, the [iPhone app](#iphone-app). B
 
 ## What Stays On Your Mac
 
-- **Audio:** recorded and transcribed on your Mac with a local model (Parakeet or Whisper). Temporary recordings are deleted after each workflow. A dictation whose transcription failed stays on your Mac for up to 24 hours, so it can be transcribed again from the menu; then it is deleted.
+- **Audio:** recorded and transcribed on your Mac with a local model (Parakeet or Whisper). Temporary recordings are deleted after each workflow. A dictation whose transcription failed stays on your Mac for up to 24 hours, encrypted with a key kept in the macOS Keychain, so it can be transcribed again from the menu; then it is deleted.
 - **Writing modes with Apple Intelligence:** run on your Mac.
 - **Settings, dictionary, prompts:** local app storage.
 - **History (optional):** encrypted on your Mac with a key kept in the macOS Keychain, kept as long as you choose (off, 24 hours, 7 days).
@@ -39,8 +39,8 @@ The iPhone app needs no account and talks to no Blitztext or Blackboat server. I
 - **Audio:** recorded and transcribed on your iPhone with a local model (Parakeet, Whisper or the speech recognition built into iOS). The recording is deleted as soon as its text is done.
 - **Imported audio:** voice memos and voice messages you share with Blitztext are converted and transcribed on your iPhone; the copies are deleted afterwards.
 - **Writing modes with Apple Intelligence:** run on your iPhone.
-- **History (optional):** stored on your iPhone, protected by iOS data protection and shared only between the app and its keyboard, kept as long as you choose (off, 24 hours, 7 days or 30 days; 7 days by default).
-- **Meetings:** recorded, transcribed and split by speaker on your iPhone. The audio is deleted after the evaluation; transcript and summary stay on your iPhone until you delete them. With Apple Intelligence the summary is written on your iPhone; otherwise only through your own model provider, if you allowed it (see below).
+- **History (optional):** stored on your iPhone, protected by iOS data protection and shared only between the app and its keyboard, kept as long as you choose (off, 24 hours, 7 days or 30 days; 7 days by default). It is not included in iCloud or computer backups.
+- **Meetings:** recorded, transcribed and split by speaker on your iPhone. The audio is deleted after the evaluation; a meeting that was never evaluated keeps its audio for 30 days, then it is deleted too. Transcript and summary stay on your iPhone until you delete them and are not included in iCloud or computer backups. With Apple Intelligence the summary is written on your iPhone; otherwise only through your own model provider, if you allowed it (see below).
 - **Settings, dictionary and your own modes:** local app storage.
 - **API keys** for an optional model provider: in the iOS Keychain, on this device only.
 - **Clipboard:** every result is also copied to the clipboard. iOS may offer it on your other devices (Universal Clipboard).
